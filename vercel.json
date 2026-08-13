@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/cron/kajabi-sync", "schedule": "*/5 * * * *" }
+  ]
+}

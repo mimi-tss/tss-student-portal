@@ -1,0 +1,123 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifyKajabiSignature } from "@/lib/kajabi/client";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
+
+// Direct Kajabi API/webhook integration — no Zapier — per
+// TSS_App_Spec_1.md section 1 & 3.
+//
+// Kajabi's *only* outbound webhook events are purchase.created,
+// payment.succeeded, and cart.purchase (confirmed against Kajabi's docs —
+// see spec section 1). There is NO subscription-cancelled or
+// payment-failed event, so cancellation and DNC sync can't be event-driven
+// here; that's handled by the polling job in app/api/cron/kajabi-sync
+// instead. This handler only covers what a real webhook can tell us:
+// new/renewed access.
+//
+// TODO: the payload shape below (member/offer/payment_transaction as
+// top-level siblings, plus an `event` field) is reconstructed from Kajabi's
+// webhook data-reference docs, not a captured real payload — confirm field
+// names against an actual delivery once webhooks are configured. There's
+// also no confirmed unique delivery/event id, so idempotency below keys off
+// payment_transaction.id, which may not cover every event type.
+type KajabiWebhookPayload = {
+  event: string; // "purchase.created" | "payment.succeeded" | "cart.purchase"
+  member: { id: string; email: string; first_name?: string; last_name?: string };
+  offer?: { id: string; title: string };
+  payment_transaction?: { id: string };
+};
+
+const TIER_BY_OFFER_TITLE: Record<string, string> = {
+  "Sing Smarter Suite": "suite",
+  "Sing Smarter Pro": "pro",
+  "Sing Smarter Elite": "elite",
+};
+
+export async function POST(req: NextRequest) {
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-kajabi-signature");
+
+  if (!verifyKajabiSignature(rawBody, signature)) {
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  const event = JSON.parse(rawBody) as KajabiWebhookPayload;
+  const admin = createAdminClient();
+  const dedupeKey = event.payment_transaction?.id ?? `${event.event}:${event.member.id}`;
+
+  // Idempotency: webhook senders (Kajabi included) retry on timeout, so a
+  // duplicate delivery must not double-provision or double-send emails.
+  const { error: dupeError } = await admin
+    .from("kajabi_events")
+    .insert({ kajabi_event_id: dedupeKey, type: event.event, payload: event });
+
+  if (dupeError) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  const member = event.member;
+
+  switch (event.event) {
+    case "purchase.created":
+    case "cart.purchase": {
+      const tier = event.offer ? (TIER_BY_OFFER_TITLE[event.offer.title] ?? "lite") : "lite";
+
+      const { data: student } = await admin
+        .from("students")
+        .upsert(
+          {
+            email: member.email,
+            name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim(),
+            kajabi_customer_id: member.id,
+            tier,
+            subscription_status: "active",
+            payment_status: "ok",
+          },
+          { onConflict: "kajabi_customer_id" },
+        )
+        .select("id, profile_id")
+        .single();
+
+      // First time we've seen this contact: create their (passwordless)
+      // Supabase auth user + profile now, so the login route never has to.
+      if (student && !student.profile_id) {
+        const { data: authUser, error: createErr } = await admin.auth.admin.createUser({
+          email: member.email,
+          email_confirm: true,
+        });
+
+        if (!createErr && authUser.user) {
+          await admin.from("profiles").insert({ id: authUser.user.id, role: "student" });
+          await admin
+            .from("students")
+            .update({ profile_id: authUser.user.id })
+            .eq("id", student.id);
+        }
+      }
+
+      if (student) {
+        await issueAndSendLoginLink(student.id, member.email);
+      }
+      break;
+    }
+
+    case "payment.succeeded": {
+      // A recurring payment landing successfully clears any prior DNC flag.
+      await admin
+        .from("students")
+        .update({ payment_status: "ok" })
+        .eq("kajabi_customer_id", member.id);
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  await admin
+    .from("kajabi_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("kajabi_event_id", dedupeKey);
+
+  return NextResponse.json({ received: true });
+}
