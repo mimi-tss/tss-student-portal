@@ -6,13 +6,14 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // Direct Kajabi API/webhook integration — no Zapier — per
 // TSS_App_Spec_1.md section 1 & 3.
 //
-// Kajabi's *only* outbound webhook events are purchase.created,
-// payment.succeeded, and cart.purchase (confirmed against Kajabi's docs —
-// see spec section 1). There is NO subscription-cancelled or
-// payment-failed event, so cancellation and DNC sync can't be event-driven
-// here; that's handled by the polling job in app/api/cron/kajabi-sync
-// instead. This handler only covers what a real webhook can tell us:
-// new/renewed access.
+// Kajabi's *only* outbound webhook events, confirmed from the actual
+// Kajabi dashboard's Webhooks screen (the docs described a different,
+// wrong set — order.created/cart.purchase split that doesn't exist in the
+// real UI): order.created and payment.succeeded. There is NO
+// subscription-cancelled or payment-failed event, so cancellation and DNC
+// sync can't be event-driven here; that's handled by the polling job in
+// app/api/cron/kajabi-sync instead. This handler only covers what a real
+// webhook can tell us: new/renewed access.
 //
 // Kajabi also doesn't sign webhook payloads at all (confirmed absent from
 // their docs), so the webhook URL configured in Kajabi must include
@@ -20,13 +21,13 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // not a header.
 //
 // TODO: the payload shape below (member/offer/payment_transaction as
-// top-level siblings, plus an `event` field) is reconstructed from Kajabi's
-// webhook data-reference docs, not a captured real payload — confirm field
-// names against an actual delivery once webhooks are configured. There's
+// top-level siblings, plus an `event` field) is still reconstructed from
+// Kajabi's webhook data-reference docs, not a captured real payload —
+// confirm field names against an actual delivery once one arrives. There's
 // also no confirmed unique delivery/event id, so idempotency below keys off
 // payment_transaction.id, which may not cover every event type.
 type KajabiWebhookPayload = {
-  event: string; // "purchase.created" | "payment.succeeded" | "cart.purchase"
+  event: string; // "order.created" | "payment.succeeded"
   member: { id: string; email: string; first_name?: string; last_name?: string };
   offer?: { id: string; title: string };
   payment_transaction?: { id: string };
@@ -63,8 +64,7 @@ export async function POST(req: NextRequest) {
   const member = event.member;
 
   switch (event.event) {
-    case "purchase.created":
-    case "cart.purchase": {
+    case "order.created": {
       const tier = event.offer ? (TIER_BY_OFFER_TITLE[event.offer.title] ?? "lite") : "lite";
 
       const { data: student } = await admin

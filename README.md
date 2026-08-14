@@ -45,9 +45,10 @@ supabase/
 There's no real Kajabi SSO, and Kajabi's webhook coverage turned out to be
 narrower than assumed — confirmed against Kajabi's own docs:
 
-- **Only 3 outbound webhook events exist**: `purchase.created`,
-  `payment.succeeded`, `cart.purchase`. No event fires on cancellation, pause,
-  or payment failure.
+- **Only 2 outbound webhook events exist**: `order.created`,
+  `payment.succeeded` — confirmed straight from the Kajabi dashboard's
+  Webhooks screen (Kajabi's own docs described a different, wrong set). No
+  event fires on cancellation, pause, or payment failure.
 - **Kajabi doesn't sign webhooks at all** — no HMAC, no header, nothing to
   verify a delivery came from Kajabi. Worked around by putting a secret
   token in the webhook URL itself (`?secret=...`), checked server-side —
@@ -56,7 +57,7 @@ narrower than assumed — confirmed against Kajabi's own docs:
   "Variants" (pre-built alternate pages per segment). Liquid custom-field
   merge only works inside Kajabi's own emails.
 
-So the flow is: `purchase.created`/`cart.purchase` fires → the app
+So the flow is: `order.created` fires → the app
 synchronously mints a signed, single-use token and **emails it directly**
 to the student (no dependency on Kajabi rendering anything). Because
 minting + sending happens the instant the webhook fires — not queued
