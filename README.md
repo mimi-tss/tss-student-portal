@@ -42,13 +42,22 @@ supabase/
 
 ### Auth: Kajabi magic-link login
 
-There's no real Kajabi SSO, and Kajabi's webhook coverage turned out to be
-narrower than assumed — confirmed against Kajabi's own docs:
+There's no real Kajabi SSO, and Kajabi's webhook setup turned out to be
+split across two unrelated config surfaces — found by testing real
+purchases, not from docs:
 
-- **Only 2 outbound webhook events exist**: `order.created`,
-  `payment.succeeded` — confirmed straight from the Kajabi dashboard's
-  Webhooks screen (Kajabi's own docs described a different, wrong set). No
-  event fires on cancellation, pause, or payment failure.
+- **Settings → Third Party Integrations and Webhooks** (global, pick an
+  event from a dropdown): `payment.succeeded` fires correctly from here.
+  `order.created` is selectable in the same dropdown but **never fired** in
+  testing (real purchase, $0 coupon, real $1 purchase — none triggered
+  it). Don't rely on it.
+- **Sales → Offers → [offer] → "···" → Webhooks → "Purchase Webhook URL"**:
+  this is what actually fires on purchase — must be set **per offer**, not
+  once globally. Its event is `purchase.created`, with a different,
+  flatter payload shape (`payload.member_email`, `payload.offer_title`,
+  ...) than the global tab's `payment.succeeded`
+  (`member.email`, `offer.title`, ...). The code in
+  `app/api/webhooks/kajabi/route.ts` handles both shapes.
 - **Kajabi doesn't sign webhooks at all** — no HMAC, no header, nothing to
   verify a delivery came from Kajabi. Worked around by putting a secret
   token in the webhook URL itself (`?secret=...`), checked server-side —
@@ -57,12 +66,12 @@ narrower than assumed — confirmed against Kajabi's own docs:
   "Variants" (pre-built alternate pages per segment). Liquid custom-field
   merge only works inside Kajabi's own emails.
 
-So the flow is: `order.created` fires → the app
-synchronously mints a signed, single-use token and **emails it directly**
-to the student (no dependency on Kajabi rendering anything). Because
-minting + sending happens the instant the webhook fires — not queued
-through Zapier — the email is already there by the time the student checks
-their inbox, no password screen. The token rotates on every use.
+So the flow is: `purchase.created` fires (from the per-offer webhook) → the
+app synchronously mints a signed, single-use token and **emails it
+directly** to the student (no dependency on Kajabi rendering anything).
+Because minting + sending happens the instant the webhook fires — not
+queued through Zapier — the email is already there by the time the student
+checks their inbox, no password screen. The token rotates on every use.
 
 Cancellation and DNC, which have no webhook to listen for, run on a
 **5-minute polling job** (`api/cron/kajabi-sync`). This was originally a
@@ -72,11 +81,15 @@ now runs from a GitHub Actions scheduled workflow instead
 cost. Requires a `CRON_SECRET` repository secret in GitHub matching the one
 in Vercel's env vars. See `TSS_App_Spec_1.md` section 1 for the full writeup.
 
-**Confirmed working end-to-end**: both webhooks tested live via Kajabi's
-"Send test" button — the `order.created` handler correctly created a
-`students` row and a Supabase auth user, and the payload's top-level `id`
-field (not documented anywhere, only visible from a real delivery) is now
-what idempotency keys off, replacing the earlier guess.
+**Confirmed working end-to-end** with a real $1 purchase: the
+`purchase.created` handler correctly created a `students` row and a
+Supabase auth user, and the payload's top-level `id` field is what
+idempotency keys off.
+
+**Before this covers real signups**: the per-offer "Purchase Webhook URL"
+has only been set on one offer (Sing Smarter Pro) so far — it needs adding
+to every other offer individually (Suite, Elite, bundles) or their
+purchases won't provision anything. See spec section 11.
 
 **Still unconfirmed**: the exact response shape of Kajabi's
 contacts-custom-field and subscriptions-list endpoints — not in the

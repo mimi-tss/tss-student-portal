@@ -6,31 +6,41 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // Direct Kajabi API/webhook integration — no Zapier — per
 // TSS_App_Spec_1.md section 1 & 3.
 //
-// Kajabi's *only* outbound webhook events, confirmed from the actual
-// Kajabi dashboard's Webhooks screen (the docs described a different,
-// wrong set — order.created/cart.purchase split that doesn't exist in the
-// real UI): order.created and payment.succeeded. There is NO
-// subscription-cancelled or payment-failed event, so cancellation and DNC
-// sync can't be event-driven here; that's handled by the polling job in
-// app/api/cron/kajabi-sync instead. This handler only covers what a real
-// webhook can tell us: new/renewed access.
+// Kajabi has two *separate* webhook configuration surfaces — found the
+// hard way, via real test purchases, not docs:
+//  - Settings → Third Party Integrations and Webhooks (global, picks an
+//    event type from a dropdown): only payment.succeeded actually fires
+//    from here for a real purchase. "order.created" is selectable in that
+//    dropdown but never fired for any real or coupon purchase tested.
+//  - Sales → Offers → [offer] → "···" → Webhooks → "Purchase Webhook URL":
+//    must be set on EVERY offer individually (not global). This is what
+//    actually fires on purchase — event name "purchase.created" — and its
+//    payload is a completely different, flatter shape than the global
+//    tab's events (flat member_*/offer_title fields nested one level
+//    under `payload`, not `member{}`/`offer{}` objects).
+// There is still no cancelled/payment-failed event of any kind from
+// either surface; that's handled by the polling job in
+// app/api/cron/kajabi-sync instead.
 //
-// Kajabi also doesn't sign webhook payloads at all (confirmed absent from
-// their docs), so the webhook URL configured in Kajabi must include
-// ?secret=<KAJABI_WEBHOOK_SECRET> — that's what's actually checked below,
-// not a header.
-//
-// Payload shape confirmed via Kajabi's "Send test" button on each
-// configured webhook (real delivery, not docs): every event carries a
-// top-level `id` (a UUID, unique per delivery) alongside `event`,
-// `member`, `offer`, and `payment_transaction`; order.created additionally
-// carries `order`. `id` is what idempotency below keys off.
+// Kajabi doesn't sign webhook payloads at all, so the webhook URL
+// configured in Kajabi (both surfaces) must include
+// ?secret=<KAJABI_WEBHOOK_SECRET> — checked below, not a header.
 type KajabiWebhookPayload = {
   id: string;
-  event: string; // "order.created" | "payment.succeeded"
-  member: { id: string; email: string; first_name?: string; last_name?: string };
-  offer?: { id: string; title: string };
-  payment_transaction?: { id: string };
+  event: string; // "purchase.created" | "payment.succeeded"
+  // payment.succeeded shape (global webhook tab)
+  member?: { id: number; email: string; first_name?: string; last_name?: string };
+  offer?: { id: number; title: string };
+  payment_transaction?: { id: number };
+  // purchase.created shape (per-offer "Purchase Webhook URL")
+  payload?: {
+    member_id: number;
+    member_email: string;
+    member_first_name?: string;
+    member_last_name?: string;
+    offer_title?: string;
+    transaction_id: number;
+  };
 };
 
 const TIER_BY_OFFER_TITLE: Record<string, string> = {
@@ -60,19 +70,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, duplicate: true });
   }
 
-  const member = event.member;
-
   switch (event.event) {
-    case "order.created": {
-      const tier = event.offer ? (TIER_BY_OFFER_TITLE[event.offer.title] ?? "lite") : "lite";
+    case "purchase.created": {
+      const purchase = event.payload;
+      if (!purchase) break;
+
+      const tier = purchase.offer_title
+        ? (TIER_BY_OFFER_TITLE[purchase.offer_title] ?? "lite")
+        : "lite";
 
       const { data: student } = await admin
         .from("students")
         .upsert(
           {
-            email: member.email,
-            name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim(),
-            kajabi_customer_id: member.id,
+            email: purchase.member_email,
+            name: `${purchase.member_first_name ?? ""} ${purchase.member_last_name ?? ""}`.trim(),
+            kajabi_customer_id: String(purchase.member_id),
             tier,
             subscription_status: "active",
             payment_status: "ok",
@@ -86,7 +99,7 @@ export async function POST(req: NextRequest) {
       // Supabase auth user + profile now, so the login route never has to.
       if (student && !student.profile_id) {
         const { data: authUser, error: createErr } = await admin.auth.admin.createUser({
-          email: member.email,
+          email: purchase.member_email,
           email_confirm: true,
         });
 
@@ -100,17 +113,19 @@ export async function POST(req: NextRequest) {
       }
 
       if (student) {
-        await issueAndSendLoginLink(student.id, member.email);
+        await issueAndSendLoginLink(student.id, purchase.member_email);
       }
       break;
     }
 
     case "payment.succeeded": {
       // A recurring payment landing successfully clears any prior DNC flag.
+      if (!event.member) break;
+
       await admin
         .from("students")
         .update({ payment_status: "ok" })
-        .eq("kajabi_customer_id", member.id);
+        .eq("kajabi_customer_id", String(event.member.id));
       break;
     }
 
