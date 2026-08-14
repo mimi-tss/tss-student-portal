@@ -1,0 +1,20 @@
+name: Kajabi cancellation/DNC sync
+
+# Vercel's free Hobby plan only allows daily cron jobs, so the 5-minute
+# polling job that catches Kajabi cancellations and payment failures
+# (Kajabi has no webhook for either — see TSS_App_Spec_1.md section 1)
+# runs here instead, hitting the same /api/cron/kajabi-sync endpoint.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call kajabi-sync endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/kajabi-sync" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
