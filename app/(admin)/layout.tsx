@@ -1,8 +1,10 @@
-// TODO: gate this route group to users with profiles.role === "admin"
-export default function AdminLayout({
+import { requireRole } from "@/lib/auth/require-role";
+
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireRole("admin");
   return <div className="min-h-screen">{children}</div>;
 }

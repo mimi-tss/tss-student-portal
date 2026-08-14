@@ -1,8 +1,10 @@
-// TODO: gate this route group to users with profiles.role === "coach"
-export default function CoachLayout({
+import { requireRole } from "@/lib/auth/require-role";
+
+export default async function CoachLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireRole("coach");
   return <div className="min-h-screen">{children}</div>;
 }
