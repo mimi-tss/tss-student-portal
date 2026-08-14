@@ -20,13 +20,13 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // ?secret=<KAJABI_WEBHOOK_SECRET> — that's what's actually checked below,
 // not a header.
 //
-// TODO: the payload shape below (member/offer/payment_transaction as
-// top-level siblings, plus an `event` field) is still reconstructed from
-// Kajabi's webhook data-reference docs, not a captured real payload —
-// confirm field names against an actual delivery once one arrives. There's
-// also no confirmed unique delivery/event id, so idempotency below keys off
-// payment_transaction.id, which may not cover every event type.
+// Payload shape confirmed via Kajabi's "Send test" button on each
+// configured webhook (real delivery, not docs): every event carries a
+// top-level `id` (a UUID, unique per delivery) alongside `event`,
+// `member`, `offer`, and `payment_transaction`; order.created additionally
+// carries `order`. `id` is what idempotency below keys off.
 type KajabiWebhookPayload = {
+  id: string;
   event: string; // "order.created" | "payment.succeeded"
   member: { id: string; email: string; first_name?: string; last_name?: string };
   offer?: { id: string; title: string };
@@ -49,13 +49,12 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const event = JSON.parse(rawBody) as KajabiWebhookPayload;
   const admin = createAdminClient();
-  const dedupeKey = event.payment_transaction?.id ?? `${event.event}:${event.member.id}`;
 
   // Idempotency: webhook senders (Kajabi included) retry on timeout, so a
   // duplicate delivery must not double-provision or double-send emails.
   const { error: dupeError } = await admin
     .from("kajabi_events")
-    .insert({ kajabi_event_id: dedupeKey, type: event.event, payload: event });
+    .insert({ kajabi_event_id: event.id, type: event.event, payload: event });
 
   if (dupeError) {
     return NextResponse.json({ received: true, duplicate: true });
@@ -122,7 +121,7 @@ export async function POST(req: NextRequest) {
   await admin
     .from("kajabi_events")
     .update({ processed_at: new Date().toISOString() })
-    .eq("kajabi_event_id", dedupeKey);
+    .eq("kajabi_event_id", event.id);
 
   return NextResponse.json({ received: true });
 }

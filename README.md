@@ -72,10 +72,16 @@ now runs from a GitHub Actions scheduled workflow instead
 cost. Requires a `CRON_SECRET` repository secret in GitHub matching the one
 in Vercel's env vars. See `TSS_App_Spec_1.md` section 1 for the full writeup.
 
-**Still unconfirmed** (flagged as TODOs in the code): the exact response
-shape of Kajabi's contacts-custom-field and subscriptions-list endpoints —
-not in the publicly available docs, needs checking against the OpenAPI spec
-once Pro-tier credentials exist.
+**Confirmed working end-to-end**: both webhooks tested live via Kajabi's
+"Send test" button — the `order.created` handler correctly created a
+`students` row and a Supabase auth user, and the payload's top-level `id`
+field (not documented anywhere, only visible from a real delivery) is now
+what idempotency keys off, replacing the earlier guess.
+
+**Still unconfirmed**: the exact response shape of Kajabi's
+contacts-custom-field and subscriptions-list endpoints — not in the
+publicly available docs, and `api/cron/kajabi-sync` hasn't been tested
+against real Kajabi data yet.
 
 ## First-time setup
 
