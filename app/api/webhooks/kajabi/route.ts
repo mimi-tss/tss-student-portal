@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyKajabiSignature } from "@/lib/kajabi/client";
+import { verifyKajabiWebhookSecret } from "@/lib/kajabi/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 
@@ -13,6 +13,11 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // here; that's handled by the polling job in app/api/cron/kajabi-sync
 // instead. This handler only covers what a real webhook can tell us:
 // new/renewed access.
+//
+// Kajabi also doesn't sign webhook payloads at all (confirmed absent from
+// their docs), so the webhook URL configured in Kajabi must include
+// ?secret=<KAJABI_WEBHOOK_SECRET> — that's what's actually checked below,
+// not a header.
 //
 // TODO: the payload shape below (member/offer/payment_transaction as
 // top-level siblings, plus an `event` field) is reconstructed from Kajabi's
@@ -34,13 +39,13 @@ const TIER_BY_OFFER_TITLE: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const rawBody = await req.text();
-  const signature = req.headers.get("x-kajabi-signature");
+  const providedSecret = req.nextUrl.searchParams.get("secret");
 
-  if (!verifyKajabiSignature(rawBody, signature)) {
-    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  if (!verifyKajabiWebhookSecret(providedSecret)) {
+    return NextResponse.json({ error: "invalid secret" }, { status: 401 });
   }
 
+  const rawBody = await req.text();
   const event = JSON.parse(rawBody) as KajabiWebhookPayload;
   const admin = createAdminClient();
   const dedupeKey = event.payment_transaction?.id ?? `${event.event}:${event.member.id}`;

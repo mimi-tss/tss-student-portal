@@ -1,11 +1,15 @@
 import crypto from "node:crypto";
 
 // Confirmed against Kajabi's public docs (help.kajabi.com/api-reference) as
-// of building this: base URL, OAuth2 client_credentials flow, and the
-// x-kajabi-signature webhook header. NOT confirmed: exact contacts-endpoint
-// path/shape for updateKajabiContactField below — verify against the
-// OpenAPI spec (openapi.yaml in Kajabi/public_api_docs) once credentials
-// exist.
+// of building this: base URL and the OAuth2 client_credentials flow.
+// Confirmed ABSENT: Kajabi webhooks carry no signature or verification
+// token of any kind (help.kajabi.com/articles/api-integrations/webhooks/
+// webhooks-explained) — there is nothing to check against an
+// x-kajabi-signature-style header, because Kajabi never sends one. See
+// verifyKajabiWebhookSecret below for the workaround this forced.
+// NOT confirmed: exact contacts-endpoint path/shape for
+// updateKajabiContactField below — verify against the OpenAPI spec
+// (openapi.yaml in Kajabi/public_api_docs) once credentials exist.
 const KAJABI_API_BASE = "https://api.kajabi.com/v1";
 
 let cachedToken: { accessToken: string; expiresAt: number } | null = null;
@@ -85,21 +89,18 @@ export async function listKajabiSubscriptions(params: { updatedSince?: string } 
   return res.json();
 }
 
-// Verifies the HMAC-SHA256 signature Kajabi attaches to webhook requests
-// via the x-kajabi-signature header, so we only ever act on events that
-// actually came from Kajabi. Must be checked against the raw request body,
-// before JSON parsing — parsing and re-serializing changes byte content.
-export function verifyKajabiSignature(rawBody: string, signature: string | null) {
-  if (!signature) return false;
+// Kajabi doesn't sign webhook payloads at all, so there's no header to
+// verify against — the standard workaround when a sender doesn't support
+// signing: embed a shared secret directly in the webhook URL we give
+// Kajabi (?secret=...) and check it here. Not as strong as an HMAC over
+// the body, but it does mean the endpoint only acts on requests that know
+// this secret, which anyone scanning/guessing the bare URL won't.
+export function verifyKajabiWebhookSecret(providedSecret: string | null) {
+  if (!providedSecret) return false;
 
-  const expected = crypto
-    .createHmac("sha256", process.env.KAJABI_WEBHOOK_SECRET!)
-    .update(rawBody)
-    .digest("hex");
+  const expected = Buffer.from(process.env.KAJABI_WEBHOOK_SECRET!);
+  const provided = Buffer.from(providedSecret);
 
-  const expectedBuf = Buffer.from(expected);
-  const signatureBuf = Buffer.from(signature);
-
-  if (expectedBuf.length !== signatureBuf.length) return false;
-  return crypto.timingSafeEqual(expectedBuf, signatureBuf);
+  if (expected.length !== provided.length) return false;
+  return crypto.timingSafeEqual(expected, provided);
 }

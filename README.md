@@ -28,7 +28,7 @@ app/
   login/                        auth entry point
 lib/
   supabase/                     browser, server, and admin (service-role) Supabase clients
-  kajabi/                       Kajabi API client (OAuth2) + webhook signature verification
+  kajabi/                       Kajabi API client (OAuth2) + webhook secret check
   auth/magic-link.ts            mint/consume/rotate magic-link tokens
   email/send.ts                 Resend-based transactional email
   google/                       Calendar/Drive auth helper
@@ -37,7 +37,7 @@ supabase/
                                  credits, entitlements, payroll, chat, ...)
   migrations/0002_kajabi_auth.sql   magic-link tokens + webhook idempotency log
   migrations/0003_student_rls_policies.sql   RLS for the student booking flow
-vercel.json                     cron schedule for api/cron/kajabi-sync
+.github/workflows/kajabi-sync.yml   5-min schedule for api/cron/kajabi-sync (see below)
 ```
 
 ### Auth: Kajabi magic-link login
@@ -48,6 +48,10 @@ narrower than assumed — confirmed against Kajabi's own docs:
 - **Only 3 outbound webhook events exist**: `purchase.created`,
   `payment.succeeded`, `cart.purchase`. No event fires on cancellation, pause,
   or payment failure.
+- **Kajabi doesn't sign webhooks at all** — no HMAC, no header, nothing to
+  verify a delivery came from Kajabi. Worked around by putting a secret
+  token in the webhook URL itself (`?secret=...`), checked server-side —
+  see `KAJABI_WEBHOOK_SECRET` in `.env.example`.
 - **Kajabi Pages can't merge a per-member value into a link** — only static
   "Variants" (pre-built alternate pages per segment). Liquid custom-field
   merge only works inside Kajabi's own emails.
@@ -60,10 +64,12 @@ through Zapier — the email is already there by the time the student checks
 their inbox, no password screen. The token rotates on every use.
 
 Cancellation and DNC, which have no webhook to listen for, run on a
-**5-minute polling job** (`api/cron/kajabi-sync`, scheduled in
-`vercel.json`) instead — still direct API, just not event-driven, since
-Kajabi doesn't expose a faster signal for those two. See `TSS_App_Spec_1.md`
-section 1 for the full writeup.
+**5-minute polling job** (`api/cron/kajabi-sync`). This was originally a
+Vercel Cron job, but Vercel's free Hobby plan only allows daily crons — it
+now runs from a GitHub Actions scheduled workflow instead
+(`.github/workflows/kajabi-sync.yml`), calling the same endpoint, at no
+cost. Requires a `CRON_SECRET` repository secret in GitHub matching the one
+in Vercel's env vars. See `TSS_App_Spec_1.md` section 1 for the full writeup.
 
 **Still unconfirmed** (flagged as TODOs in the code): the exact response
 shape of Kajabi's contacts-custom-field and subscriptions-list endpoints —
