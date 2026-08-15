@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       id: s.id,
       scheduledAt: s.scheduled_at,
       durationMinutes: s.duration_minutes,
+      status: s.status,
       isTrial: s.is_trial,
       studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
     })),

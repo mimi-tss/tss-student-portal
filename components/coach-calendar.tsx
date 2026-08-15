@@ -6,10 +6,23 @@ import { zonedTimeToUtc, zonedHourMinute, zonedDayKey } from "@/lib/timezone";
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const SLOT_MINUTES = 30;
 
+const STATUS_LABEL: Record<string, string> = {
+  attended: "✓",
+  "no-show": "✗",
+  "late-forfeit": "L",
+};
+
+const ATTENDANCE_OPTIONS: { value: string; label: string }[] = [
+  { value: "attended", label: "Attended" },
+  { value: "no-show", label: "No-show" },
+  { value: "late-forfeit", label: "Late-forfeit" },
+];
+
 interface Session {
   id: string;
   scheduledAt: string;
   durationMinutes: number;
+  status: string;
   isTrial: boolean;
   studentName: string;
 }
@@ -67,17 +80,26 @@ function formatTimeLabel(minutesFromMidnight: number) {
 // coach's calendar to the same display zone for admin — the coach's
 // actual working-hours windows still get checked against *their own*
 // zone regardless of what the grid is displayed in.
+//
+// `canMarkAttendance` enables click-to-mark on past sessions (the
+// coach's own dashboard only — admin browses, doesn't mark attendance
+// for someone else's session, per section 8).
 export default function CoachCalendar({
   scheduleEndpoint,
   displayTimeZone,
+  canMarkAttendance = false,
 }: {
   scheduleEndpoint: string;
   displayTimeZone?: string;
+  canMarkAttendance?: boolean;
 }) {
   const [view, setView] = useState<"day" | "week">("week");
   const [anchorKey, setAnchorKey] = useState(() => toDateKey(new Date()));
   const [data, setData] = useState<ScheduleData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [marking, setMarking] = useState(false);
 
   const rangeStartKey = view === "week" ? startOfWeekKey(anchorKey) : anchorKey;
   const numDays = view === "week" ? 7 : 1;
@@ -93,7 +115,7 @@ export default function CoachCalendar({
       .then(setData)
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleEndpoint, rangeStartKey, numDays]);
+  }, [scheduleEndpoint, rangeStartKey, numDays, refreshTick]);
 
   const workingHours = data?.coach.workingHours ?? {};
   const coachTimeZone = data?.coach.timezone ?? "America/New_York";
@@ -167,6 +189,23 @@ export default function CoachCalendar({
     return { type: "available" as const };
   }
 
+  async function handleMark(status: string) {
+    if (!selectedSession) return;
+    setMarking(true);
+
+    const res = await fetch("/api/coach/mark-attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: selectedSession.id, status }),
+    });
+
+    setMarking(false);
+    if (res.ok) {
+      setSelectedSession(null);
+      setRefreshTick((t) => t + 1);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -226,9 +265,42 @@ export default function CoachCalendar({
         <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-3 bg-black" /> Blocked
         </span>
+        {canMarkAttendance && (
+          <span className="text-gray-400">Click a past session to mark attendance</span>
+        )}
       </div>
 
       {loading && <p className="text-gray-500">Loading…</p>}
+
+      {selectedSession && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded border bg-gray-50 p-3 text-sm">
+          <span className="font-medium">
+            {selectedSession.studentName} —{" "}
+            {new Date(selectedSession.scheduledAt).toLocaleString()}
+            {selectedSession.status !== "scheduled" && (
+              <span className="ml-2 text-gray-500">
+                (currently: {selectedSession.status})
+              </span>
+            )}
+          </span>
+          {ATTENDANCE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleMark(opt.value)}
+              disabled={marking}
+              className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50"
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setSelectedSession(null)}
+            className="rounded border px-2 py-1 text-xs"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {!loading && data && (
         <div className="overflow-x-auto">
@@ -255,10 +327,22 @@ export default function CoachCalendar({
                 {dayKeys.map((dayKey) => {
                   const state = cellState(dayKey, minutes);
                   const isTrial = state.type === "session" && state.session.isTrial;
+                  const isPast =
+                    state.type === "session" &&
+                    new Date(state.session.scheduledAt) <= new Date();
+                  const clickable = canMarkAttendance && state.type === "session" && isPast;
+
                   return (
                     <div
                       key={dayKey + minutes}
-                      className={`h-6 border-b border-r ${
+                      onClick={
+                        clickable && state.type === "session"
+                          ? () => setSelectedSession(state.session)
+                          : undefined
+                      }
+                      className={`flex h-6 items-center justify-center border-b border-r text-[10px] font-bold text-white ${
+                        clickable ? "cursor-pointer hover:opacity-80" : ""
+                      } ${
                         state.type === "available"
                           ? "bg-gray-200"
                           : state.type === "session"
@@ -271,12 +355,14 @@ export default function CoachCalendar({
                       }`}
                       title={
                         state.type === "session"
-                          ? `${state.session.studentName}${isTrial ? " (trial — pitch Pro upgrade)" : ""}`
+                          ? `${state.session.studentName}${isTrial ? " (trial — pitch Pro upgrade)" : ""} — ${state.session.status}`
                           : state.type === "block"
                             ? (state.block.reason ?? "Blocked")
                             : undefined
                       }
-                    />
+                    >
+                      {state.type === "session" && STATUS_LABEL[state.session.status]}
+                    </div>
                   );
                 })}
               </div>
