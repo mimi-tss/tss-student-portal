@@ -86,7 +86,7 @@ export default function BookingClient({
   if (mode === "trial" && !selectedCoachId) {
     return (
       <main className="mx-auto max-w-lg p-8">
-        <h1 className="mb-4 text-xl font-semibold">Book your trial lesson</h1>
+        <h1 className="mb-4 text-xl font-semibold">Book Your FREE First Vocal Coaching Session</h1>
         <p className="mb-4 text-sm text-gray-500">
           Pick a coach to see their open times.
         </p>
@@ -116,7 +116,7 @@ export default function BookingClient({
   return (
     <main className="mx-auto max-w-lg p-8">
       <h1 className="mb-4 text-xl font-semibold">
-        {mode === "trial" ? "Book your trial lesson" : "Book a session"}
+        {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
 
       {loading && <p className="text-gray-500">Loading open slots…</p>}
