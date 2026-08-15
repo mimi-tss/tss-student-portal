@@ -23,7 +23,12 @@ app/
   api/webhooks/kajabi           receives Kajabi's 3 real events, syncs status, sends login emails
   api/auth/kajabi/login         magic-link entry point the emailed link points to
   api/cron/kajabi-sync          5-min poll for cancellations/DNC (no webhook exists for these)
-  api/booking/slots, /book      open-slot computation + self-service booking, makeup-credit aware
+  api/booking/slots, /book      open-slot computation + self-service booking,
+                                 makeup-credit and trial-lesson aware
+  api/booking/coaches           coach list, for the trial-lesson coach picker
+  api/admin/assign-coach        admin sets a student's assigned coach
+  api/admin/provision-student   manual student creation for ambassadors
+                                 (Grant Offer / 100%-coupon — no webhook fires)
   auth/callback                 client-side page that picks up the fragment-
                                  delivered session from Supabase's magic-link
                                  verify (not PKCE — see note below) and redirects on

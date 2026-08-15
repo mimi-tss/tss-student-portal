@@ -1,6 +1,7 @@
 const ERROR_MESSAGES: Record<string, string> = {
   not_logged_in: "Please log in from your portal link to continue.",
   unauthorized: "You don't have access to that page.",
+  no_portal_access: "Your current plan doesn't include portal access — upgrade to Suite or higher to get in.",
   missing_token: "That link is missing its login token.",
   expired_link: "That login link has expired or was already used — request a new one.",
   student_not_found: "We couldn't find your account.",

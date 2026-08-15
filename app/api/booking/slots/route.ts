@@ -13,23 +13,28 @@ type WorkingHours = Record<string, [string, string][]>;
 
 export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
+  const requestedCoachId = req.nextUrl.searchParams.get("coachId");
   if (!studentId) {
     return NextResponse.json({ error: "studentId required" }, { status: 400 });
   }
 
   const supabase = await createClient();
 
-  const { data: student } = await supabase
-    .from("students")
-    .select("assigned_coach_id")
-    .eq("id", studentId)
-    .single();
-
-  if (!student?.assigned_coach_id) {
-    return NextResponse.json({ slots: [] });
+  // An explicit coachId (trial-lesson coach picker, section 5) overrides
+  // assigned_coach_id — a fresh Suite student may not have one yet.
+  let coachId = requestedCoachId;
+  if (!coachId) {
+    const { data: student } = await supabase
+      .from("students")
+      .select("assigned_coach_id")
+      .eq("id", studentId)
+      .single();
+    coachId = student?.assigned_coach_id ?? null;
   }
 
-  const coachId = student.assigned_coach_id;
+  if (!coachId) {
+    return NextResponse.json({ slots: [] });
+  }
 
   const { data: coach } = await supabase
     .from("coaches")

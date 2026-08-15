@@ -44,6 +44,24 @@
 
 **Other products:** mini courses $17 each, master courses $249.99 each, $497 3-month bundle into Suite, group vocal classes $40 add-on, 60-min lesson upgrade +$250/mo, prepay discounts (6-mo upfront $1599, 1-yr upfront $3199), single private lesson $150 (internal), Spotlight $80.
 
+### Portal access by tier
+
+The student portal is an add-on library-card layer on top of Kajabi's own course/community access — how much of *this app* a student can use scales with tier, separately from what Kajabi itself shows them:
+
+| Tier | Portal access |
+|---|---|
+| Lite | None. No login, no portal at all. |
+| Suite | One **lifetime** trial lesson with a coach (see "Trial lesson" in section 5) — bookable once. After it's used (or if never used but the student downgraded from Pro/Elite), portal access is **view-only**: past recordings and homework notes, no new booking. |
+| Pro | Full booking access — 4 weekly sessions/month (section 4), plus everything Suite includes. |
+| Elite | Same booking access as Pro, plus Elite's other non-portal perks. |
+
+**Upgrades/downgrades change access immediately, not just billing:**
+- Downgrade to Lite → portal access fully revoked.
+- Downgrade to Suite (from Pro/Elite) → drops to view-only (the trial lesson was already used during their Pro/Elite tenure in the normal case).
+- Upgrade Suite → Pro (the coach's post-trial discounted pitch, see section 5) → full weekly booking access resumes right away.
+
+**Ambassadors:** given free portal + course access in exchange for promotion/content, via Kajabi's "Grant Offer" or a 100%-off coupon — confirmed in section 1 that **neither of those fires a purchase webhook**. So ambassador provisioning is a manual **admin action** in this app (assign tier + coach directly), not something that happens automatically off a Kajabi event.
+
 **Entitlement tracking needed beyond a binary tier flag:** one-time perks (trial lesson, mastercourse unlock after 1 year), lifetime perks (Elite success calls, onboarding session), and recurring-but-capped perks (quarterly Insta-reaction, bi-annual group session). Model as a small `entitlements` table per student: perk type, used/unused, expiry or recurrence — separate from the base tier/weekly-slot logic.
 
 ---
@@ -81,6 +99,13 @@
   > "Please contact the studio for scheduling: info@tarasimonstudios.com or +1-866-471-9454 (Text/Call/WhatsApp)"
   Coach chat should have this as a canned quick-reply for scheduling questions.
 - **Admin can override any makeup restriction** for special-case exemptions — logged with a required note and an `override_by_admin` flag for audit trail. Coach exceptions (admin-granted) can only be given to a student **once**.
+
+### Trial lesson (Suite tier)
+
+- One lifetime trial lesson per Suite-tier student, modeled as a one-time `entitlements` row — auto-granted the moment a student first reaches Suite (via the `purchase.created` webhook), independent of whatever they do after.
+- **Unlike every other booking in this app, the trial lesson is not restricted to the student's assigned coach** — a fresh Suite student may not have one yet. The student picks any coach's open slot themselves, or an admin books it on their behalf and assigns the coach at the same time.
+- **Visually distinct on the coach's schedule** (different color from regular/makeup sessions) — the point is to flag the coach that this session ends with a "coach sale": pitch the discounted upgrade into Pro before the student leaves the call.
+- Booking the trial does not set `assigned_coach_id` permanently — that's still whatever the studio assigns if/when the student upgrades to Pro.
 
 ### Makeup credit types (three distinct kinds — do not conflate)
 
@@ -174,6 +199,8 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 - Manual pause/resume toggling
 - Manual admin overrides on makeup restrictions (logged, one-time-per-student cap on exceptions)
 - Manual substitute-coach assignment
+- Assign a coach and book the trial lesson on a Suite student's behalf (section 5) — students can also do this themselves
+- Manual ambassador provisioning (assign tier + coach directly) for Grant Offer / 100%-off-coupon students, since neither fires a purchase webhook (section 2)
 - Unmatched-recordings safety net view
 - Exercises library management (add/edit the mp3 catalog coaches assign from)
 - New-coach onboarding form

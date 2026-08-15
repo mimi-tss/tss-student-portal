@@ -112,6 +112,27 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // First time reaching Suite: grant the one lifetime trial-lesson
+      // entitlement (section 2/5). Only ever granted once per student —
+      // if they later upgrade then downgrade back to Suite, this row
+      // already exists (used or not) so it's never re-granted.
+      if (student && tier === "suite") {
+        const { data: existing } = await admin
+          .from("entitlements")
+          .select("id")
+          .eq("student_id", student.id)
+          .eq("perk_type", "trial_lesson")
+          .maybeSingle();
+
+        if (!existing) {
+          await admin.from("entitlements").insert({
+            student_id: student.id,
+            perk_type: "trial_lesson",
+            recurrence: "one-time",
+          });
+        }
+      }
+
       if (student) {
         await issueAndSendLoginLink(student.id, purchase.member_email);
       }
