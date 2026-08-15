@@ -24,7 +24,9 @@ app/
   api/auth/kajabi/login         magic-link entry point the emailed link points to
   api/cron/kajabi-sync          5-min poll for cancellations/DNC (no webhook exists for these)
   api/booking/slots, /book      open-slot computation + self-service booking, makeup-credit aware
-  auth/callback                 Supabase PKCE callback, completes the session
+  auth/callback                 client-side page that picks up the fragment-
+                                 delivered session from Supabase's magic-link
+                                 verify (not PKCE — see note below) and redirects on
   login/                        auth entry point
 lib/
   supabase/                     browser, server, and admin (service-role) Supabase clients
@@ -72,6 +74,16 @@ directly** to the student (no dependency on Kajabi rendering anything).
 Because minting + sending happens the instant the webhook fires — not
 queued through Zapier — the email is already there by the time the student
 checks their inbox, no password screen. The token rotates on every use.
+
+One layer down, the Supabase session handoff itself needed a fix too:
+`admin.auth.admin.generateLink()` + Supabase's `/auth/v1/verify` deliver
+the session as a URL **fragment** (`#access_token=...`), not a `?code=...`
+query param — fragments never reach the server, so the original
+server-side `/auth/callback` route handler could never have worked here.
+It's a client-side page now (`app/auth/callback/page.tsx`); the browser
+Supabase client's `detectSessionInUrl` picks the fragment up and persists
+it into cookies, then the page redirects on to the dashboard. Confirmed
+with a real login walked through step-by-step, not just code review.
 
 Cancellation and DNC, which have no webhook to listen for, run on a
 **5-minute polling job** (`api/cron/kajabi-sync`). This was originally a

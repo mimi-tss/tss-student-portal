@@ -22,6 +22,7 @@
 **Auth: no real Kajabi SSO exists, so login is a magic-link token built directly against Kajabi's API** (not Zapier):
 - On `purchase.created` (the per-offer webhook), the app synchronously mints a signed, single-use login token and **emails it directly to the student** — confirmed that Kajabi's member Pages only support static per-segment "Variants," not per-member dynamic values, so a page-embedded merge-tag link (the original plan) isn't possible; Liquid custom-field merge only works inside Kajabi's own email campaigns. The app's own email is the source of truth for delivery.
 - Because the token is minted and the email sent the moment the webhook fires — not queued through Zapier — it's already in the student's inbox by the time they check it, no per-click delay or password screen. The token rotates (a fresh one is minted and re-sent) every time it's consumed, so the same flow works next login too.
+- Clicking the link still needs to hand off to a real Supabase session, and that handoff is client-side, not server-side: Supabase delivers the session as a URL fragment (`#access_token=...`), which never reaches a server at all, so the final step is a client-side page picking that up rather than a server route handler. Confirmed by walking a real login through step by step.
 
 **Google Workspace setup (confirmed live):**
 - Only one Workspace account exists: `info@tarasimonstudios.com` (admin). Coaches do **not** have their own Workspace seats.
