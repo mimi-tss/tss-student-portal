@@ -173,7 +173,8 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 ## 8. Coach / Student / Admin Views
 
 ### Coach side (permissions: read-only on scheduling, write on a few specific things)
-- View own schedule only (never another coach's — enforced by data scoping, not just UI)
+- View own schedule only (never another coach's — enforced by data scoping, not just UI), as a **full calendar grid** (day/week toggle), color-coded: grey = open/available within working hours, purple = a booked student session (trial lessons get an amber border on top of the purple, so the coach knows to pitch the Pro upgrade — section 5), black = a coach block (break, time off), and anything outside working hours simply isn't shown.
+- **Coaches are spread across multiple timezones** — each coach has their own `timezone`, and their calendar always displays in that zone regardless of who's viewing. Admin's coach-schedule view (below) is the one exception: normalized to Eastern for every coach, so admin can compare across coaches without doing zone math themselves.
 - Mark attendance (Attended / No-show / Late-forfeit) — their one scheduling-adjacent write action
 - Click into a session (e.g. "Caleb 5:30–6:00pm") to open a **student snapshot panel**: chat box, student's upcoming schedule, makeup credit count, subscription tier, Google Drive folder, Homework Notes
 - Homework Notes: dated running log, **visible to the student**, shows recent ~5–8 entries by default with expand-for-more (don't dump full multi-year history), optionally pin important notes
@@ -194,7 +195,7 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 - Plain-language renewal/cancel-by date
 
 ### Admin/owner side
-- Full visibility across all coaches — schedules, capacity, payroll rollup
+- Full visibility across all coaches — schedules, capacity, payroll rollup. Schedule view uses the same calendar grid coaches see, but **always normalized to Eastern time** regardless of each coach's own timezone, so admin can compare across coaches directly.
 - DNC flag management, no-show/absence review and termination confirms
 - Manual pause/resume toggling
 - Manual admin overrides on makeup restrictions (logged, one-time-per-student cap on exceptions)

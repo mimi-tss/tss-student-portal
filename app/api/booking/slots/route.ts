@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 
 // Computes open slots for the student's own assigned coach:
 // coach working_hours minus coach_blocks minus existing sessions.
 // See TSS_App_Spec_1.md section 5 ("Coach availability").
+//
+// Coaches are spread across multiple timezones (confirmed, not assumed),
+// so "09:00"-"17:00" is only meaningful against that specific coach's
+// own timezone column — walking calendar days and converting each
+// window's start/end via zonedTimeToUtc, not naive server-local
+// setHours(), which silently used whatever timezone the server process
+// happens to run in (previously a real, if minor, bug).
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const LOOKAHEAD_DAYS = 14;
@@ -38,11 +46,12 @@ export async function GET(req: NextRequest) {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("working_hours")
+    .select("working_hours, timezone")
     .eq("id", coachId)
     .single();
 
   const workingHours = (coach?.working_hours ?? {}) as WorkingHours;
+  const timeZone = coach?.timezone ?? "America/New_York";
 
   const now = new Date();
   const horizon = new Date(now.getTime() + LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
@@ -74,19 +83,25 @@ export async function GET(req: NextRequest) {
 
   const slots: Slot[] = [];
 
+  // Anchor on "today" in the coach's own timezone, then walk forward in
+  // pure calendar days (Date.UTC on Y/M/D numbers) — DST-safe, since
+  // we're manipulating calendar dates, not instants, until the very end
+  // when zonedTimeToUtc converts each window's wall-clock time.
+  const [nowYear, nowMonth, nowDay] = zonedYearMonthDay(now, timeZone);
+
   for (let d = 0; d < LOOKAHEAD_DAYS; d++) {
-    const day = new Date(now);
-    day.setDate(day.getDate() + d);
-    const windows = workingHours[DAY_KEYS[day.getDay()]] ?? [];
+    const dateOnly = new Date(Date.UTC(nowYear, nowMonth - 1, nowDay + d));
+    const year = dateOnly.getUTCFullYear();
+    const month = dateOnly.getUTCMonth() + 1;
+    const day = dateOnly.getUTCDate();
+    const windows = workingHours[DAY_KEYS[dateOnly.getUTCDay()]] ?? [];
 
     for (const [winStart, winEnd] of windows) {
       const [startH, startM] = winStart.split(":").map(Number);
       const [endH, endM] = winEnd.split(":").map(Number);
 
-      const cursor = new Date(day);
-      cursor.setHours(startH, startM, 0, 0);
-      const windowEnd = new Date(day);
-      windowEnd.setHours(endH, endM, 0, 0);
+      let cursor = zonedTimeToUtc(year, month, day, startH, startM, timeZone);
+      const windowEnd = zonedTimeToUtc(year, month, day, endH, endM, timeZone);
 
       while (cursor.getTime() + SLOT_MINUTES * 60 * 1000 <= windowEnd.getTime()) {
         const slotEnd = new Date(cursor.getTime() + SLOT_MINUTES * 60 * 1000);
@@ -99,7 +114,7 @@ export async function GET(req: NextRequest) {
           slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
         }
 
-        cursor.setTime(slotEnd.getTime());
+        cursor = slotEnd;
       }
     }
   }

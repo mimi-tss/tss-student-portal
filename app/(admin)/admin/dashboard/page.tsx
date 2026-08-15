@@ -27,7 +27,12 @@ export default async function AdminDashboardPage() {
 
   return (
     <main className="p-8">
-      <h1 className="mb-4 text-xl font-semibold">Students</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Students</h1>
+        <Link href="/admin/schedules" className="text-sm text-blue-600 underline">
+          View coach schedules →
+        </Link>
+      </div>
 
       <ProvisionStudentClient coaches={coaches ?? []} />
 
