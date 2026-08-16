@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { zonedTimeToUtc } from "@/lib/timezone";
 import {
+  CANADA_TIMEZONES,
   DEFAULT_TIMEZONE,
+  OTHER_COMMON_TIMEZONES,
+  US_TIMEZONES,
   allTimezones,
   detectTimezone,
   timezoneLabel,
@@ -76,6 +79,7 @@ export default function BookingClient({
   const [useCredit, setUseCredit] = useState(false);
   const [bookedWithCredit, setBookedWithCredit] = useState(false);
   const [availableCredits, setAvailableCredits] = useState(credits);
+  const [expiryWarningSlot, setExpiryWarningSlot] = useState<Slot | null>(null);
 
   // Auto-detect on mount (client-only — server/first paint use the ET
   // default so there's no SSR/hydration mismatch), then re-center the
@@ -140,9 +144,10 @@ export default function BookingClient({
     return ty === viewYear && tm === viewMonth;
   })();
 
-  async function handleBook(slot: Slot) {
+  async function proceedBooking(slot: Slot, applyCredit: boolean) {
     setBookingStart(slot.start);
     setErrorMsg(null);
+    setExpiryWarningSlot(null);
 
     const res = await fetch("/api/booking/book", {
       method: "POST",
@@ -151,14 +156,14 @@ export default function BookingClient({
         studentId,
         slotStart: slot.start,
         ...(mode === "trial" ? { trial: true, coachId: selectedCoachId } : {}),
-        ...(useCredit && availableCredits[0] ? { makeupCreditId: availableCredits[0].id } : {}),
+        ...(applyCredit && availableCredits[0] ? { makeupCreditId: availableCredits[0].id } : {}),
       }),
     });
 
     if (res.ok) {
       setSlots((prev) => prev.filter((s) => s.start !== slot.start));
       if (mode === "trial") setBooked(true);
-      if (mode === "full" && useCredit) {
+      if (mode === "full" && applyCredit) {
         setErrorMsg(null);
         setBookedWithCredit(true);
         setUseCredit(false);
@@ -170,6 +175,18 @@ export default function BookingClient({
     }
 
     setBookingStart(null);
+  }
+
+  // Warn before even trying, rather than letting the server 409 it —
+  // the credit's expiry (not just "not expired right now", see the
+  // booking API) means a date past that point simply can't use it.
+  function handleBook(slot: Slot) {
+    const credit = availableCredits[0];
+    if (useCredit && credit?.expires_at && new Date(slot.start) > new Date(credit.expires_at)) {
+      setExpiryWarningSlot(slot);
+      return;
+    }
+    proceedBooking(slot, useCredit);
   }
 
   if (mode === "trial" && booked) {
@@ -267,19 +284,84 @@ export default function BookingClient({
             onChange={(e) => setTimezone(e.target.value)}
             className="rounded border p-1"
           >
-            {!timezoneList.includes(timezone) && (
-              <option value={timezone}>{timezoneLabel(timezone)}</option>
-            )}
-            {timezoneList.map((tz) => (
-              <option key={tz} value={tz}>
-                {timezoneLabel(tz)}
-              </option>
-            ))}
+            {!timezoneList.includes(timezone) &&
+              !US_TIMEZONES.some((z) => z.tz === timezone) &&
+              !CANADA_TIMEZONES.some((z) => z.tz === timezone) && (
+                <option value={timezone}>{timezoneLabel(timezone)}</option>
+              )}
+            <optgroup label="United States">
+              {US_TIMEZONES.map((z) => (
+                <option key={z.tz} value={z.tz}>
+                  {z.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Canada">
+              {CANADA_TIMEZONES.map((z) => (
+                <option key={z.tz} value={z.tz}>
+                  {z.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Other">
+              {OTHER_COMMON_TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>
+                  {timezoneLabel(tz)}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="All timezones">
+              {timezoneList
+                .filter(
+                  (tz) =>
+                    !US_TIMEZONES.some((z) => z.tz === tz) &&
+                    !CANADA_TIMEZONES.some((z) => z.tz === tz) &&
+                    !OTHER_COMMON_TIMEZONES.includes(tz),
+                )
+                .map((tz) => (
+                  <option key={tz} value={tz}>
+                    {timezoneLabel(tz)}
+                  </option>
+                ))}
+            </optgroup>
           </select>
         </label>
       </div>
 
       {errorMsg && <p className="mb-4 text-sm text-red-600">{errorMsg}</p>}
+
+      {expiryWarningSlot && (
+        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="mb-1 font-medium">This time is past your makeup credit&apos;s expiry</p>
+          <p className="mb-3 text-gray-700">
+            Your makeup credit expires{" "}
+            {availableCredits[0]?.expires_at
+              ? new Date(availableCredits[0].expires_at).toLocaleDateString("en-US", {
+                  timeZone: timezone,
+                })
+              : ""}
+            , before{" "}
+            {new Date(expiryWarningSlot.start).toLocaleDateString("en-US", {
+              timeZone: timezone,
+            })}
+            . It won&apos;t be applied to this booking.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => proceedBooking(expiryWarningSlot, false)}
+              className="rounded bg-black px-3 py-1 text-xs text-white"
+            >
+              Book without credit
+            </button>
+            <button
+              onClick={() => setExpiryWarningSlot(null)}
+              className="text-xs text-gray-600 underline"
+            >
+              Choose a different date
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-6 sm:flex-row">
         <div className="sm:w-72">

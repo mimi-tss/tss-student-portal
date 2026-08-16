@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import AssignCoachClient from "./assign-coach-client";
 import ProvisionStudentClient from "./provision-student-client";
+import AddCreditClient from "./add-credit-client";
 
 // Admin dashboard: student list with coach assignment and trial-lesson
 // booking on a student's behalf. See TSS_App_Spec_1.md section 8 — full
@@ -43,6 +44,7 @@ export default async function AdminDashboardPage() {
             <th className="py-2">Tier</th>
             <th className="py-2">Assigned coach</th>
             <th className="py-2">Trial lesson</th>
+            <th className="py-2">Extra lesson credit</th>
           </tr>
         </thead>
         <tbody>
@@ -71,6 +73,9 @@ export default async function AdminDashboardPage() {
                 ) : (
                   <span className="text-gray-400">—</span>
                 )}
+              </td>
+              <td className="py-2">
+                <AddCreditClient studentId={student.id} />
               </td>
             </tr>
           ))}
