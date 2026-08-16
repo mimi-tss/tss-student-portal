@@ -244,6 +244,7 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 - **Notification, not two-way email relay** (deliberate choice): when a message arrives and the recipient isn't active in-app, send a generic notification ("You have a new message from [Name] — tap to view and reply") linking back into the app. No message content or real email/phone exposed in the notification.
 - Two-way masked email relay (reply-by-email) was considered and rejected — more infrastructure to build/maintain, and it undermines the anti-poaching goal by normalizing email-based exchange instead of requiring the app.
 - Future idea (not built now): lightweight content filter flagging phone numbers/emails typed into chat.
+- **Built:** one thread per student, auto-created (and re-pointed on coach reassignment) via a DB trigger on `students.assigned_coach_id`, not app code — so every path that ever sets a coach (webhook, admin assign, ambassador provisioning) gets a thread for free, no per-route wiring. Text + attachments (images/video/pdf/audio, 50MB cap) via a private Supabase Storage bucket, RLS-scoped per thread. Simple 4s polling for new messages, not Supabase Realtime — matches the polling pattern already used elsewhere (Join button) rather than adding a new mechanism. **Not built yet:** the email notification for an inactive recipient (spec para above) — chat today is in-app-only with no external nudge when a new message arrives.
 
 ---
 

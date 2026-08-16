@@ -35,6 +35,9 @@ export default async function StudentLayout({
           <Link href="/student/book" className="text-gray-600 hover:text-black">
             Book / reschedule
           </Link>
+          <Link href="/student/chat" className="text-gray-600 hover:text-black">
+            Chat
+          </Link>
         </nav>
       </header>
       {children}
