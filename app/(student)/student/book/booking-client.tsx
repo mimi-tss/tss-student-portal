@@ -13,14 +13,21 @@ interface Coach {
   name: string;
 }
 
+interface Credit {
+  id: string;
+  expires_at: string | null;
+}
+
 export default function BookingClient({
   studentId,
   mode,
   coachId,
+  credits = [],
 }: {
   studentId: string;
   mode: "full" | "trial";
   coachId: string | null;
+  credits?: Credit[];
 }) {
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
@@ -29,6 +36,9 @@ export default function BookingClient({
   const [bookingStart, setBookingStart] = useState<string | null>(null);
   const [booked, setBooked] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [useCredit, setUseCredit] = useState(false);
+  const [bookedWithCredit, setBookedWithCredit] = useState(false);
+  const [availableCredits, setAvailableCredits] = useState(credits);
 
   // Trial mode: student picks any coach first (section 5 — no
   // assigned_coach_id needed for the one-time trial lesson).
@@ -61,12 +71,19 @@ export default function BookingClient({
         studentId,
         slotStart: slot.start,
         ...(mode === "trial" ? { trial: true, coachId: selectedCoachId } : {}),
+        ...(useCredit && availableCredits[0] ? { makeupCreditId: availableCredits[0].id } : {}),
       }),
     });
 
     if (res.ok) {
       setSlots((prev) => prev.filter((s) => s.start !== slot.start));
       if (mode === "trial") setBooked(true);
+      if (mode === "full" && useCredit) {
+        setErrorMsg(null);
+        setBookedWithCredit(true);
+        setUseCredit(false);
+        setAvailableCredits((prev) => prev.slice(1));
+      }
     } else {
       const body = await res.json().catch(() => ({}));
       setErrorMsg(body.error ?? "Could not book that slot — please try another.");
@@ -127,6 +144,35 @@ export default function BookingClient({
       <h1 className="mb-4 text-xl font-semibold">
         {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
+
+      {mode === "full" && (
+        <div className="mb-4 rounded border p-3 text-sm">
+          {availableCredits.length > 0 ? (
+            <>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={useCredit}
+                  onChange={(e) => setUseCredit(e.target.checked)}
+                />
+                Use a makeup credit for this booking ({availableCredits.length} available
+                {availableCredits[0].expires_at
+                  ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
+                  : ""}
+                )
+              </label>
+            </>
+          ) : (
+            <p className="text-gray-500">No makeup credits available right now.</p>
+          )}
+        </div>
+      )}
+
+      {bookedWithCredit && (
+        <p className="mb-4 text-sm text-green-700">
+          Booked using a makeup credit.
+        </p>
+      )}
 
       {loading && <p className="text-gray-500">Loading open slots…</p>}
       {errorMsg && <p className="mb-4 text-sm text-red-600">{errorMsg}</p>}

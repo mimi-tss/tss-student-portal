@@ -29,11 +29,22 @@ export default async function BookPage() {
   if (!student) redirect("/login");
 
   if (student.tier === "pro" || student.tier === "elite") {
+    // Unused, unexpired credits — what's actually spendable on this
+    // booking right now (spec section 8: "see remaining makeup credits").
+    const { data: credits } = await supabase
+      .from("makeup_credits")
+      .select("id, expires_at")
+      .eq("student_id", student.id)
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("expires_at", { ascending: true, nullsFirst: false });
+
     return (
       <BookingClient
         studentId={student.id}
         mode="full"
         coachId={student.assigned_coach_id}
+        credits={credits ?? []}
       />
     );
   }

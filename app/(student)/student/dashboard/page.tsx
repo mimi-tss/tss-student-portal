@@ -29,37 +29,51 @@ export default async function StudentDashboardPage() {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
 
-  const [{ data: coach }, { data: nextSession }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }] =
-    await Promise.all([
-      student.assigned_coach_id
-        ? supabase
-            .from("coaches")
-            .select("meet_link")
-            .eq("id", student.assigned_coach_id)
-            .single()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("sessions")
-        .select("id, scheduled_at, duration_minutes")
-        .eq("student_id", student.id)
-        .eq("status", "scheduled")
-        .gte("scheduled_at", new Date().toISOString())
-        .order("scheduled_at")
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("makeup_credits")
-        .select("id", { count: "exact", head: true })
-        .eq("student_id", student.id)
-        .eq("type", "student-fault")
-        .gte("created_at", monthStart),
-      supabase
-        .from("makeup_credits")
-        .select("id", { count: "exact", head: true })
-        .eq("student_id", student.id)
-        .eq("type", "student-fault")
-        .gte("created_at", yearStart),
-    ]);
+  const [
+    { data: coach },
+    { data: nextSession },
+    { count: monthlyCreditsUsed },
+    { count: yearlyCreditsUsed },
+    { data: availableCredits },
+  ] = await Promise.all([
+    student.assigned_coach_id
+      ? supabase
+          .from("coaches")
+          .select("meet_link")
+          .eq("id", student.assigned_coach_id)
+          .single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("sessions")
+      .select("id, scheduled_at, duration_minutes")
+      .eq("student_id", student.id)
+      .eq("status", "scheduled")
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("makeup_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", student.id)
+      .eq("type", "student-fault")
+      .gte("created_at", monthStart),
+    supabase
+      .from("makeup_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", student.id)
+      .eq("type", "student-fault")
+      .gte("created_at", yearStart),
+    // Unused, unexpired credits of any type — what's actually spendable
+    // right now (see "See remaining makeup credits" in spec section 8).
+    supabase
+      .from("makeup_credits")
+      .select("id, expires_at")
+      .eq("student_id", student.id)
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("expires_at", { ascending: true, nullsFirst: false }),
+  ]);
 
   const recordings = student.drive_folder_id
     ? await listStudentRecordings(student.drive_folder_id)
@@ -92,6 +106,25 @@ export default async function StudentDashboardPage() {
           </div>
         </div>
       )}
+
+      <div className="mb-6 rounded border p-4 text-sm">
+        <p className="font-medium">
+          {availableCredits && availableCredits.length > 0
+            ? `${availableCredits.length} makeup credit${availableCredits.length > 1 ? "s" : ""} available`
+            : "No makeup credits available"}
+        </p>
+        {availableCredits && availableCredits.length > 0 && (
+          <ul className="mt-1 text-gray-600">
+            {availableCredits.map((credit) => (
+              <li key={credit.id}>
+                {credit.expires_at
+                  ? `Expires ${new Date(credit.expires_at).toLocaleDateString()}`
+                  : "No expiration"}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <Link
         href="/student/book"
