@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tara Simon Studios — Portal",
+  title: "Your Coaching Studio — Tara Simon Studios",
   description: "Coach and student portal for Tara Simon Studios",
 };
 

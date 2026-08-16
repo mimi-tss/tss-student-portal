@@ -30,7 +30,7 @@ export default async function StudentLayout({
       <header className="border-b">
         <nav className="mx-auto flex max-w-2xl items-center gap-6 p-4">
           <Link href="/student/dashboard" className="font-semibold">
-            Dashboard
+            Studio
           </Link>
           <Link href="/student/book" className="text-gray-600 hover:text-black">
             Book / reschedule
