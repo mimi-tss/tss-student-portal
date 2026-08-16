@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface Slot {
@@ -78,9 +79,15 @@ export default function BookingClient({
     return (
       <main className="mx-auto max-w-lg p-8">
         <h1 className="mb-2 text-xl font-semibold">Trial lesson booked!</h1>
-        <p className="text-gray-500">
+        <p className="mb-4 text-gray-500">
           We&apos;ll see you then. Check your dashboard for the details.
         </p>
+        <Link
+          href="/student/dashboard"
+          className="inline-block rounded bg-black px-4 py-2 text-white"
+        >
+          Go to dashboard
+        </Link>
       </main>
     );
   }
