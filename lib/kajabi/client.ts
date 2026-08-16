@@ -75,18 +75,28 @@ export async function updateKajabiContactField(
   return res.json();
 }
 
-// TODO: confirm the actual endpoint/pagination for listing subscriptions —
-// used by the polling reconciliation job (app/api/cron/kajabi-sync) since
-// Kajabi has no cancelled/payment-failed webhook events to listen for.
-export async function listKajabiSubscriptions(params: { updatedSince?: string } = {}) {
-  const url = new URL(`${KAJABI_API_BASE}/subscriptions`);
-  if (params.updatedSince) url.searchParams.set("updated_since", params.updatedSince);
+// Returns the Offer IDs a contact currently holds — confirmed real via
+// GET /v1/contacts?filter[email]=... and its relationships.offers.data.
+// This is the only reliable way to detect a downgrade/cancellation/the
+// 60-min add-on being removed, since Kajabi has no webhook for any of
+// those (confirmed) and /v1/subscriptions, this function's previous
+// implementation, doesn't exist at all (confirmed 404, not assumed —
+// see app/api/cron/kajabi-sync).
+export async function getKajabiContactOfferIds(email: string): Promise<string[]> {
+  const url = new URL(`${KAJABI_API_BASE}/contacts`);
+  url.searchParams.set("filter[email]", email);
 
   const res = await fetch(url, { headers: await kajabiHeaders() });
   if (!res.ok) {
-    throw new Error(`Kajabi subscriptions list failed (${res.status}): ${await res.text()}`);
+    throw new Error(`Kajabi contact lookup failed (${res.status}): ${await res.text()}`);
   }
-  return res.json();
+
+  const body = (await res.json()) as {
+    data: { relationships?: { offers?: { data?: { id: string }[] } } }[];
+  };
+
+  const offers = body.data[0]?.relationships?.offers?.data ?? [];
+  return offers.map((o) => o.id);
 }
 
 // Kajabi doesn't sign webhook payloads at all, so there's no header to

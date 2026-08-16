@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyKajabiWebhookSecret } from "@/lib/kajabi/client";
+import { OFFER_IDS, TIER_BY_OFFER_ID } from "@/lib/kajabi/offers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 
@@ -35,22 +36,9 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // via Stripe (not yet integrated). The legacy "Sing Smarter Elite"
 // offer (no suffix, $2,799/6mo) isn't mapped either — any existing
 // subscribers on it still get payment_status synced fine via the
-// tier-agnostic global payment.succeeded handler below.
-const OFFER_IDS = {
-  LITE: "2151043892",
-  SUITE: "2151078893",
-  PRO_MASTER: "2151186014",
-  ELITE_MASTER: "2151340480",
-  ADDON_60MIN: "2151340474",
-} as const;
-
-const TIER_BY_OFFER_ID: Record<string, string> = {
-  [OFFER_IDS.LITE]: "lite",
-  [OFFER_IDS.SUITE]: "suite",
-  [OFFER_IDS.PRO_MASTER]: "pro",
-  [OFFER_IDS.ELITE_MASTER]: "elite",
-};
-
+// tier-agnostic global payment.succeeded handler below. See
+// lib/kajabi/offers.ts for the OFFER_IDS/TIER_BY_OFFER_ID mapping,
+// shared with the polling job in app/api/cron/kajabi-sync.
 type KajabiWebhookPayload = {
   id: string;
   event: string; // "purchase.created" | "payment.succeeded"
