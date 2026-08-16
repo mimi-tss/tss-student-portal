@@ -11,11 +11,23 @@ const NOTICE_HOURS = 24;
 const MONTHLY_CAP = 1;
 const YEARLY_CAP = 6;
 
-function warningFor(scheduledAt: string, monthlyCreditsUsed: number, yearlyCreditsUsed: number) {
+function warningFor(
+  scheduledAt: string,
+  monthlyCreditsUsed: number,
+  yearlyCreditsUsed: number,
+  isMakeup: boolean,
+) {
   const hoursNotice = (new Date(scheduledAt).getTime() - Date.now()) / (60 * 60 * 1000);
 
   if (hoursNotice < NOTICE_HOURS) {
-    return "This is inside the 24-hour notice window, so this cancellation won't earn a makeup credit — the lesson will be forfeited, though you're still welcome to book a new time.";
+    return isMakeup
+      ? "This is inside the 24-hour notice window, so this cancellation won't give you your makeup credit back — it'll be forfeited, though you're still welcome to book a new time."
+      : "This is inside the 24-hour notice window, so this cancellation won't earn a makeup credit — the lesson will be forfeited, though you're still welcome to book a new time.";
+  }
+  // Rescheduling a makeup session gives back the same credit you already
+  // spent on it — not a new student-fault event, so the cap doesn't apply.
+  if (isMakeup) {
+    return "You're cancelling with more than 24 hours' notice, so the makeup credit you used to book this will be given back to you.";
   }
   if (monthlyCreditsUsed >= MONTHLY_CAP) {
     return `You're cancelling with plenty of notice, but you've already used your makeup credit for this month (${monthlyCreditsUsed}/${MONTHLY_CAP}), so this one won't earn an additional credit.`;
@@ -29,11 +41,13 @@ function warningFor(scheduledAt: string, monthlyCreditsUsed: number, yearlyCredi
 export default function CancelButton({
   sessionId,
   scheduledAt,
+  isMakeup,
   monthlyCreditsUsed,
   yearlyCreditsUsed,
 }: {
   sessionId: string;
   scheduledAt: string;
+  isMakeup: boolean;
   monthlyCreditsUsed: number;
   yearlyCreditsUsed: number;
 }) {
@@ -82,7 +96,7 @@ export default function CancelButton({
       <div className="max-w-sm rounded border border-gray-200 bg-gray-50 p-3 text-sm">
         <p className="mb-1 font-medium">Are you sure you want to cancel this session?</p>
         <p className="mb-3 text-gray-600">
-          {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed)}
+          {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed, isMakeup)}
         </p>
         <div className="flex items-center gap-3">
           <button

@@ -10,6 +10,12 @@ const CREDIT_EXPIRY_DAYS = 30;
 // not duplicated here). Inside the 24-hour window, or once the student is
 // already at cap, the session is marked cancelled-no-notice instead — no
 // credit, coach still paid per the no-refund policy.
+//
+// Exception: if the session being cancelled was itself a makeup session
+// (booked by spending a credit), a with-notice cancellation reinstates
+// that same credit instead of trying to mint a new one — this is a
+// reschedule of an existing make-good, not a fresh student-fault event,
+// so it doesn't touch the monthly/yearly cap.
 export async function POST(req: NextRequest) {
   const { sessionId } = await req.json();
 
@@ -38,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, student_id, scheduled_at, status")
+    .select("id, student_id, scheduled_at, status, is_makeup, makeup_credit_id")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -58,9 +64,23 @@ export async function POST(req: NextRequest) {
   const withinNoticeWindow = hoursNotice >= NOTICE_HOURS;
 
   let creditGranted = false;
+  let creditReinstated = false;
   let creditExpiresAt: string | null = null;
 
-  if (withinNoticeWindow) {
+  if (withinNoticeWindow && session.is_makeup && session.makeup_credit_id) {
+    const { data: reinstated, error: reinstateError } = await supabase
+      .from("makeup_credits")
+      .update({ used: false, used_session_id: null })
+      .eq("id", session.makeup_credit_id)
+      .select("expires_at")
+      .maybeSingle();
+
+    if (!reinstateError && reinstated) {
+      creditGranted = true;
+      creditReinstated = true;
+      creditExpiresAt = reinstated.expires_at;
+    }
+  } else if (withinNoticeWindow) {
     const expiresAt = new Date(
       scheduledAt.getTime() + CREDIT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
@@ -92,9 +112,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  const message = creditGranted
-    ? "Session cancelled — you've earned a makeup credit, good for 30 days."
-    : "Session cancelled. This one didn't earn a makeup credit (inside the 24-hour notice window, or you're already at your credit limit for this period), but you can still book a new time.";
+  const message = creditReinstated
+    ? "Session cancelled — your makeup credit has been given back to you, so you can reschedule."
+    : creditGranted
+      ? "Session cancelled — you've earned a makeup credit, good for 30 days."
+      : "Session cancelled. This one didn't earn a makeup credit (inside the 24-hour notice window, or you're already at your credit limit for this period), but you can still book a new time.";
 
-  return NextResponse.json({ creditGranted, creditExpiresAt, message });
+  return NextResponse.json({ creditGranted, creditReinstated, creditExpiresAt, message });
 }

@@ -45,7 +45,7 @@ export default async function StudentDashboardPage() {
       : Promise.resolve({ data: null }),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes")
+      .select("id, scheduled_at, duration_minutes, is_makeup")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
@@ -100,6 +100,7 @@ export default async function StudentDashboardPage() {
               key={nextSession.id}
               sessionId={nextSession.id}
               scheduledAt={nextSession.scheduled_at}
+              isMakeup={nextSession.is_makeup}
               monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
               yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
             />
