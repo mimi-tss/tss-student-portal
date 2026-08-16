@@ -3,6 +3,7 @@ import { verifyKajabiWebhookSecret } from "@/lib/kajabi/client";
 import { OFFER_IDS, TIER_BY_OFFER_ID } from "@/lib/kajabi/offers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
+import { ensureStudentDriveFolder } from "@/lib/google/drive";
 
 // Direct Kajabi API/webhook integration — no Zapier — per
 // TSS_App_Spec_1.md section 1 & 3.
@@ -163,6 +164,15 @@ export async function POST(req: NextRequest) {
             recurrence: "one-time",
           });
         }
+      }
+
+      // No-ops today — a fresh Kajabi purchase never has assigned_coach_id
+      // set yet (admin assigns that separately, see
+      // app/api/admin/assign-coach) — but included here so the folder
+      // gets created immediately in the rare case a coach is already
+      // assigned by the time this fires.
+      if (student) {
+        await ensureStudentDriveFolder(student.id);
       }
 
       if (student) {

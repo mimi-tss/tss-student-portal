@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
+import { ensureStudentDriveFolder } from "@/lib/google/drive";
 
 // Manually provisions a student — for ambassadors given free access via
 // Kajabi's "Grant Offer" or a 100%-off coupon (neither fires a purchase
@@ -77,6 +78,10 @@ export async function POST(req: NextRequest) {
       recurrence: "one-time",
     });
   }
+
+  // Only does something immediately if a coach was picked at
+  // provisioning time — otherwise no-ops until assign-coach later sets one.
+  await ensureStudentDriveFolder(student.id);
 
   await issueAndSendLoginLink(student.id, email);
 
