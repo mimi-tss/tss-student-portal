@@ -97,6 +97,17 @@ export async function POST(req: NextRequest) {
       if (creditRow.expires_at && new Date(creditRow.expires_at) < new Date()) {
         return NextResponse.json({ error: "makeup credit expired" }, { status: 409 });
       }
+      // The slot itself must fall within the credit's window, not just "not
+      // expired as of right now" — otherwise a credit could be locked onto
+      // a session booked arbitrarily far in the future, or kept alive
+      // indefinitely via repeated cancel-and-rebook cycles that each land
+      // just before the (fixed, never-extended) expiry date.
+      if (creditRow.expires_at && new Date(slotStart) > new Date(creditRow.expires_at)) {
+        return NextResponse.json(
+          { error: "that time is past your makeup credit's expiry — please pick an earlier slot" },
+          { status: 409 },
+        );
+      }
 
       credit = creditRow;
     }
