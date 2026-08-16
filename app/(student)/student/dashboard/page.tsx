@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import JoinButton from "./join-button";
+import CancelButton from "./cancel-button";
 
 // Student dashboard: next session + Join button (opens 10 min early,
 // section [today's addition]), recordings from their own Drive
@@ -32,7 +33,7 @@ export default async function StudentDashboardPage() {
       : Promise.resolve({ data: null }),
     supabase
       .from("sessions")
-      .select("scheduled_at, duration_minutes")
+      .select("id, scheduled_at, duration_minutes")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
@@ -50,15 +51,20 @@ export default async function StudentDashboardPage() {
       <h1 className="mb-4 text-xl font-semibold">Welcome, {student.name}</h1>
 
       {nextSession && (
-        <div className="mb-6 flex items-center justify-between rounded border p-4">
-          <p>Next session: {new Date(nextSession.scheduled_at).toLocaleString()}</p>
-          {coach?.meet_link && (
-            <JoinButton
-              scheduledAt={nextSession.scheduled_at}
-              durationMinutes={nextSession.duration_minutes}
-              meetLink={coach.meet_link}
-            />
-          )}
+        <div className="mb-6 rounded border p-4">
+          <div className="flex items-center justify-between">
+            <p>Next session: {new Date(nextSession.scheduled_at).toLocaleString()}</p>
+            {coach?.meet_link && (
+              <JoinButton
+                scheduledAt={nextSession.scheduled_at}
+                durationMinutes={nextSession.duration_minutes}
+                meetLink={coach.meet_link}
+              />
+            )}
+          </div>
+          <div className="mt-3">
+            <CancelButton sessionId={nextSession.id} />
+          </div>
         </div>
       )}
 

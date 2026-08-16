@@ -143,6 +143,8 @@ The student portal is an add-on library-card layer on top of Kajabi's own course
 
 Studio-initiated makeups never touch the student's capped credit balance — that's reserved for the student's own fault.
 
+**Self-service cancellation (built):** a student can cancel their own upcoming session from the dashboard. **24-hour notice window (decided):** cancelling 24+ hours before the scheduled time earns a student-fault makeup credit (30 days from the missed session's original date, same as the table above); inside 24 hours, the session is simply marked `cancelled-no-notice` — no credit, coach still paid per the no-refund policy. **At-cap behavior (decided):** if the student is already at their 1/month or 6/year cap, cancellation still goes through (never blocked) — it just doesn't earn a new credit, same as a no-notice cancellation. The cap window is calendar month/year (not billing-anniversary-based) for simplicity; revisit if that turns out to matter. Cap enforcement lives in the `makeup_credits` insert RLS policy itself (migration `0012_student_cancellation.sql`), not just app-layer logic, so it holds even against a direct API call. After cancelling, the student is offered an immediate link to rebook against their own coach's open slots.
+
 ### Coach-block reschedule flow (planned blocks, e.g. vacation)
 
 1. Block added → system calculates days until block starts.
