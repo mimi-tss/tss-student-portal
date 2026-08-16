@@ -12,33 +12,41 @@ import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 // window's start/end via zonedTimeToUtc, not naive server-local
 // setHours(), which silently used whatever timezone the server process
 // happens to run in (previously a real, if minor, bug).
+//
+// Slot *length* depends on the student's session_duration_minutes (the
+// 60-min add-on, section 2) — trial lessons are always a fixed 30
+// regardless, since the add-on is Pro/Elite-only and mutually exclusive
+// with the Suite-tier trial. Start times still walk in 30-min
+// increments either way, so a 60-min student sees overlapping options
+// (e.g. 2:00 and 2:30) until they book one, same as any variable-length
+// booking system.
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const LOOKAHEAD_DAYS = 14;
-const SLOT_MINUTES = 30;
+const WALK_MINUTES = 30;
 
 type WorkingHours = Record<string, [string, string][]>;
 
 export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
   const requestedCoachId = req.nextUrl.searchParams.get("coachId");
+  const isTrial = req.nextUrl.searchParams.get("trial") === "true";
   if (!studentId) {
     return NextResponse.json({ error: "studentId required" }, { status: 400 });
   }
 
   const supabase = await createClient();
 
+  const { data: student } = await supabase
+    .from("students")
+    .select("assigned_coach_id, session_duration_minutes")
+    .eq("id", studentId)
+    .single();
+
   // An explicit coachId (trial-lesson coach picker, section 5) overrides
   // assigned_coach_id — a fresh Suite student may not have one yet.
-  let coachId = requestedCoachId;
-  if (!coachId) {
-    const { data: student } = await supabase
-      .from("students")
-      .select("assigned_coach_id")
-      .eq("id", studentId)
-      .single();
-    coachId = student?.assigned_coach_id ?? null;
-  }
+  const coachId = requestedCoachId ?? student?.assigned_coach_id ?? null;
+  const slotMinutes = isTrial ? 30 : (student?.session_duration_minutes ?? 30);
 
   if (!coachId) {
     return NextResponse.json({ slots: [] });
@@ -103,8 +111,8 @@ export async function GET(req: NextRequest) {
       let cursor = zonedTimeToUtc(year, month, day, startH, startM, timeZone);
       const windowEnd = zonedTimeToUtc(year, month, day, endH, endM, timeZone);
 
-      while (cursor.getTime() + SLOT_MINUTES * 60 * 1000 <= windowEnd.getTime()) {
-        const slotEnd = new Date(cursor.getTime() + SLOT_MINUTES * 60 * 1000);
+      while (cursor.getTime() + slotMinutes * 60 * 1000 <= windowEnd.getTime()) {
+        const slotEnd = new Date(cursor.getTime() + slotMinutes * 60 * 1000);
         const isPast = cursor < now;
         const overlapsBusy = busyRanges.some(
           ([bStart, bEnd]) => cursor < bEnd && slotEnd > bStart,
@@ -114,7 +122,7 @@ export async function GET(req: NextRequest) {
           slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
         }
 
-        cursor = slotEnd;
+        cursor = new Date(cursor.getTime() + WALK_MINUTES * 60 * 1000);
       }
     }
   }

@@ -25,6 +25,32 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // Kajabi doesn't sign webhook payloads at all, so the webhook URL
 // configured in Kajabi (both surfaces) must include
 // ?secret=<KAJABI_WEBHOOK_SECRET> — checked below, not a header.
+//
+// Offer IDs confirmed live via GET /v1/offers (see TSS_App_Spec_1.md
+// section 2) — there are 11 real offers total, only 5 of which are
+// tier-relevant. Coach Tara's two offers ("...Coach Tara") exist purely
+// to gate Kajabi's own Courses/Community content and are never
+// purchased through checkout (links hidden) — her students are
+// provisioned entirely through the admin ambassador tool instead, paid
+// via Stripe (not yet integrated). The legacy "Sing Smarter Elite"
+// offer (no suffix, $2,799/6mo) isn't mapped either — any existing
+// subscribers on it still get payment_status synced fine via the
+// tier-agnostic global payment.succeeded handler below.
+const OFFER_IDS = {
+  LITE: "2151043892",
+  SUITE: "2151078893",
+  PRO_MASTER: "2151186014",
+  ELITE_MASTER: "2151340480",
+  ADDON_60MIN: "2151340474",
+} as const;
+
+const TIER_BY_OFFER_ID: Record<string, string> = {
+  [OFFER_IDS.LITE]: "lite",
+  [OFFER_IDS.SUITE]: "suite",
+  [OFFER_IDS.PRO_MASTER]: "pro",
+  [OFFER_IDS.ELITE_MASTER]: "elite",
+};
+
 type KajabiWebhookPayload = {
   id: string;
   event: string; // "purchase.created" | "payment.succeeded"
@@ -38,15 +64,10 @@ type KajabiWebhookPayload = {
     member_email: string;
     member_first_name?: string;
     member_last_name?: string;
+    offer_id: number;
     offer_title?: string;
     transaction_id: number;
   };
-};
-
-const TIER_BY_OFFER_TITLE: Record<string, string> = {
-  "Sing Smarter Suite": "suite",
-  "Sing Smarter Pro": "pro",
-  "Sing Smarter Elite": "elite",
 };
 
 export async function POST(req: NextRequest) {
@@ -75,9 +96,32 @@ export async function POST(req: NextRequest) {
       const purchase = event.payload;
       if (!purchase) break;
 
-      const tier = purchase.offer_title
-        ? (TIER_BY_OFFER_TITLE[purchase.offer_title] ?? "lite")
-        : "lite";
+      const offerId = String(purchase.offer_id);
+
+      // The 60-min add-on layers on top of an existing Pro/Elite
+      // subscription — it changes session duration, not tier. Doesn't
+      // touch anything else about the student's record.
+      if (offerId === OFFER_IDS.ADDON_60MIN) {
+        await admin
+          .from("students")
+          .update({ session_duration_minutes: 60 })
+          .eq("kajabi_customer_id", String(purchase.member_id));
+        break;
+      }
+
+      const tier = TIER_BY_OFFER_ID[offerId];
+      if (!tier) {
+        // Not one of the 5 tier-relevant offers (mini course, master
+        // course, workbook, Coach Tara's content-gating offers, the
+        // legacy Elite offer, etc.) — deliberately don't touch the
+        // student's existing tier. Previously this defaulted unknown
+        // offers to "lite", which would have silently downgraded an
+        // existing Pro/Elite student the moment they bought an unrelated
+        // add-on course — a real bug, caught once the full offer list
+        // (11 offers, not the 3 originally assumed) came back from the
+        // Kajabi API.
+        break;
+      }
 
       const { data: student } = await admin
         .from("students")

@@ -41,11 +41,13 @@ export default function BookingClient({
   useEffect(() => {
     if (!selectedCoachId) return;
     setLoading(true);
-    fetch(`/api/booking/slots?studentId=${studentId}&coachId=${selectedCoachId}`)
+    fetch(
+      `/api/booking/slots?studentId=${studentId}&coachId=${selectedCoachId}${mode === "trial" ? "&trial=true" : ""}`,
+    )
       .then((res) => res.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoading(false));
-  }, [studentId, selectedCoachId]);
+  }, [studentId, selectedCoachId, mode]);
 
   async function handleBook(slot: Slot) {
     setBookingStart(slot.start);

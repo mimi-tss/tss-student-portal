@@ -44,6 +44,24 @@
 
 **Other products:** mini courses $17 each, master courses $249.99 each, $497 3-month bundle into Suite, group vocal classes $40 add-on, 60-min lesson upgrade +$250/mo, prepay discounts (6-mo upfront $1599, 1-yr upfront $3199), single private lesson $150 (internal), Spotlight $80.
 
+### Kajabi offers — real Offer IDs (confirmed via `GET /v1/offers`, not assumed)
+
+Kajabi was restructured after the original tiers above were priced out — 11 real offers exist today, only 5 of which are tier-relevant to this app. Pulling the live list (rather than trusting titles, which can be renamed) is what caught this:
+
+| Offer ID | Title | Maps to |
+|---|---|---|
+| `2151043892` | Sing Smarter Lite | tier `lite` — no portal access |
+| `2151078893` | Sing Smarter Suite | tier `suite` — one lifetime trial lesson |
+| `2151186014` | Sing Smarter Pro (internal: "...- Master Coaches") | tier `pro` — full weekly booking, Master Coach pool |
+| `2151340480` | Sing Smarter Elite - Master Coaches | tier `elite` — full weekly booking, Master Coach pool |
+| `2151340474` | 60 Minute Session Upgrade | **not a tier** — layers on an existing Pro/Elite sub, sets `session_duration_minutes = 60` |
+
+**Not mapped, deliberately:**
+- `2151340477` "Sing Smarter Pro - Coach Tara" and `2151340478` "Sing Smarter Elite - Coach Tara" ($357/mo each) — these exist purely to gate Kajabi's own Courses/Community content for Tara's students. Checkout links are hidden; no one purchases through them. Tara's students are provisioned entirely through the admin ambassador tool (section 8), billed via **Stripe**, not yet integrated — tracked as an open item (section 11).
+- `2151333347` "Sing Smarter Elite" (legacy, no suffix, $2,799/6mo) — pre-restructuring offer. Not given a per-offer purchase webhook; any existing subscribers still get `payment_status` synced fine via the tier-agnostic global `payment.succeeded` webhook.
+
+**A real bug this caught:** the webhook handler used to default any *unrecognized* offer to tier `lite`. With the full 11-offer list in view, that would have silently downgraded an existing Pro/Elite student to Lite the moment they bought an unrelated mini-course or master-course. Fixed — unmapped offers now leave the student's tier untouched.
+
 ### Portal access by tier
 
 The student portal is an add-on library-card layer on top of Kajabi's own course/community access — how much of *this app* a student can use scales with tier, separately from what Kajabi itself shows them:
@@ -106,6 +124,14 @@ The student portal is an add-on library-card layer on top of Kajabi's own course
 - **Unlike every other booking in this app, the trial lesson is not restricted to the student's assigned coach** — a fresh Suite student may not have one yet. The student picks any coach's open slot themselves, or an admin books it on their behalf and assigns the coach at the same time.
 - **Visually distinct on the coach's schedule** (different color from regular/makeup sessions) — the point is to flag the coach that this session ends with a "coach sale": pitch the discounted upgrade into Pro before the student leaves the call.
 - Booking the trial does not set `assigned_coach_id` permanently — that's still whatever the studio assigns if/when the student upgrades to Pro.
+- **Coach Tara never appears in this picker** — she's admin-side only (section 8). Students choosing a coach for their trial only ever see the Master Coaches (Celine/Ivan/Nikki/Crissy).
+- Trial lessons are always a fixed 30 minutes, regardless of anything set on the student's record — the 60-min add-on below is Pro/Elite-only and mutually exclusive with the Suite-tier trial by construction.
+
+### Session duration (60-min add-on)
+
+- Pro/Elite students book 30-min sessions by default. Kajabi's "60 Minute Session Upgrade" offer (`2151340474`) layers on top of an existing subscription and switches a student's `session_duration_minutes` to 60 — it's an entitlement flag on the student, not a separate tier.
+- Same flag is settable manually from the admin ambassador tool, for Coach Tara's Stripe-billed students who never purchase the Kajabi add-on at all.
+- Slot generation respects this per-student: start times still offered every 30 minutes, but a 60-min student's slots are checked and booked as full 60-min blocks (so e.g. both 2:00 and 2:30 might show until one is booked, same as any variable-length booking system).
 
 ### Makeup credit types (three distinct kinds — do not conflate)
 
@@ -173,6 +199,7 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 ## 8. Coach / Student / Admin Views
 
 ### Coach side (permissions: read-only on scheduling, write on a few specific things)
+- **Coach Tara** gets the exact same coach access as the Master Coaches (Celine/Ivan/Nikki/Crissy) — same dashboard, same calendar, same student snapshot panel/chat/homework notes, no separate one-off view. Provisioning her account is the identical process (admin-created Supabase auth user + coach role) as the Master Coaches. The one difference: `hidden_from_students = true` on her coach row, so she never appears in the student-facing trial-lesson coach picker (section 5) — **admin-only** to assign her, e.g. through the ambassador tool.
 - View own schedule only (never another coach's — enforced by data scoping, not just UI), as a **full calendar grid** (day/week toggle), color-coded: grey = open/available within working hours, purple = a booked student session (trial lessons get an amber border on top of the purple, so the coach knows to pitch the Pro upgrade — section 5), black = a coach block (break, time off), and anything outside working hours simply isn't shown.
 - **Coaches are spread across multiple timezones** — each coach has their own `timezone`, and their calendar always displays in that zone regardless of who's viewing. Admin's coach-schedule view (below) is the one exception: normalized to Eastern for every coach, so admin can compare across coaches without doing zone math themselves.
 - Mark attendance (Attended / No-show / Late-forfeit) — their one scheduling-adjacent write action. Click any past session directly on the calendar grid to mark it; marked sessions show a small status indicator (✓ / ✗ / L) on the block going forward.
@@ -235,5 +262,7 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 - Resolved: Kajabi Pages don't support per-member merge tags (only static Variants; Liquid custom-field merge is email-only) — login link is emailed directly by the app instead (see section 1).
 - Exact Kajabi API response shapes for the contacts custom-field update and subscriptions list endpoints — not in the publicly available docs; confirm against the OpenAPI spec once Pro-tier credentials exist.
 - Whether 5 minutes is the right polling interval for the cancellation/DNC reconciliation job, once real data shows how urgent same-day detection actually needs to be.
-- **Operational, not code**: the per-offer "Purchase Webhook URL" (section 1) has only been set on one offer (Sing Smarter Pro) so far, as part of testing. It needs to be added to every other offer whose purchase should provision portal access (Suite, Elite, and any bundle offers) before this goes live — easy to forget since it's a manual per-offer step, not a one-time global setting.
+- **Operational, not code — needs manual verification in the Kajabi dashboard** (can't be checked via API, confirmed no `/webhooks` endpoint exists): the per-offer "Purchase Webhook URL" (section 1) needs to be set on all 5 tier-relevant offers — `2151043892` (Lite), `2151078893` (Suite), `2151186014` (Pro), `2151340480` (Elite - Master Coaches), `2151340474` (60-Min Add-on). Only Pro was confirmed set as of the last real-purchase test; **don't assume any of the other four are already done** — this was specifically flagged after Pro/Elite turned out to have been restructured with new Offer IDs, which would have silently orphaned any webhook still pointed at an old ID.
+- **Stripe integration for Coach Tara's students — not yet built.** Her students are billed outside Kajabi entirely; provisioning currently goes through the admin ambassador tool by hand. Needs scoping as its own piece of work.
+- **Needs live verification, not assumed**: does the coach dashboard show a student assigned to a coach (`assigned_coach_id`) before any session exists between them? The calendar is session-driven (a coach only sees students they have actual sessions with) — there's no separate "my assigned students" list yet. This matters specifically for Coach Tara's ambassador-provisioned students, who might be assigned before their first session is booked. Untested as of this writing.
 - Possible future: student-facing self-service pause requests (currently admin-only); GHL birthday marketing emails; standalone scheduling app; phone/email content-filtering in chat.

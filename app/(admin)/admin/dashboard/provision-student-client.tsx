@@ -17,6 +17,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   const [name, setName] = useState("");
   const [tier, setTier] = useState("suite");
   const [coachId, setCoachId] = useState("");
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState(30);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -28,7 +29,13 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
     const res = await fetch("/api/admin/provision-student", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name, tier, coachId: coachId || undefined }),
+      body: JSON.stringify({
+        email,
+        name,
+        tier,
+        coachId: coachId || undefined,
+        sessionDurationMinutes,
+      }),
     });
 
     setSaving(false);
@@ -74,6 +81,17 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
           <option value="suite">Suite</option>
           <option value="pro">Pro</option>
           <option value="elite">Elite</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500">Session length</label>
+        <select
+          value={sessionDurationMinutes}
+          onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
+          className="rounded border px-2 py-1 text-sm"
+        >
+          <option value={30}>30 min</option>
+          <option value={60}>60 min</option>
         </select>
       </div>
       <div>

@@ -4,10 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 
 // Manually provisions a student — for ambassadors given free access via
-// Kajabi's "Grant Offer" or a 100%-off coupon, neither of which fires a
-// purchase webhook (confirmed in TSS_App_Spec_1.md section 1). This is
-// the direct-admin-action counterpart to what the webhook does
-// automatically for a real purchase.
+// Kajabi's "Grant Offer" or a 100%-off coupon (neither fires a purchase
+// webhook, confirmed in TSS_App_Spec_1.md section 1), and for Coach
+// Tara's students, who are billed via Stripe and never touch Kajabi at
+// all (section 5/8). This is the direct-admin-action counterpart to what
+// the webhook does automatically for a real Kajabi purchase.
+// sessionDurationMinutes is the manual equivalent of Kajabi's 60-Minute
+// Session Upgrade add-on, for Tara's students who won't ever purchase
+// that Kajabi offer.
 //
 // Uses the service-role client for the auth-user/profile creation steps
 // (creating a Supabase auth user isn't something a regular session's RLS
@@ -15,7 +19,7 @@ import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 // but only after confirming the caller is an admin via the normal
 // session-scoped client first.
 export async function POST(req: NextRequest) {
-  const { email, name, tier, coachId } = await req.json();
+  const { email, name, tier, coachId, sessionDurationMinutes } = await req.json();
 
   if (!email || !name || !tier) {
     return NextResponse.json({ error: "email, name, and tier required" }, { status: 400 });
@@ -47,6 +51,7 @@ export async function POST(req: NextRequest) {
       assigned_coach_id: coachId || null,
       subscription_status: "active",
       payment_status: "ok",
+      session_duration_minutes: sessionDurationMinutes === 60 ? 60 : 30,
     })
     .select("id")
     .single();

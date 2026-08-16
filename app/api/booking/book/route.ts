@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("assigned_coach_id, tier")
+    .select("assigned_coach_id, tier, session_duration_minutes")
     .eq("id", studentId)
     .single();
 
@@ -115,13 +115,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "slot no longer available" }, { status: 409 });
   }
 
+  // Trial lessons are always a fixed 30 min regardless of the student's
+  // entitled duration — the 60-min add-on is Pro/Elite-only and mutually
+  // exclusive with the Suite-tier trial.
+  const durationMinutes = trial ? 30 : (student.session_duration_minutes ?? 30);
+
   const { data: session, error } = await supabase
     .from("sessions")
     .insert({
       student_id: studentId,
       actual_coach_id: coachId,
       scheduled_at: slotStart,
-      duration_minutes: 30,
+      duration_minutes: durationMinutes,
       status: "scheduled",
       is_makeup: !!credit,
       makeup_credit_id: credit?.id ?? null,
