@@ -63,7 +63,7 @@ export default async function StudentDashboardPage() {
             )}
           </div>
           <div className="mt-3">
-            <CancelButton sessionId={nextSession.id} />
+            <CancelButton key={nextSession.id} sessionId={nextSession.id} />
           </div>
         </div>
       )}
