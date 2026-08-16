@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -24,5 +25,19 @@ export default async function StudentLayout({
     redirect("/login?error=no_portal_access");
   }
 
-  return <div className="min-h-screen">{children}</div>;
+  return (
+    <div className="min-h-screen">
+      <header className="border-b">
+        <nav className="mx-auto flex max-w-2xl items-center gap-6 p-4">
+          <Link href="/student/dashboard" className="font-semibold">
+            Dashboard
+          </Link>
+          <Link href="/student/book" className="text-gray-600 hover:text-black">
+            Book / reschedule
+          </Link>
+        </nav>
+      </header>
+      {children}
+    </div>
+  );
 }
