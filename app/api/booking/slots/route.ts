@@ -20,9 +20,16 @@ import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 // increments either way, so a 60-min student sees overlapping options
 // (e.g. 2:00 and 2:30) until they book one, same as any variable-length
 // booking system.
+//
+// Range is caller-supplied (start/end, absolute instants) rather than a
+// fixed lookahead — the booking UI is a month calendar, so it asks for
+// whatever month is currently in view, computed in the *student's*
+// chosen display timezone. Defaults to a 14-day window if omitted, for
+// any other caller.
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-const LOOKAHEAD_DAYS = 14;
+const DEFAULT_LOOKAHEAD_DAYS = 14;
+const MAX_RANGE_DAYS = 62;
 const WALK_MINUTES = 30;
 
 type WorkingHours = Record<string, [string, string][]>;
@@ -31,8 +38,23 @@ export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
   const requestedCoachId = req.nextUrl.searchParams.get("coachId");
   const isTrial = req.nextUrl.searchParams.get("trial") === "true";
+  const startParam = req.nextUrl.searchParams.get("start");
+  const endParam = req.nextUrl.searchParams.get("end");
   if (!studentId) {
     return NextResponse.json({ error: "studentId required" }, { status: 400 });
+  }
+
+  const now = new Date();
+  const rangeStart = startParam ? new Date(startParam) : now;
+  const rangeEnd = endParam
+    ? new Date(endParam)
+    : new Date(now.getTime() + DEFAULT_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
+
+  if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime()) || rangeEnd < rangeStart) {
+    return NextResponse.json({ error: "invalid start/end" }, { status: 400 });
+  }
+  if (rangeEnd.getTime() - rangeStart.getTime() > MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: "range too large" }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -61,22 +83,19 @@ export async function GET(req: NextRequest) {
   const workingHours = (coach?.working_hours ?? {}) as WorkingHours;
   const timeZone = coach?.timezone ?? "America/New_York";
 
-  const now = new Date();
-  const horizon = new Date(now.getTime() + LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000);
-
   const [{ data: blocks }, { data: existingSessions }] = await Promise.all([
     supabase
       .from("coach_blocks")
       .select("start_at, end_at")
       .eq("coach_id", coachId)
-      .lte("start_at", horizon.toISOString())
-      .gte("end_at", now.toISOString()),
+      .lte("start_at", rangeEnd.toISOString())
+      .gte("end_at", rangeStart.toISOString()),
     supabase
       .from("sessions")
       .select("scheduled_at, duration_minutes")
       .eq("actual_coach_id", coachId)
-      .gte("scheduled_at", now.toISOString())
-      .lte("scheduled_at", horizon.toISOString())
+      .gte("scheduled_at", rangeStart.toISOString())
+      .lte("scheduled_at", rangeEnd.toISOString())
       .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)"),
   ]);
 
@@ -90,19 +109,24 @@ export async function GET(req: NextRequest) {
   ];
 
   const slots: Slot[] = [];
+  const effectiveStart = rangeStart > now ? rangeStart : now;
 
-  // Anchor on "today" in the coach's own timezone, then walk forward in
-  // pure calendar days (Date.UTC on Y/M/D numbers) — DST-safe, since
+  // Walk pure calendar days (Date.UTC on Y/M/D numbers) from rangeStart's
+  // date through rangeEnd's date, both read in the *coach's* timezone
+  // (working_hours are defined against that zone) — DST-safe, since
   // we're manipulating calendar dates, not instants, until the very end
   // when zonedTimeToUtc converts each window's wall-clock time.
-  const [nowYear, nowMonth, nowDay] = zonedYearMonthDay(now, timeZone);
+  const [startYear, startMonth, startDay] = zonedYearMonthDay(rangeStart, timeZone);
+  const [endYear, endMonth, endDay] = zonedYearMonthDay(rangeEnd, timeZone);
 
-  for (let d = 0; d < LOOKAHEAD_DAYS; d++) {
-    const dateOnly = new Date(Date.UTC(nowYear, nowMonth - 1, nowDay + d));
-    const year = dateOnly.getUTCFullYear();
-    const month = dateOnly.getUTCMonth() + 1;
-    const day = dateOnly.getUTCDate();
-    const windows = workingHours[DAY_KEYS[dateOnly.getUTCDay()]] ?? [];
+  let cursorDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+  const lastDate = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+
+  while (cursorDate.getTime() <= lastDate.getTime()) {
+    const year = cursorDate.getUTCFullYear();
+    const month = cursorDate.getUTCMonth() + 1;
+    const day = cursorDate.getUTCDate();
+    const windows = workingHours[DAY_KEYS[cursorDate.getUTCDay()]] ?? [];
 
     for (const [winStart, winEnd] of windows) {
       const [startH, startM] = winStart.split(":").map(Number);
@@ -113,18 +137,20 @@ export async function GET(req: NextRequest) {
 
       while (cursor.getTime() + slotMinutes * 60 * 1000 <= windowEnd.getTime()) {
         const slotEnd = new Date(cursor.getTime() + slotMinutes * 60 * 1000);
-        const isPast = cursor < now;
+        const inRange = cursor >= effectiveStart && cursor <= rangeEnd;
         const overlapsBusy = busyRanges.some(
           ([bStart, bEnd]) => cursor < bEnd && slotEnd > bStart,
         );
 
-        if (!isPast && !overlapsBusy) {
+        if (inRange && !overlapsBusy) {
           slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
         }
 
         cursor = new Date(cursor.getTime() + WALK_MINUTES * 60 * 1000);
       }
     }
+
+    cursorDate = new Date(cursorDate.getTime() + 24 * 60 * 60 * 1000);
   }
 
   return NextResponse.json({ slots });
