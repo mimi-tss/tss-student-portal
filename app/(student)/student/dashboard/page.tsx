@@ -23,24 +23,43 @@ export default async function StudentDashboardPage() {
 
   if (!student) redirect("/login");
 
-  const [{ data: coach }, { data: nextSession }] = await Promise.all([
-    student.assigned_coach_id
-      ? supabase
-          .from("coaches")
-          .select("meet_link")
-          .eq("id", student.assigned_coach_id)
-          .single()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("sessions")
-      .select("id, scheduled_at, duration_minutes")
-      .eq("student_id", student.id)
-      .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString())
-      .order("scheduled_at")
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  // Matches the cap windows enforced by the makeup_credits insert RLS
+  // policy (migration 0012) — calendar month/year, not billing-anniversary.
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
+
+  const [{ data: coach }, { data: nextSession }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }] =
+    await Promise.all([
+      student.assigned_coach_id
+        ? supabase
+            .from("coaches")
+            .select("meet_link")
+            .eq("id", student.assigned_coach_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("sessions")
+        .select("id, scheduled_at, duration_minutes")
+        .eq("student_id", student.id)
+        .eq("status", "scheduled")
+        .gte("scheduled_at", new Date().toISOString())
+        .order("scheduled_at")
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("makeup_credits")
+        .select("id", { count: "exact", head: true })
+        .eq("student_id", student.id)
+        .eq("type", "student-fault")
+        .gte("created_at", monthStart),
+      supabase
+        .from("makeup_credits")
+        .select("id", { count: "exact", head: true })
+        .eq("student_id", student.id)
+        .eq("type", "student-fault")
+        .gte("created_at", yearStart),
+    ]);
 
   const recordings = student.drive_folder_id
     ? await listStudentRecordings(student.drive_folder_id)
@@ -63,7 +82,13 @@ export default async function StudentDashboardPage() {
             )}
           </div>
           <div className="mt-3">
-            <CancelButton key={nextSession.id} sessionId={nextSession.id} />
+            <CancelButton
+              key={nextSession.id}
+              sessionId={nextSession.id}
+              scheduledAt={nextSession.scheduled_at}
+              monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
+              yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
+            />
           </div>
         </div>
       )}
