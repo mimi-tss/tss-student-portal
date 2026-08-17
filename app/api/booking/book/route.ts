@@ -110,12 +110,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Re-check the slot is still free — another student could have claimed it
-  // between the slots fetch and this request.
+  // between the slots fetch and this request. Must exclude cancelled
+  // sessions the same way the slots endpoint does, or a cancelled session
+  // permanently blocks that exact time from ever being rebooked by anyone.
   const { data: clash } = await supabase
     .from("sessions")
     .select("id")
     .eq("actual_coach_id", coachId)
     .eq("scheduled_at", slotStart)
+    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)")
     .maybeSingle();
 
   if (clash) {
