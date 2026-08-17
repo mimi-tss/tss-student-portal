@@ -55,11 +55,16 @@ export default function BookingClient({
   mode,
   coachId,
   credits = [],
+  canBookWithoutCredit = true,
 }: {
   studentId: string;
   mode: "full" | "trial";
   coachId: string | null;
   credits?: Credit[];
+  // False for a non-Pro/Elite student who's only here because of a
+  // purchased-addon credit (section 5) — they have no other entitlement
+  // to book with, so offering "book without credit" would just 403.
+  canBookWithoutCredit?: boolean;
 }) {
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
@@ -344,15 +349,20 @@ export default function BookingClient({
             {new Date(expiryWarningSlot.start).toLocaleDateString("en-US", {
               timeZone: timezone,
             })}
-            . It won&apos;t be applied to this booking.
+            .{" "}
+            {canBookWithoutCredit
+              ? "It won't be applied to this booking."
+              : "This student's plan doesn't include booking without a credit, so please pick an earlier date instead."}
           </p>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => proceedBooking(expiryWarningSlot, false)}
-              className="rounded bg-black px-3 py-1 text-xs text-white"
-            >
-              Book without credit
-            </button>
+            {canBookWithoutCredit && (
+              <button
+                onClick={() => proceedBooking(expiryWarningSlot, false)}
+                className="rounded bg-black px-3 py-1 text-xs text-white"
+              >
+                Book without credit
+              </button>
+            )}
             <button
               onClick={() => setExpiryWarningSlot(null)}
               className="text-xs text-gray-600 underline"
