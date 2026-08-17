@@ -8,7 +8,7 @@ import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/canc
 // own. Distinct from "staff cancel" (see staff-cancel-session/route.ts),
 // which always grants a credit uncapped and requires a logged reason.
 export async function POST(req: NextRequest) {
-  const { sessionId } = await req.json();
+  const { sessionId, reason } = await req.json();
 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, student_id, scheduled_at, status, is_makeup, makeup_credit_id")
+    .select("id, student_id, scheduled_at, duration_minutes, status, is_makeup, makeup_credit_id")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "session is not scheduled" }, { status: 409 });
   }
 
-  const outcome = await applyCancellationCredit(supabase, session);
+  const outcome = await applyCancellationCredit(supabase, session, reason);
 
   const { error: updateError } = await supabase
     .from("sessions")

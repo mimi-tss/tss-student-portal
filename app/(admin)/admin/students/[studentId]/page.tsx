@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
+import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import AdminCancelButtons from "./admin-cancel-buttons";
 
 // Read-only admin view of what a student sees on their own dashboard —
@@ -17,7 +18,9 @@ export default async function AdminStudentPage({
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id")
+    .select(
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes",
+    )
     .eq("id", studentId)
     .maybeSingle();
 
@@ -38,7 +41,7 @@ export default async function AdminStudentPage({
       .maybeSingle(),
     supabase
       .from("makeup_credits")
-      .select("id, type, used, expires_at")
+      .select("id, type, used, expires_at, reason, duration_minutes")
       .eq("student_id", student.id)
       .eq("used", false)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
@@ -84,14 +87,20 @@ export default async function AdminStudentPage({
       <div className="mb-6 rounded border p-4">
         <h2 className="mb-1 text-sm font-semibold text-gray-500">Session credits</h2>
         {credits && credits.length > 0 ? (
-          <ul className="space-y-1 text-sm">
+          <ul className="space-y-2 text-sm">
             {credits.map((c) => (
               <li key={c.id}>
-                {c.type}
-                {" — "}
-                {c.expires_at
-                  ? `expires ${new Date(c.expires_at).toLocaleDateString()}`
-                  : "no expiration"}
+                <p>
+                  {creditDisplayName(c.duration_minutes ?? student.session_duration_minutes ?? 30)}
+                  {" — "}
+                  {c.expires_at
+                    ? `expires ${new Date(c.expires_at).toLocaleDateString()}`
+                    : "no expiration"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {creditTypeLabel(c.type)}
+                  {c.reason ? ` - ${c.reason}` : ""}
+                </p>
               </li>
             ))}
           </ul>

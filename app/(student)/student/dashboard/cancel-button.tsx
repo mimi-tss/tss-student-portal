@@ -53,6 +53,7 @@ export default function CancelButton({
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export default function CancelButton({
     const res = await fetch("/api/booking/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId }),
+      body: JSON.stringify({ sessionId, reason: reason.trim() || undefined }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -98,6 +99,13 @@ export default function CancelButton({
         <p className="mb-3 text-gray-600">
           {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed, isMakeup)}
         </p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Reason (optional)"
+          className="mb-3 w-full rounded border p-2 text-sm"
+        />
         <div className="flex items-center gap-3">
           <button
             onClick={handleCancel}
@@ -107,7 +115,10 @@ export default function CancelButton({
             {loading ? "Cancelling…" : "Yes, cancel"}
           </button>
           <button
-            onClick={() => setConfirming(false)}
+            onClick={() => {
+              setConfirming(false);
+              setReason("");
+            }}
             disabled={loading}
             className="text-gray-500 underline"
           >

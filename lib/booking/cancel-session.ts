@@ -9,6 +9,7 @@ interface SessionForCancel {
   id: string;
   student_id: string;
   scheduled_at: string;
+  duration_minutes: number;
   is_makeup: boolean;
   makeup_credit_id: string | null;
 }
@@ -32,6 +33,7 @@ export interface CancelOutcome {
 export async function applyCancellationCredit(
   supabase: Awaited<ReturnType<typeof createClient>>,
   session: SessionForCancel,
+  reason?: string | null,
 ): Promise<CancelOutcome> {
   const scheduledAt = new Date(session.scheduled_at);
   const hoursNotice = (scheduledAt.getTime() - Date.now()) / (60 * 60 * 1000);
@@ -40,7 +42,7 @@ export async function applyCancellationCredit(
   if (withinNoticeWindow && session.is_makeup && session.makeup_credit_id) {
     const { data: reinstated, error } = await supabase
       .from("makeup_credits")
-      .update({ used: false, used_session_id: null })
+      .update({ used: false, used_session_id: null, reason: reason?.trim() || null })
       .eq("id", session.makeup_credit_id)
       .select("expires_at")
       .maybeSingle();
@@ -88,6 +90,12 @@ export async function applyCancellationCredit(
     type: "student-fault",
     source_session_id: session.id,
     expires_at: expiresAt,
+    reason: reason?.trim() || null,
+    // Snapshot the actual missed session's length, not the student's
+    // current default — those can drift apart (e.g. the 60-min add-on
+    // gets removed later; the credit should still represent what was
+    // actually lost).
+    duration_minutes: session.duration_minutes,
   });
 
   if (creditError) {

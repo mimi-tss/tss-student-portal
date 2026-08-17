@@ -14,12 +14,15 @@ import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 // happens to run in (previously a real, if minor, bug).
 //
 // Slot *length* depends on the student's session_duration_minutes (the
-// 60-min add-on, section 2) — trial lessons are always a fixed 30
-// regardless, since the add-on is Pro/Elite-only and mutually exclusive
-// with the Suite-tier trial. Start times still walk in 30-min
-// increments either way, so a 60-min student sees overlapping options
-// (e.g. 2:00 and 2:30) until they book one, same as any variable-length
-// booking system.
+// 60-min add-on, section 2) by default — trial lessons are always a
+// fixed 30 regardless, since the add-on is Pro/Elite-only and mutually
+// exclusive with the Suite-tier trial. If a specific creditId is passed
+// (the student has "use a credit" checked), that credit's own duration
+// overrides the student's ambient setting, since a purchased 60-min
+// add-on should show 60-min slots even for a 30-min-plan student. Start
+// times still walk in 30-min increments either way, so a 60-min student
+// sees overlapping options (e.g. 2:00 and 2:30) until they book one,
+// same as any variable-length booking system.
 //
 // Range is caller-supplied (start/end, absolute instants) rather than a
 // fixed lookahead — the booking UI is a month calendar, so it asks for
@@ -38,6 +41,7 @@ export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
   const requestedCoachId = req.nextUrl.searchParams.get("coachId");
   const isTrial = req.nextUrl.searchParams.get("trial") === "true";
+  const creditId = req.nextUrl.searchParams.get("creditId");
   const startParam = req.nextUrl.searchParams.get("start");
   const endParam = req.nextUrl.searchParams.get("end");
   if (!studentId) {
@@ -68,7 +72,16 @@ export async function GET(req: NextRequest) {
   // An explicit coachId (trial-lesson coach picker, section 5) overrides
   // assigned_coach_id — a fresh Suite student may not have one yet.
   const coachId = requestedCoachId ?? student?.assigned_coach_id ?? null;
-  const slotMinutes = isTrial ? 30 : (student?.session_duration_minutes ?? 30);
+
+  let slotMinutes = isTrial ? 30 : (student?.session_duration_minutes ?? 30);
+  if (!isTrial && creditId) {
+    const { data: credit } = await supabase
+      .from("makeup_credits")
+      .select("duration_minutes")
+      .eq("id", creditId)
+      .maybeSingle();
+    if (credit?.duration_minutes) slotMinutes = credit.duration_minutes;
+  }
 
   if (!coachId) {
     return NextResponse.json({ slots: [] });

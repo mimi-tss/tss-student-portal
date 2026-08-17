@@ -18,7 +18,7 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
     const res = await fetch("/api/admin/cancel-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId }),
+      body: JSON.stringify({ sessionId, reason: reason.trim() || undefined }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -31,6 +31,7 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
 
     setMessage(body.message);
     setMode(null);
+    setReason("");
     router.refresh();
   }
 
@@ -87,7 +88,10 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
             {loading ? "Cancelling…" : "Confirm staff cancel"}
           </button>
           <button
-            onClick={() => setMode(null)}
+            onClick={() => {
+              setMode(null);
+              setReason("");
+            }}
             disabled={loading}
             className="text-xs text-gray-600 underline"
           >
@@ -106,6 +110,13 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
           credit is issued only with 24+ hours notice, and it counts against their
           monthly/yearly cap.
         </p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Reason (optional)"
+          className="mb-2 w-full rounded border p-2 text-sm"
+        />
         <div className="flex items-center gap-3">
           <button
             onClick={doRegularCancel}
@@ -115,7 +126,10 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
             {loading ? "Cancelling…" : "Confirm cancel"}
           </button>
           <button
-            onClick={() => setMode(null)}
+            onClick={() => {
+              setMode(null);
+              setReason("");
+            }}
             disabled={loading}
             className="text-xs text-gray-600 underline"
           >

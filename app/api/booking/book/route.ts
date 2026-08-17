@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   let coachId: string;
   let trialEntitlementId: string | null = null;
-  let credit: { id: string } | null = null;
+  let credit: { id: string; duration_minutes: number | null } | null = null;
 
   if (trial) {
     if (!requestedCoachId) {
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     if (makeupCreditId) {
       const { data: creditRow } = await supabase
         .from("makeup_credits")
-        .select("id, student_id, used, expires_at")
+        .select("id, student_id, used, expires_at, duration_minutes")
         .eq("id", makeupCreditId)
         .maybeSingle();
 
@@ -124,8 +124,12 @@ export async function POST(req: NextRequest) {
 
   // Trial lessons are always a fixed 30 min regardless of the student's
   // entitled duration — the 60-min add-on is Pro/Elite-only and mutually
-  // exclusive with the Suite-tier trial.
-  const durationMinutes = trial ? 30 : (student.session_duration_minutes ?? 30);
+  // exclusive with the Suite-tier trial. A credit's own duration (e.g. a
+  // purchased 60-min add-on) takes priority over the student's ambient
+  // plan setting when one is being redeemed.
+  const durationMinutes = trial
+    ? 30
+    : (credit?.duration_minutes ?? student.session_duration_minutes ?? 30);
 
   const { data: session, error } = await supabase
     .from("sessions")

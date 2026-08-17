@@ -28,7 +28,7 @@ export default async function AdminBookStudentPage({
 
   const { data: credits } = await supabase
     .from("makeup_credits")
-    .select("id, expires_at")
+    .select("id, expires_at, duration_minutes")
     .eq("student_id", student.id)
     .eq("used", false)
     .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)

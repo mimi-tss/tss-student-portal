@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
+import { creditDisplayName } from "@/lib/booking/credit-display";
 import JoinButton from "./join-button";
 import CancelButton from "./cancel-button";
 
@@ -17,7 +18,7 @@ export default async function StudentDashboardPage() {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, drive_folder_id, assigned_coach_id")
+    .select("id, name, drive_folder_id, assigned_coach_id, session_duration_minutes")
     .eq("profile_id", user.id)
     .single();
 
@@ -68,7 +69,7 @@ export default async function StudentDashboardPage() {
     // right now (see "See remaining session credits" in spec section 8).
     supabase
       .from("makeup_credits")
-      .select("id, expires_at")
+      .select("id, expires_at, duration_minutes")
       .eq("student_id", student.id)
       .eq("used", false)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
@@ -118,9 +119,11 @@ export default async function StudentDashboardPage() {
           <ul className="mt-1 text-gray-600">
             {availableCredits.map((credit) => (
               <li key={credit.id}>
+                {creditDisplayName(credit.duration_minutes ?? student.session_duration_minutes ?? 30)}
+                {" — "}
                 {credit.expires_at
-                  ? `Expires ${new Date(credit.expires_at).toLocaleDateString()}`
-                  : "No expiration"}
+                  ? `expires ${new Date(credit.expires_at).toLocaleDateString()}`
+                  : "no expiration"}
               </li>
             ))}
           </ul>

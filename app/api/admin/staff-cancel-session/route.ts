@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, student_id, status, is_makeup, makeup_credit_id")
+    .select("id, student_id, duration_minutes, status, is_makeup, makeup_credit_id")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (session.is_makeup && session.makeup_credit_id) {
     const { data: reinstated, error: reinstateError } = await supabase
       .from("makeup_credits")
-      .update({ used: false, used_session_id: null })
+      .update({ used: false, used_session_id: null, reason: reason.trim() })
       .eq("id", session.makeup_credit_id)
       .select("expires_at")
       .maybeSingle();
@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
       type: "studio-emergency",
       source_session_id: session.id,
       expires_at: null,
+      reason: reason.trim(),
+      duration_minutes: session.duration_minutes,
     });
 
     if (creditError) {

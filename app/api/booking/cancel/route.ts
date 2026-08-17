@@ -7,7 +7,7 @@ import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/canc
 // shared with the admin "regular cancel" route. This just resolves and
 // checks ownership of the session, then updates its status afterward.
 export async function POST(req: NextRequest) {
-  const { sessionId } = await req.json();
+  const { sessionId, reason } = await req.json();
 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, student_id, scheduled_at, status, is_makeup, makeup_credit_id")
+    .select("id, student_id, scheduled_at, duration_minutes, status, is_makeup, makeup_credit_id")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "session has already passed" }, { status: 409 });
   }
 
-  const outcome = await applyCancellationCredit(supabase, session);
+  const outcome = await applyCancellationCredit(supabase, session, reason);
 
   const { error: updateError } = await supabase
     .from("sessions")

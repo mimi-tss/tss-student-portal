@@ -26,6 +26,7 @@ interface Coach {
 interface Credit {
   id: string;
   expires_at: string | null;
+  duration_minutes: number | null;
 }
 
 function addMonths(year: number, month: number, delta: number) {
@@ -125,13 +126,17 @@ export default function BookingClient({
       start: start.toISOString(),
       end: end.toISOString(),
       ...(mode === "trial" ? { trial: "true" } : {}),
+      // Slot length follows the selected credit's own duration (e.g. a
+      // purchased 60-min add-on) rather than the student's default plan
+      // when one is being used for this booking.
+      ...(useCredit && availableCredits[0] ? { creditId: availableCredits[0].id } : {}),
     });
 
     fetch(`/api/booking/slots?${params}`)
       .then((res) => res.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoading(false));
-  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone]);
+  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone, useCredit, availableCredits]);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, Slot[]>();
@@ -265,7 +270,8 @@ export default function BookingClient({
                 checked={useCredit}
                 onChange={(e) => setUseCredit(e.target.checked)}
               />
-              Use a session credit for this booking ({availableCredits.length} available
+              Use a {availableCredits[0].duration_minutes ?? 30}-min session credit for this
+              booking ({availableCredits.length} available
               {availableCredits[0].expires_at
                 ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
                 : ""}

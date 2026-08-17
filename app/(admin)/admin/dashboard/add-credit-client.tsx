@@ -5,6 +5,7 @@ import { useState } from "react";
 export default function AddCreditClient({ studentId }: { studentId: string }) {
   const [open, setOpen] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState(30);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,7 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
       body: JSON.stringify({
         studentId,
         expiresAt: new Date(`${expiresAt}T23:59:59`).toISOString(),
+        durationMinutes,
       }),
     });
 
@@ -29,6 +31,7 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
       setSaved(true);
       setOpen(false);
       setExpiresAt("");
+      setDurationMinutes(30);
     } else {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "Could not add credit.");
@@ -48,6 +51,14 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
 
   return (
     <div className="flex items-center gap-1">
+      <select
+        value={durationMinutes}
+        onChange={(e) => setDurationMinutes(Number(e.target.value))}
+        className="rounded border px-1 py-0.5 text-xs"
+      >
+        <option value={30}>30 min</option>
+        <option value={60}>60 min</option>
+      </select>
       <input
         type="date"
         value={expiresAt}
