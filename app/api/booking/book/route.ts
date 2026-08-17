@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Self-service booking: student claims an open slot, either as a regular
-// (Pro/Elite) recurring/makeup booking against their own assigned coach,
-// or — the one exception — a Suite-tier student's one-time trial lesson
-// against any coach. See TSS_App_Spec_1.md sections 2 and 5.
-//
-// TODO: this checks that a *given* makeup credit is valid to redeem
-// (belongs to the student, unused, unexpired) — it does not enforce the
-// 1/month, 6/year cap on how many student-fault credits get *issued* in
-// the first place. That cap belongs in whatever flow grants credits
-// (cancellation/no-show handling), which isn't built yet.
+// Booking a slot — either a regular (Pro/Elite) recurring/session-credit
+// booking against a student's own assigned coach, or the one exception,
+// a Suite-tier student's one-time trial lesson against any coach. Used
+// by both the student's own self-service page and the admin
+// book-on-behalf-of page. See TSS_App_Spec_1.md sections 2 and 5.
 export async function POST(req: NextRequest) {
   const {
     studentId,
@@ -78,16 +73,16 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (!creditRow || creditRow.student_id !== studentId) {
-        return NextResponse.json({ error: "makeup credit not found" }, { status: 404 });
+        return NextResponse.json({ error: "session credit not found" }, { status: 404 });
       }
       if (creditRow.used) {
         return NextResponse.json(
-          { error: "makeup credit already used" },
+          { error: "session credit already used" },
           { status: 409 },
         );
       }
       if (creditRow.expires_at && new Date(creditRow.expires_at) < new Date()) {
-        return NextResponse.json({ error: "makeup credit expired" }, { status: 409 });
+        return NextResponse.json({ error: "session credit expired" }, { status: 409 });
       }
       // The slot itself must fall within the credit's window, not just "not
       // expired as of right now" — otherwise a credit could be locked onto
@@ -96,7 +91,7 @@ export async function POST(req: NextRequest) {
       // just before the (fixed, never-extended) expiry date.
       if (creditRow.expires_at && new Date(slotStart) > new Date(creditRow.expires_at)) {
         return NextResponse.json(
-          { error: "that time is past your makeup credit's expiry — please pick an earlier slot" },
+          { error: "that time is past your session credit's expiry — please pick an earlier slot" },
           { status: 409 },
         );
       }

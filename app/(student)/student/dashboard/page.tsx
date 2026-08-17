@@ -65,7 +65,7 @@ export default async function StudentDashboardPage() {
       .eq("type", "student-fault")
       .gte("created_at", yearStart),
     // Unused, unexpired credits of any type — what's actually spendable
-    // right now (see "See remaining makeup credits" in spec section 8).
+    // right now (see "See remaining session credits" in spec section 8).
     supabase
       .from("makeup_credits")
       .select("id, expires_at")
@@ -111,8 +111,8 @@ export default async function StudentDashboardPage() {
       <div className="mb-6 rounded border p-4 text-sm">
         <p className="font-medium">
           {availableCredits && availableCredits.length > 0
-            ? `${availableCredits.length} makeup credit${availableCredits.length > 1 ? "s" : ""} available`
-            : "No makeup credits available"}
+            ? `${availableCredits.length} session credit${availableCredits.length > 1 ? "s" : ""} available`
+            : "No session credits available"}
         </p>
         {availableCredits && availableCredits.length > 0 && (
           <ul className="mt-1 text-gray-600">

@@ -30,7 +30,7 @@ export default async function BookPage() {
 
   if (student.tier === "pro" || student.tier === "elite") {
     // Unused, unexpired credits — what's actually spendable on this
-    // booking right now (spec section 8: "see remaining makeup credits").
+    // booking right now (spec section 8: "see remaining session credits").
     const { data: credits } = await supabase
       .from("makeup_credits")
       .select("id, expires_at")

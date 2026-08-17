@@ -21,21 +21,21 @@ function warningFor(
 
   if (hoursNotice < NOTICE_HOURS) {
     return isMakeup
-      ? "This is inside the 24-hour notice window, so this cancellation won't give you your makeup credit back — it'll be forfeited, though you're still welcome to book a new time."
-      : "This is inside the 24-hour notice window, so this cancellation won't earn a makeup credit — the lesson will be forfeited, though you're still welcome to book a new time.";
+      ? "This is inside the 24-hour notice window, so this cancellation won't give you your session credit back — it'll be forfeited, though you're still welcome to book a new time."
+      : "This is inside the 24-hour notice window, so this cancellation won't earn a session credit — the lesson will be forfeited, though you're still welcome to book a new time.";
   }
   // Rescheduling a makeup session gives back the same credit you already
   // spent on it — not a new student-fault event, so the cap doesn't apply.
   if (isMakeup) {
-    return "You're cancelling with more than 24 hours' notice, so the makeup credit you used to book this will be given back to you.";
+    return "You're cancelling with more than 24 hours' notice, so the session credit you used to book this will be given back to you.";
   }
   if (monthlyCreditsUsed >= MONTHLY_CAP) {
-    return `You're cancelling with plenty of notice, but you've already used your makeup credit for this month (${monthlyCreditsUsed}/${MONTHLY_CAP}), so this one won't earn an additional credit.`;
+    return `You're cancelling with plenty of notice, but you've already used your session credit for this month (${monthlyCreditsUsed}/${MONTHLY_CAP}), so this one won't earn an additional credit.`;
   }
   if (yearlyCreditsUsed >= YEARLY_CAP) {
-    return `You're cancelling with plenty of notice, but you've already used all of your makeup credits for this year (${yearlyCreditsUsed}/${YEARLY_CAP}), so this one won't earn an additional credit.`;
+    return `You're cancelling with plenty of notice, but you've already used all of your session credits for this year (${yearlyCreditsUsed}/${YEARLY_CAP}), so this one won't earn an additional credit.`;
   }
-  return "You're cancelling with more than 24 hours' notice, so you'll earn a makeup credit good for 30 days.";
+  return "You're cancelling with more than 24 hours' notice, so you'll earn a session credit good for 30 days.";
 }
 
 export default function CancelButton({

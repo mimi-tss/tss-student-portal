@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
+import AdminCancelButtons from "./admin-cancel-buttons";
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -28,7 +29,7 @@ export default async function AdminStudentPage({
       : Promise.resolve({ data: null }),
     supabase
       .from("sessions")
-      .select("scheduled_at, duration_minutes, status")
+      .select("id, scheduled_at, duration_minutes, status")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
@@ -71,14 +72,17 @@ export default async function AdminStudentPage({
           </Link>
         </div>
         {nextSession ? (
-          <p>{new Date(nextSession.scheduled_at).toLocaleString()}</p>
+          <>
+            <p>{new Date(nextSession.scheduled_at).toLocaleString()}</p>
+            <AdminCancelButtons key={nextSession.id} sessionId={nextSession.id} />
+          </>
         ) : (
           <p className="text-gray-500">Nothing scheduled.</p>
         )}
       </div>
 
       <div className="mb-6 rounded border p-4">
-        <h2 className="mb-1 text-sm font-semibold text-gray-500">Makeup credits</h2>
+        <h2 className="mb-1 text-sm font-semibold text-gray-500">Session credits</h2>
         {credits && credits.length > 0 ? (
           <ul className="space-y-1 text-sm">
             {credits.map((c) => (

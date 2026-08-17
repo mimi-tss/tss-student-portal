@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Admin-granted makeup credit for a student who bought an extra lesson
+// Admin-granted session credit for a student who bought an extra lesson
 // via a standalone Stripe payment link — outside Kajabi entirely, no
 // webhook, so this is the manual confirmation step after the admin sees
 // the payment come through (spec section 5). Uncapped, expiry is

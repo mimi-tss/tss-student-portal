@@ -51,7 +51,7 @@ export default function StudentTable({
             <th className="py-2">Tier</th>
             <th className="py-2">Assigned coach</th>
             <th className="py-2">Trial lesson</th>
-            <th className="py-2">Extra lesson credit</th>
+            <th className="py-2">Session credit</th>
           </tr>
         </thead>
         <tbody>

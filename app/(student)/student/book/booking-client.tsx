@@ -265,20 +265,20 @@ export default function BookingClient({
                 checked={useCredit}
                 onChange={(e) => setUseCredit(e.target.checked)}
               />
-              Use a makeup credit for this booking ({availableCredits.length} available
+              Use a session credit for this booking ({availableCredits.length} available
               {availableCredits[0].expires_at
                 ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
                 : ""}
               )
             </label>
           ) : (
-            <p className="text-gray-500">No makeup credits available right now.</p>
+            <p className="text-gray-500">No session credits available right now.</p>
           )}
         </div>
       )}
 
       {bookedWithCredit && (
-        <p className="mb-4 text-sm text-green-700">Booked using a makeup credit.</p>
+        <p className="mb-4 text-sm text-green-700">Booked using a session credit.</p>
       )}
 
       <div className="mb-4 flex items-center justify-between text-sm">
@@ -337,9 +337,9 @@ export default function BookingClient({
 
       {expiryWarningSlot && (
         <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-          <p className="mb-1 font-medium">This time is past your makeup credit&apos;s expiry</p>
+          <p className="mb-1 font-medium">This time is past your session credit&apos;s expiry</p>
           <p className="mb-3 text-gray-700">
-            Your makeup credit expires{" "}
+            Your session credit expires{" "}
             {availableCredits[0]?.expires_at
               ? new Date(availableCredits[0].expires_at).toLocaleDateString("en-US", {
                   timeZone: timezone,

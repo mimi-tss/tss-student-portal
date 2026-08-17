@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
 
-// Self-service cancellation (spec section 5/6) — see
-// lib/booking/cancel-session.ts for the actual notice/credit rules,
-// shared with the admin "regular cancel" route. This just resolves and
-// checks ownership of the session, then updates its status afterward.
+// Admin-triggered version of the student's own self-service cancel — same
+// rules either way (see lib/booking/cancel-session.ts), just reachable
+// for any student's session rather than only the logged-in student's
+// own. Distinct from "staff cancel" (see staff-cancel-session/route.ts),
+// which always grants a credit uncapped and requires a logged reason.
 export async function POST(req: NextRequest) {
   const { sessionId } = await req.json();
 
@@ -15,39 +16,17 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "not logged in" }, { status: 401 });
-  }
-
-  const { data: student } = await supabase
-    .from("students")
-    .select("id")
-    .eq("profile_id", user.id)
-    .single();
-
-  if (!student) {
-    return NextResponse.json({ error: "student not found" }, { status: 404 });
-  }
-
   const { data: session } = await supabase
     .from("sessions")
     .select("id, student_id, scheduled_at, status, is_makeup, makeup_credit_id")
     .eq("id", sessionId)
     .maybeSingle();
 
-  if (!session || session.student_id !== student.id) {
+  if (!session) {
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
   if (session.status !== "scheduled") {
     return NextResponse.json({ error: "session is not scheduled" }, { status: 409 });
-  }
-
-  const scheduledAt = new Date(session.scheduled_at);
-  if (scheduledAt.getTime() <= Date.now()) {
-    return NextResponse.json({ error: "session has already passed" }, { status: 409 });
   }
 
   const outcome = await applyCancellationCredit(supabase, session);
