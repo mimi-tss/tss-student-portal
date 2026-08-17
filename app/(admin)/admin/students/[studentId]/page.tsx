@@ -61,7 +61,15 @@ export default async function AdminStudentPage({
       </p>
 
       <div className="mb-6 rounded border p-4">
-        <h2 className="mb-1 text-sm font-semibold text-gray-500">Next session</h2>
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-500">Next session</h2>
+          <Link
+            href={`/admin/students/${student.id}/book`}
+            className="text-sm text-blue-600 underline"
+          >
+            Book a session
+          </Link>
+        </div>
         {nextSession ? (
           <p>{new Date(nextSession.scheduled_at).toLocaleString()}</p>
         ) : (

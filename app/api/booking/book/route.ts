@@ -65,14 +65,6 @@ export async function POST(req: NextRequest) {
     coachId = requestedCoachId;
     trialEntitlementId = entitlement.id;
   } else {
-    // Regular booking (recurring or makeup): Suite-tier students without
-    // an available trial are view-only — no new bookings — per section 2.
-    if (student.tier !== "pro" && student.tier !== "elite") {
-      return NextResponse.json(
-        { error: "your plan doesn't include new bookings" },
-        { status: 403 },
-      );
-    }
     if (!student.assigned_coach_id) {
       return NextResponse.json({ error: "no assigned coach" }, { status: 400 });
     }
@@ -110,6 +102,15 @@ export async function POST(req: NextRequest) {
       }
 
       credit = creditRow;
+    } else if (student.tier !== "pro" && student.tier !== "elite") {
+      // A credit (e.g. the Stripe-only purchased-addon type, section 5) is
+      // its own entitlement regardless of base tier — only a *non*-credit
+      // regular booking is gated to Pro/Elite. Suite-tier students without
+      // an available trial or credit are otherwise view-only.
+      return NextResponse.json(
+        { error: "your plan doesn't include new bookings" },
+        { status: 403 },
+      );
     }
   }
 

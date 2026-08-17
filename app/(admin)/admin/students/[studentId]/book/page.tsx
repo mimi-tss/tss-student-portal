@@ -1,0 +1,55 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import BookingClient from "@/app/(student)/student/book/booking-client";
+
+// Admin books a session on a student's behalf — the same month-calendar
+// UI students use themselves (BookingClient), just reachable from the
+// admin side. Needed so a purchased-addon credit (Stripe-only extra
+// lesson, no Kajabi — section 5) can actually be redeemed, not just
+// granted: students can only book against their own assigned coach, and
+// this is often how the studio confirms a Stripe payment and schedules
+// the lesson in one motion.
+export default async function AdminBookStudentPage({
+  params,
+}: {
+  params: Promise<{ studentId: string }>;
+}) {
+  const { studentId } = await params;
+  const supabase = await createClient();
+
+  const { data: student } = await supabase
+    .from("students")
+    .select("id, name, assigned_coach_id")
+    .eq("id", studentId)
+    .maybeSingle();
+
+  if (!student) notFound();
+
+  const { data: credits } = await supabase
+    .from("makeup_credits")
+    .select("id, expires_at")
+    .eq("student_id", student.id)
+    .eq("used", false)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+    .order("expires_at", { ascending: true, nullsFirst: false });
+
+  return (
+    <div>
+      <div className="mx-auto max-w-2xl px-8 pt-8">
+        <Link
+          href={`/admin/students/${student.id}`}
+          className="text-sm text-blue-600 underline"
+        >
+          ← Back to {student.name}
+        </Link>
+      </div>
+      <BookingClient
+        studentId={student.id}
+        mode="full"
+        coachId={student.assigned_coach_id}
+        credits={credits ?? []}
+      />
+    </div>
+  );
+}
