@@ -227,7 +227,8 @@ Studio-initiated makeups never touch the student's capped credit balance — tha
 - Plain-language renewal/cancel-by date
 
 ### Admin/owner side
-- Full visibility across all coaches — schedules, capacity, payroll rollup. Schedule view uses the same calendar grid coaches see, but **always normalized to Eastern time** regardless of each coach's own timezone, so admin can compare across coaches directly.
+- Full visibility across all coaches — schedules, capacity, payroll rollup. Schedule view uses the same calendar grid coaches see, but **always normalized to Eastern time** regardless of each coach's own timezone, so admin can compare across coaches directly. **Built:** searchable coach list on the schedules page — click a name to load their calendar in place, instead of only a plain dropdown.
+- **Built:** searchable student list on the admin dashboard — click a name to open a read-only admin view of that student's own dashboard (next session, credit balance with type + expiry, recordings), without impersonating their session. Needed a new admin SELECT policy on `makeup_credits` (migration `0015`) — admin could grant credits (0014) but couldn't actually see a student's existing balance until now.
 - DNC flag management, no-show/absence review and termination confirms
 - Manual pause/resume toggling
 - Manual admin overrides on makeup restrictions (logged, one-time-per-student cap on exceptions)

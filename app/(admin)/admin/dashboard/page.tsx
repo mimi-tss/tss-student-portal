@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import AssignCoachClient from "./assign-coach-client";
 import ProvisionStudentClient from "./provision-student-client";
-import AddCreditClient from "./add-credit-client";
+import StudentTable from "./student-table";
 
-// Admin dashboard: student list with coach assignment and trial-lesson
-// booking on a student's behalf. See TSS_App_Spec_1.md section 8 — full
-// version also needs cross-coach schedule/payroll visibility, DNC
-// management, and manual overrides; not built yet.
+// Admin dashboard: student list (searchable, click a name to view their
+// dashboard) with coach assignment and trial-lesson booking on a
+// student's behalf. See TSS_App_Spec_1.md section 8 — full version also
+// needs cross-coach payroll visibility, DNC management, and manual
+// overrides; not built yet.
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
@@ -24,7 +24,7 @@ export default async function AdminDashboardPage() {
       .eq("used", false),
   ]);
 
-  const studentsWithUnusedTrial = new Set((unusedTrials ?? []).map((e) => e.student_id));
+  const studentsWithUnusedTrial = (unusedTrials ?? []).map((e) => e.student_id);
 
   return (
     <main className="p-8">
@@ -37,54 +37,11 @@ export default async function AdminDashboardPage() {
 
       <ProvisionStudentClient coaches={coaches ?? []} />
 
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b text-gray-500">
-            <th className="py-2">Name</th>
-            <th className="py-2">Tier</th>
-            <th className="py-2">Assigned coach</th>
-            <th className="py-2">Trial lesson</th>
-            <th className="py-2">Extra lesson credit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(students ?? []).map((student) => (
-            <tr key={student.id} className="border-b">
-              <td className="py-2">
-                <div>{student.name}</div>
-                <div className="text-xs text-gray-500">{student.email}</div>
-              </td>
-              <td className="py-2 capitalize">{student.tier}</td>
-              <td className="py-2">
-                <AssignCoachClient
-                  studentId={student.id}
-                  currentCoachId={student.assigned_coach_id}
-                  coaches={coaches ?? []}
-                />
-              </td>
-              <td className="py-2">
-                {studentsWithUnusedTrial.has(student.id) ? (
-                  <Link
-                    href={`/admin/book-trial/${student.id}`}
-                    className="text-blue-600 underline"
-                  >
-                    Book trial
-                  </Link>
-                ) : (
-                  <span className="text-gray-400">—</span>
-                )}
-              </td>
-              <td className="py-2">
-                <AddCreditClient studentId={student.id} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {(students ?? []).length === 0 && (
-        <p className="text-gray-500">No students yet.</p>
-      )}
+      <StudentTable
+        students={students ?? []}
+        coaches={coaches ?? []}
+        studentsWithUnusedTrial={studentsWithUnusedTrial}
+      />
     </main>
   );
 }
