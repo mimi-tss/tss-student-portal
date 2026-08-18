@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { zonedTimeToUtc } from "@/lib/timezone";
 import {
@@ -67,6 +68,7 @@ export default function BookingClient({
   // to book with, so offering "book without credit" would just 403.
   canBookWithoutCredit?: boolean;
 }) {
+  const router = useRouter();
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
 
@@ -85,6 +87,18 @@ export default function BookingClient({
   const [bookedWithCredit, setBookedWithCredit] = useState(false);
   const [availableCredits, setAvailableCredits] = useState(credits);
   const [expiryWarningSlot, setExpiryWarningSlot] = useState<Slot | null>(null);
+
+  // Re-sync from the server whenever the credit list actually changes
+  // identity. Without this, navigating away and back re-mounts this
+  // component against Next's cached (stale) server payload, resurrecting
+  // a credit that was already spent — the UI would offer it again and
+  // only the API would catch it, at which point the student has already
+  // picked a slot. Keyed on ids so a parent re-render alone doesn't churn.
+  const creditsKey = credits.map((c) => c.id).join(",");
+  useEffect(() => {
+    setAvailableCredits(credits);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creditsKey]);
 
   // Auto-detect on mount (client-only — server/first paint use the ET
   // default so there's no SSR/hydration mismatch), then re-center the
@@ -177,6 +191,10 @@ export default function BookingClient({
         setBookedWithCredit(true);
         setAvailableCredits((prev) => prev.slice(1));
       }
+      // Invalidate the router cache so the credit balance (and the
+      // dashboard's copy of it) reflects what was just spent, rather
+      // than a cached payload from before this booking.
+      router.refresh();
     } else {
       const body = await res.json().catch(() => ({}));
       setErrorMsg(body.error ?? "Could not book that slot — please try another.");
@@ -254,6 +272,12 @@ export default function BookingClient({
 
   const selectedSlots = selectedDate ? (slotsByDate.get(selectedDate) ?? []) : [];
 
+  // A student with no credits who also can't book without one has nothing
+  // bookable here — say so up front rather than letting them pick a slot
+  // and hit a 403 on the Book button.
+  const blockedNoCredits =
+    mode === "full" && availableCredits.length === 0 && !canBookWithoutCredit;
+
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="mb-4 text-xl font-semibold">
@@ -268,6 +292,21 @@ export default function BookingClient({
             ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
             : ""}
           )
+        </div>
+      )}
+
+      {blockedNoCredits && (
+        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="font-medium">No session credits available to book</p>
+          <p className="mt-1 text-gray-700">
+            Contact the studio to purchase an additional lesson, and a credit will be added here.
+          </p>
+        </div>
+      )}
+
+      {mode === "full" && availableCredits.length === 0 && canBookWithoutCredit && (
+        <div className="mb-4 rounded border p-3 text-sm text-gray-500">
+          No session credits available — this will book one of your plan&apos;s included sessions.
         </div>
       )}
 
@@ -367,7 +406,7 @@ export default function BookingClient({
         </div>
       )}
 
-      <div className="flex flex-col gap-6 sm:flex-row">
+      <div className={`flex flex-col gap-6 sm:flex-row ${blockedNoCredits ? "hidden" : ""}`}>
         <div className="sm:w-72">
           <div className="mb-2 flex items-center justify-between">
             <button
