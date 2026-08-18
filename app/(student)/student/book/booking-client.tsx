@@ -82,7 +82,6 @@ export default function BookingClient({
   const [bookingStart, setBookingStart] = useState<string | null>(null);
   const [booked, setBooked] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [useCredit, setUseCredit] = useState(false);
   const [bookedWithCredit, setBookedWithCredit] = useState(false);
   const [availableCredits, setAvailableCredits] = useState(credits);
   const [expiryWarningSlot, setExpiryWarningSlot] = useState<Slot | null>(null);
@@ -126,17 +125,17 @@ export default function BookingClient({
       start: start.toISOString(),
       end: end.toISOString(),
       ...(mode === "trial" ? { trial: "true" } : {}),
-      // Slot length follows the selected credit's own duration (e.g. a
-      // purchased 60-min add-on) rather than the student's default plan
-      // when one is being used for this booking.
-      ...(useCredit && availableCredits[0] ? { creditId: availableCredits[0].id } : {}),
+      // Slot length follows the available credit's own duration (e.g. a
+      // purchased 60-min add-on) rather than the student's default plan —
+      // a credit is always applied automatically when one exists.
+      ...(availableCredits[0] ? { creditId: availableCredits[0].id } : {}),
     });
 
     fetch(`/api/booking/slots?${params}`)
       .then((res) => res.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoading(false));
-  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone, useCredit, availableCredits]);
+  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone, availableCredits]);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, Slot[]>();
@@ -176,7 +175,6 @@ export default function BookingClient({
       if (mode === "full" && applyCredit) {
         setErrorMsg(null);
         setBookedWithCredit(true);
-        setUseCredit(false);
         setAvailableCredits((prev) => prev.slice(1));
       }
     } else {
@@ -189,14 +187,15 @@ export default function BookingClient({
 
   // Warn before even trying, rather than letting the server 409 it —
   // the credit's expiry (not just "not expired right now", see the
-  // booking API) means a date past that point simply can't use it.
+  // booking API) means a date past that point simply can't use it. A
+  // credit is always applied automatically when one is available.
   function handleBook(slot: Slot) {
     const credit = availableCredits[0];
-    if (useCredit && credit?.expires_at && new Date(slot.start) > new Date(credit.expires_at)) {
+    if (credit?.expires_at && new Date(slot.start) > new Date(credit.expires_at)) {
       setExpiryWarningSlot(slot);
       return;
     }
-    proceedBooking(slot, useCredit);
+    proceedBooking(slot, !!credit);
   }
 
   if (mode === "trial" && booked) {
@@ -261,25 +260,14 @@ export default function BookingClient({
         {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
 
-      {mode === "full" && (
-        <div className="mb-4 rounded border p-3 text-sm">
-          {availableCredits.length > 0 ? (
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={useCredit}
-                onChange={(e) => setUseCredit(e.target.checked)}
-              />
-              Use a {availableCredits[0].duration_minutes ?? 30}-min session credit for this
-              booking ({availableCredits.length} available
-              {availableCredits[0].expires_at
-                ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
-                : ""}
-              )
-            </label>
-          ) : (
-            <p className="text-gray-500">No session credits available right now.</p>
-          )}
+      {mode === "full" && availableCredits.length > 0 && (
+        <div className="mb-4 rounded border p-3 text-sm text-gray-700">
+          This booking will use a {availableCredits[0].duration_minutes ?? 30}-min session credit
+          ({availableCredits.length} available
+          {availableCredits[0].expires_at
+            ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
+            : ""}
+          )
         </div>
       )}
 
