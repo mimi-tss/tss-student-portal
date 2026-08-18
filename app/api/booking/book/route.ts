@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Booking a slot — either a regular (Pro/Elite) recurring/session-credit
-// booking against a student's own assigned coach, or the one exception,
-// a Suite-tier student's one-time trial lesson against any coach. Used
-// by both the student's own self-service page and the admin
-// book-on-behalf-of page. See TSS_App_Spec_1.md sections 2 and 5.
+// Booking a slot — a session-credit booking against the student's own
+// assigned coach, or the one exception, a Suite-tier student's one-time
+// trial lesson against any coach. Used by both the student's own
+// self-service page and the admin book-on-behalf-of page. See
+// TSS_App_Spec_1.md sections 2 and 5.
+//
+// Self-service booking ALWAYS requires a credit: a student's regular
+// weekly sessions come from their admin-set recurring schedule, not from
+// self-booking, so the only thing a student books here is a credit
+// redemption. Admin is exempt (admin ⊇ student) and can book a plain
+// session on a student's behalf.
 export async function POST(req: NextRequest) {
   const {
     studentId,
@@ -23,6 +29,20 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "not logged in" }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = profile?.role === "admin";
 
   const { data: student } = await supabase
     .from("students")
@@ -97,13 +117,16 @@ export async function POST(req: NextRequest) {
       }
 
       credit = creditRow;
-    } else if (student.tier !== "pro" && student.tier !== "elite") {
-      // A credit (e.g. the Stripe-only purchased-addon type, section 5) is
-      // its own entitlement regardless of base tier — only a *non*-credit
-      // regular booking is gated to Pro/Elite. Suite-tier students without
-      // an available trial or credit are otherwise view-only.
+    } else if (!isAdmin) {
+      // A credit is its own entitlement regardless of base tier, and it's
+      // the *only* way a student self-books: plan-included weekly
+      // sessions come from the admin-set recurring schedule instead, so
+      // there's nothing legitimate for a student to book without one.
       return NextResponse.json(
-        { error: "your plan doesn't include new bookings" },
+        {
+          error:
+            "booking requires a session credit — contact the studio to change your regular weekly time",
+        },
         { status: 403 },
       );
     }

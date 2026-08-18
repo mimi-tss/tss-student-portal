@@ -45,6 +45,10 @@ export default async function BookPage() {
         mode="full"
         coachId={student.assigned_coach_id}
         credits={credits ?? []}
+        // Students never self-book a plain session — their weekly lessons
+        // come from the admin-set recurring schedule, so this page is only
+        // for redeeming a credit (section 5).
+        canBookWithoutCredit={false}
       />
     );
   }

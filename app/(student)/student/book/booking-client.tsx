@@ -297,16 +297,17 @@ export default function BookingClient({
 
       {blockedNoCredits && (
         <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-          <p className="font-medium">No session credits available to book</p>
+          <p className="font-medium">No session credits available</p>
           <p className="mt-1 text-gray-700">
-            Contact the studio to purchase an additional lesson, and a credit will be added here.
+            Your regular weekly lessons are already scheduled for you — contact the studio to
+            change that time. To book an extra lesson, contact the studio to purchase one.
           </p>
         </div>
       )}
 
       {mode === "full" && availableCredits.length === 0 && canBookWithoutCredit && (
         <div className="mb-4 rounded border p-3 text-sm text-gray-500">
-          No session credits available — this will book one of your plan&apos;s included sessions.
+          No session credits available — booking here will create a plain session (admin override).
         </div>
       )}
 
@@ -406,7 +407,7 @@ export default function BookingClient({
         </div>
       )}
 
-      <div className={`flex flex-col gap-6 sm:flex-row ${blockedNoCredits ? "hidden" : ""}`}>
+      <div className="flex flex-col gap-6 sm:flex-row">
         <div className="sm:w-72">
           <div className="mb-2 flex items-center justify-between">
             <button
@@ -496,8 +497,13 @@ export default function BookingClient({
                     </span>
                     <button
                       onClick={() => handleBook(slot)}
-                      disabled={bookingStart === slot.start}
-                      className="rounded bg-black px-3 py-1 text-white disabled:opacity-50"
+                      disabled={bookingStart === slot.start || blockedNoCredits}
+                      title={
+                        blockedNoCredits
+                          ? "You need a session credit to book — contact the studio."
+                          : undefined
+                      }
+                      className="rounded bg-black px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {bookingStart === slot.start ? "Booking…" : "Book"}
                     </button>

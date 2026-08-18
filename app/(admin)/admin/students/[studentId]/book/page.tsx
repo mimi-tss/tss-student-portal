@@ -20,7 +20,7 @@ export default async function AdminBookStudentPage({
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, tier, assigned_coach_id")
+    .select("id, name, assigned_coach_id")
     .eq("id", studentId)
     .maybeSingle();
 
@@ -49,7 +49,9 @@ export default async function AdminBookStudentPage({
         mode="full"
         coachId={student.assigned_coach_id}
         credits={credits ?? []}
-        canBookWithoutCredit={student.tier === "pro" || student.tier === "elite"}
+        // Admin ⊇ student: admin can book a plain session on a student's
+        // behalf even with no credit on file, which students can't do.
+        canBookWithoutCredit
       />
     </div>
   );
