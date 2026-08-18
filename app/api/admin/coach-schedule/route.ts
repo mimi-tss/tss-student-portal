@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       .gte("end_at", start),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes, status, is_trial, students(name)")
+      .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name)")
       .eq("actual_coach_id", coach.id)
       .gte("scheduled_at", start)
       .lte("scheduled_at", end)
@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      studentId: s.student_id,
       studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
     })),
   });

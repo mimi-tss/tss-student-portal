@@ -55,6 +55,7 @@ export default function SchedulesClient({ coaches }: { coaches: Coach[] }) {
             <CoachCalendar
               scheduleEndpoint={`/api/admin/coach-schedule?coachId=${selectedCoachId}`}
               displayTimeZone="America/New_York"
+              studentLinkBase="/admin/students"
             />
           ) : (
             <p className="text-gray-500">Pick a coach to view their schedule.</p>

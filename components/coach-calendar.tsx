@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { zonedTimeToUtc, zonedHourMinute, zonedDayKey } from "@/lib/timezone";
 
@@ -24,6 +25,7 @@ interface Session {
   durationMinutes: number;
   status: string;
   isTrial: boolean;
+  studentId: string;
   studentName: string;
 }
 
@@ -88,10 +90,15 @@ export default function CoachCalendar({
   scheduleEndpoint,
   displayTimeZone,
   canMarkAttendance = false,
+  studentLinkBase,
 }: {
   scheduleEndpoint: string;
   displayTimeZone?: string;
   canMarkAttendance?: boolean;
+  // When set (admin's Coach Schedules page only — a coach can't reach
+  // /admin/students), the student's name in each session block links to
+  // their admin dashboard view, e.g. "/admin/students".
+  studentLinkBase?: string;
 }) {
   const [view, setView] = useState<"day" | "week">("week");
   const [anchorKey, setAnchorKey] = useState(() => toDateKey(new Date()));
@@ -177,7 +184,13 @@ export default function CoachCalendar({
       const sEnd = new Date(sStart.getTime() + s.durationMinutes * 60 * 1000);
       return slotStart < sEnd && slotEnd > sStart;
     });
-    if (session) return { type: "session" as const, session };
+    if (session) {
+      // Only the row a session actually starts on gets the name label —
+      // later rows in the same session's span just stay colored, like a
+      // real calendar's single event block rather than a repeated label.
+      const isSessionStart = slotStart.getTime() === new Date(session.scheduledAt).getTime();
+      return { type: "session" as const, session, isSessionStart };
+    }
 
     const block = (data?.blocks ?? []).find((b) => {
       const bStart = new Date(b.start_at);
@@ -340,7 +353,7 @@ export default function CoachCalendar({
                           ? () => setSelectedSession(state.session)
                           : undefined
                       }
-                      className={`flex h-6 items-center justify-center border-b border-r text-[10px] font-bold text-white ${
+                      className={`flex h-6 items-center overflow-hidden border-b border-r px-1 text-[10px] font-bold text-white ${
                         clickable ? "cursor-pointer hover:opacity-80" : ""
                       } ${
                         state.type === "available"
@@ -361,7 +374,26 @@ export default function CoachCalendar({
                             : undefined
                       }
                     >
-                      {state.type === "session" && STATUS_LABEL[state.session.status]}
+                      {state.type === "session" && state.isSessionStart && (
+                        <span className="flex w-full items-center gap-1 overflow-hidden">
+                          <span className="truncate">
+                            {studentLinkBase ? (
+                              <Link
+                                href={`${studentLinkBase}/${state.session.studentId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="underline hover:opacity-80"
+                              >
+                                {state.session.studentName}
+                              </Link>
+                            ) : (
+                              state.session.studentName
+                            )}
+                          </span>
+                          {STATUS_LABEL[state.session.status] && (
+                            <span className="shrink-0">{STATUS_LABEL[state.session.status]}</span>
+                          )}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
