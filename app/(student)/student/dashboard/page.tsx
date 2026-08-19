@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import NotesPanel from "@/components/notes-panel";
 import JoinButton from "./join-button";
 import CancelButton from "./cancel-button";
 import UpcomingSessions from "./upcoming-sessions";
@@ -150,6 +151,11 @@ export default async function StudentDashboardPage() {
           monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
           yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
         />
+      </div>
+
+      <h2 className="mb-2 mt-8 text-lg font-semibold">Homework notes</h2>
+      <div className="mb-8">
+        <NotesPanel studentId={student.id} initialLimit={5} />
       </div>
 
       <h2 className="mb-2 mt-8 text-lg font-semibold">Your recordings</h2>

@@ -26,13 +26,16 @@ export default async function AdminBookStudentPage({
 
   if (!student) notFound();
 
-  const { data: credits } = await supabase
-    .from("makeup_credits")
-    .select("id, expires_at, duration_minutes")
-    .eq("student_id", student.id)
-    .eq("used", false)
-    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-    .order("expires_at", { ascending: true, nullsFirst: false });
+  const [{ data: credits }, { data: coaches }] = await Promise.all([
+    supabase
+      .from("makeup_credits")
+      .select("id, expires_at, duration_minutes")
+      .eq("student_id", student.id)
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("expires_at", { ascending: true, nullsFirst: false }),
+    supabase.from("coaches").select("id, name").order("name"),
+  ]);
 
   return (
     <div>
@@ -52,6 +55,11 @@ export default async function AdminBookStudentPage({
         // Admin ⊇ student: admin can book a plain session on a student's
         // behalf even with no credit on file, which students can't do.
         canBookWithoutCredit
+        // Admin ⊇ student: admin can book with a different coach than
+        // the student's assigned one (e.g. redeeming a makeup with a
+        // substitute) — students always book against their assigned
+        // coach only.
+        allCoaches={coaches ?? []}
       />
     </div>
   );

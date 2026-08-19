@@ -12,6 +12,12 @@ interface Schedule {
   startTime: string;
   durationMinutes: number;
   startDate: string;
+  coachId: string;
+}
+
+interface Coach {
+  id: string;
+  name: string;
 }
 
 // "Today" as a plain YYYY-MM-DD, anchored to the coach's own zone (the
@@ -25,12 +31,20 @@ function todayInZone(timeZone: string) {
 export default function RecurringScheduleClient({
   studentId,
   hasCoach,
+  defaultCoachId,
   coachTimeZone,
+  coaches,
   schedule,
 }: {
   studentId: string;
   hasCoach: boolean;
+  // The student's overall assigned coach — used as the default when
+  // setting a brand new schedule. The schedule's own coach can be
+  // changed independently afterward (a different coach covering this
+  // student's regular slot) without touching the overall assignment.
+  defaultCoachId: string | null;
   coachTimeZone: string | null;
+  coaches: Coach[];
   schedule: Schedule | null;
 }) {
   const router = useRouter();
@@ -42,6 +56,7 @@ export default function RecurringScheduleClient({
   const [dayOfWeek, setDayOfWeek] = useState(schedule?.dayOfWeek ?? 1);
   const [startTime, setStartTime] = useState(schedule?.startTime ?? "16:00");
   const [durationMinutes, setDurationMinutes] = useState(schedule?.durationMinutes ?? 30);
+  const [coachId, setCoachId] = useState(schedule?.coachId ?? defaultCoachId ?? "");
   // Defaults to today for a brand new schedule (takes effect right
   // away); defaults to today for a change too, so by default a change
   // applies immediately unless the admin picks a future date — matching
@@ -57,7 +72,14 @@ export default function RecurringScheduleClient({
     const res = await fetch("/api/admin/recurring-schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes, startDate }),
+      body: JSON.stringify({
+        studentId,
+        dayOfWeek,
+        startTime,
+        durationMinutes,
+        startDate,
+        coachId,
+      }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -114,9 +136,11 @@ export default function RecurringScheduleClient({
         timeZone: viewTimeZone,
         weekday: "long",
       }).format(instant);
+      const coachName = coaches.find((c) => c.id === schedule.coachId)?.name;
       scheduleLabel = (
         <>
           {weekday}s at {formatTimeInZone(instant, viewTimeZone)} ({schedule.durationMinutes} min)
+          {coachName ? ` with ${coachName}` : ""}
           {schedule.startDate > today ? ` — starting ${schedule.startDate}` : ""}
         </>
       );
@@ -164,6 +188,17 @@ export default function RecurringScheduleClient({
         className="rounded border px-2 py-1"
       />
       <span className="text-xs text-gray-500">({effectiveCoachZone.replace(/_/g, " ")})</span>
+      <select
+        value={coachId}
+        onChange={(e) => setCoachId(e.target.value)}
+        className="rounded border px-2 py-1"
+      >
+        {coaches.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
       <select
         value={durationMinutes}
         onChange={(e) => setDurationMinutes(Number(e.target.value))}

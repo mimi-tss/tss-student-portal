@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import ChatPanel from "@/components/chat-panel";
 
 interface Student {
@@ -40,7 +41,19 @@ export default function CoachChatClient({ currentProfileId }: { currentProfileId
 
       <div className="flex-1">
         {selectedId ? (
-          <ChatPanel key={selectedId} studentId={selectedId} currentProfileId={currentProfileId} />
+          <>
+            <Link
+              href={`/coach/students/${selectedId}`}
+              className="mb-2 inline-block text-xs text-blue-600 underline"
+            >
+              View student dashboard
+            </Link>
+            <ChatPanel
+              key={selectedId}
+              studentId={selectedId}
+              currentProfileId={currentProfileId}
+            />
+          </>
         ) : (
           <p className="text-sm text-gray-500">Pick a student to view the conversation.</p>
         )}

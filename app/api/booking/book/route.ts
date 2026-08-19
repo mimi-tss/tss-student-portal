@@ -80,10 +80,17 @@ export async function POST(req: NextRequest) {
     coachId = requestedCoachId;
     trialEntitlementId = entitlement.id;
   } else {
-    if (!student.assigned_coach_id) {
-      return NextResponse.json({ error: "no assigned coach" }, { status: 400 });
+    // Admin ⊇ student: admin can book against any coach, not just the
+    // student's assigned one (e.g. redeeming a makeup with a substitute)
+    // — students always book against their own assigned coach only.
+    if (isAdmin && requestedCoachId) {
+      coachId = requestedCoachId;
+    } else {
+      if (!student.assigned_coach_id) {
+        return NextResponse.json({ error: "no assigned coach" }, { status: 400 });
+      }
+      coachId = student.assigned_coach_id;
     }
-    coachId = student.assigned_coach_id;
 
     if (makeupCreditId) {
       const { data: creditRow } = await supabase

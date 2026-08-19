@@ -7,7 +7,11 @@ import CoachCalendar from "@/components/coach-calendar";
 export default function CoachDashboardPage() {
   return (
     <main className="p-8">
-      <CoachCalendar scheduleEndpoint="/api/coach/schedule" canMarkAttendance />
+      <CoachCalendar
+        scheduleEndpoint="/api/coach/schedule"
+        canMarkAttendance
+        studentLinkBase="/coach/students"
+      />
     </main>
   );
 }

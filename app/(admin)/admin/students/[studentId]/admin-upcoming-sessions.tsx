@@ -3,19 +3,34 @@
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import AdminCancelButtons from "./admin-cancel-buttons";
+import ReassignSessionCoach from "./reassign-session-coach";
 
 interface UpcomingSession {
   id: string;
   scheduled_at: string;
   duration_minutes: number;
   is_makeup: boolean;
+  actual_coach_id: string;
+}
+
+interface Coach {
+  id: string;
+  name: string;
 }
 
 // Admin equivalent of the student's "Show all sessions" list — every
 // session in the current (paid) billing cycle, each individually
 // cancellable via the same two buttons ("Cancel" / "Staff cancel") used
-// for the next session above.
-export default function AdminUpcomingSessions({ studentId }: { studentId: string }) {
+// for the next session above, and individually reassignable to a
+// different coach (a one-off substitute — students/coaches can't do
+// this themselves).
+export default function AdminUpcomingSessions({
+  studentId,
+  coaches,
+}: {
+  studentId: string;
+  coaches: Coach[];
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<UpcomingSession[] | null>(null);
@@ -74,7 +89,19 @@ export default function AdminUpcomingSessions({ studentId }: { studentId: string
               <p className="text-sm">
                 <FormattedDateTime value={s.scheduled_at} />
               </p>
-              <AdminCancelButtons sessionId={s.id} scheduledAt={s.scheduled_at} onSuccess={load} />
+              <div className="mt-1 flex items-center gap-3">
+                <AdminCancelButtons
+                  sessionId={s.id}
+                  scheduledAt={s.scheduled_at}
+                  onSuccess={load}
+                />
+                <ReassignSessionCoach
+                  sessionId={s.id}
+                  currentCoachId={s.actual_coach_id}
+                  coaches={coaches}
+                  onSuccess={load}
+                />
+              </div>
             </li>
           ))}
         </ul>

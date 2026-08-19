@@ -58,6 +58,7 @@ export default function BookingClient({
   coachId,
   credits = [],
   canBookWithoutCredit = true,
+  allCoaches,
 }: {
   studentId: string;
   mode: "full" | "trial";
@@ -67,9 +68,14 @@ export default function BookingClient({
   // purchased-addon credit (section 5) — they have no other entitlement
   // to book with, so offering "book without credit" would just 403.
   canBookWithoutCredit?: boolean;
+  // Admin-only: the full coach list, enabling a coach-picker even in
+  // "full" mode (e.g. redeeming a makeup with a substitute coach) —
+  // students never get this prop, so they can only ever book against
+  // their own assigned coach.
+  allCoaches?: Coach[];
 }) {
   const router = useRouter();
-  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [coaches, setCoaches] = useState<Coach[]>(allCoaches ?? []);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
 
   const now = new Date();
@@ -183,7 +189,12 @@ export default function BookingClient({
       body: JSON.stringify({
         studentId,
         slotStart: slot.start,
-        ...(mode === "trial" ? { trial: true, coachId: selectedCoachId } : {}),
+        ...(mode === "trial"
+          ? { trial: true, coachId: selectedCoachId }
+          // Only takes effect for an admin caller (see /api/booking/book)
+          // — harmless to always send for a student, who the server
+          // ignores this for.
+          : { coachId: selectedCoachId }),
         ...(applyCredit && availableCredits[0] ? { makeupCreditId: availableCredits[0].id } : {}),
       }),
     });
@@ -320,11 +331,27 @@ export default function BookingClient({
         <p className="mb-4 text-sm text-green-700">Booked using a session credit.</p>
       )}
 
-      <div className="mb-4 flex items-center justify-between text-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
         <label className="flex items-center gap-2">
           <span className="text-gray-600">Timezone ({timezoneAbbreviation(timezone)})</span>
           <TimeZoneSelect value={timezone} onChange={setTimezone} />
         </label>
+        {mode === "full" && allCoaches && allCoaches.length > 0 && (
+          <label className="flex items-center gap-2">
+            <span className="text-gray-600">Coach</span>
+            <select
+              value={selectedCoachId ?? ""}
+              onChange={(e) => setSelectedCoachId(e.target.value)}
+              className="rounded border p-1"
+            >
+              {allCoaches.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {errorMsg && <p className="mb-4 text-sm text-red-600">{errorMsg}</p>}

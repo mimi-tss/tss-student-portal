@@ -10,7 +10,8 @@ import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/schedu
 // daily cron top-up uses, so the change shows up on the coach calendar
 // right away rather than waiting for tomorrow's run.
 export async function POST(req: NextRequest) {
-  const { studentId, dayOfWeek, startTime, durationMinutes, startDate } = await req.json();
+  const { studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId } =
+    await req.json();
 
   if (
     !studentId ||
@@ -40,7 +41,14 @@ export async function POST(req: NextRequest) {
   if (!student) {
     return NextResponse.json({ error: "student not found" }, { status: 404 });
   }
-  if (!student.assigned_coach_id) {
+
+  // Defaults to the student's overall assigned coach, but can be set
+  // independently — e.g. a different coach covers this student's
+  // regular weekly slot without changing who they're assigned to
+  // overall (students/coaches can't make this choice themselves).
+  const effectiveCoachId: string | null = coachId || student.assigned_coach_id;
+
+  if (!effectiveCoachId) {
     return NextResponse.json(
       { error: "assign a coach before setting a recurring schedule" },
       { status: 400 },
@@ -64,7 +72,7 @@ export async function POST(req: NextRequest) {
   const { data: coach } = await supabase
     .from("coaches")
     .select("working_hours")
-    .eq("id", student.assigned_coach_id)
+    .eq("id", effectiveCoachId)
     .single();
 
   if (
@@ -104,7 +112,7 @@ export async function POST(req: NextRequest) {
     .upsert(
       {
         student_id: studentId,
-        coach_id: student.assigned_coach_id,
+        coach_id: effectiveCoachId,
         day_of_week: dayOfWeek,
         start_time: startTime,
         duration_minutes: durationMinutes,

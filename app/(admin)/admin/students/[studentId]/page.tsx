@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import NotesPanel from "@/components/notes-panel";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
+import ReassignSessionCoach from "./reassign-session-coach";
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -29,37 +31,55 @@ export default async function AdminStudentPage({
 
   if (!student) notFound();
 
-  const [{ data: coach }, { data: nextSession }, { data: credits }, { data: recurringSchedule }] =
-    await Promise.all([
-      student.assigned_coach_id
-        ? supabase
-            .from("coaches")
-            .select("name, timezone")
-            .eq("id", student.assigned_coach_id)
-            .single()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("sessions")
-        .select("id, scheduled_at, duration_minutes, status")
-        .eq("student_id", student.id)
-        .eq("status", "scheduled")
-        .gte("scheduled_at", new Date().toISOString())
-        .order("scheduled_at")
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("makeup_credits")
-        .select("id, type, used, expires_at, reason, duration_minutes")
-        .eq("student_id", student.id)
-        .eq("used", false)
-        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-        .order("expires_at", { ascending: true, nullsFirst: false }),
-      supabase
-        .from("recurring_schedules")
-        .select("day_of_week, start_time, duration_minutes, start_date")
-        .eq("student_id", student.id)
-        .maybeSingle(),
-    ]);
+  const [
+    { data: coach },
+    { data: nextSession },
+    { data: credits },
+    { data: recurringSchedule },
+    { data: coaches },
+  ] = await Promise.all([
+    student.assigned_coach_id
+      ? supabase
+          .from("coaches")
+          .select("name, timezone")
+          .eq("id", student.assigned_coach_id)
+          .single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("sessions")
+      .select("id, scheduled_at, duration_minutes, status, actual_coach_id")
+      .eq("student_id", student.id)
+      .eq("status", "scheduled")
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at")
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("makeup_credits")
+      .select("id, type, used, expires_at, reason, duration_minutes")
+      .eq("student_id", student.id)
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("expires_at", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("recurring_schedules")
+      .select("day_of_week, start_time, duration_minutes, start_date, coach_id")
+      .eq("student_id", student.id)
+      .maybeSingle(),
+    supabase.from("coaches").select("id, name").order("name"),
+  ]);
+
+  // The recurring schedule's coach can now differ from the student's
+  // overall assigned_coach_id (admin can set them independently — see
+  // recurring-schedule-client.tsx) — fetch its own timezone for the
+  // display conversion rather than assuming it matches `coach` above.
+  const { data: scheduleCoach } = recurringSchedule?.coach_id
+    ? await supabase
+        .from("coaches")
+        .select("timezone")
+        .eq("id", recurringSchedule.coach_id)
+        .maybeSingle()
+    : { data: null };
 
   const recordings = student.drive_folder_id
     ? await listStudentRecordings(student.drive_folder_id)
@@ -82,7 +102,9 @@ export default async function AdminStudentPage({
         <RecurringScheduleClient
           studentId={student.id}
           hasCoach={!!student.assigned_coach_id}
-          coachTimeZone={coach?.timezone ?? null}
+          defaultCoachId={student.assigned_coach_id}
+          coachTimeZone={scheduleCoach?.timezone ?? coach?.timezone ?? null}
+          coaches={coaches ?? []}
           schedule={
             recurringSchedule
               ? {
@@ -90,6 +112,7 @@ export default async function AdminStudentPage({
                   startTime: recurringSchedule.start_time,
                   durationMinutes: recurringSchedule.duration_minutes,
                   startDate: recurringSchedule.start_date,
+                  coachId: recurringSchedule.coach_id,
                 }
               : null
           }
@@ -111,11 +134,18 @@ export default async function AdminStudentPage({
             <p>
               <FormattedDateTime value={nextSession.scheduled_at} />
             </p>
-            <AdminCancelButtons
-              key={nextSession.id}
-              sessionId={nextSession.id}
-              scheduledAt={nextSession.scheduled_at}
-            />
+            <div className="mt-1 flex items-center gap-3">
+              <AdminCancelButtons
+                key={nextSession.id}
+                sessionId={nextSession.id}
+                scheduledAt={nextSession.scheduled_at}
+              />
+              <ReassignSessionCoach
+                sessionId={nextSession.id}
+                currentCoachId={nextSession.actual_coach_id}
+                coaches={coaches ?? []}
+              />
+            </div>
           </>
         ) : (
           <p className="text-gray-500">Nothing scheduled.</p>
@@ -123,7 +153,7 @@ export default async function AdminStudentPage({
       </div>
 
       <div className="mb-6">
-        <AdminUpcomingSessions studentId={student.id} />
+        <AdminUpcomingSessions studentId={student.id} coaches={coaches ?? []} />
       </div>
 
       <div className="mb-6 rounded border p-4">
@@ -153,6 +183,11 @@ export default async function AdminStudentPage({
         ) : (
           <p className="text-gray-500">None available.</p>
         )}
+      </div>
+
+      <div className="mb-6 rounded border p-4">
+        <h2 className="mb-2 text-sm font-semibold text-gray-500">Homework notes</h2>
+        <NotesPanel studentId={student.id} />
       </div>
 
       <div className="rounded border p-4">
