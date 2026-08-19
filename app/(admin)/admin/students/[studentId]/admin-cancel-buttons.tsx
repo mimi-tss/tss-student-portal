@@ -23,6 +23,12 @@ export default function AdminCancelButtons({
   const router = useRouter();
   const [mode, setMode] = useState<null | "confirm-regular" | "staff-reason">(null);
   const [reason, setReason] = useState("");
+  // Defaults to on (the original always-credits behavior). Unchecked for
+  // a DNC / non-paying cancellation — the studio's stand-in for
+  // automated DNC detection (spec section 11): admin already has to
+  // monitor for this, so this is just "staff cancel, but they don't get
+  // a credit for a session they didn't pay for."
+  const [issueCredit, setIssueCredit] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +67,7 @@ export default function AdminCancelButtons({
     const res = await fetch("/api/admin/staff-cancel-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, reason }),
+      body: JSON.stringify({ sessionId, reason, issueCredit }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -75,6 +81,7 @@ export default function AdminCancelButtons({
     setMessage(body.message);
     setMode(null);
     setReason("");
+    setIssueCredit(true);
     router.refresh();
     onSuccess?.();
   }
@@ -90,9 +97,18 @@ export default function AdminCancelButtons({
           Staff cancel <FormattedDateTime value={scheduledAt} /> — reason required
         </p>
         <p className="mb-2 text-gray-600">
-          Always issues a session credit (no cap, no expiry) and logs this note for audit —
-          use for studio-side reasons, not the student&apos;s own late cancellation.
+          {issueCredit
+            ? "Issues a session credit (no cap, no expiry) and logs this note for audit — use for studio-side reasons, not the student's own late cancellation."
+            : "No credit will be issued — use this for a non-paying (DNC) student, not a studio-side mistake. Still logs the reason for audit."}
         </p>
+        <label className="mb-2 flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={issueCredit}
+            onChange={(e) => setIssueCredit(e.target.checked)}
+          />
+          Issue a session credit
+        </label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -112,6 +128,7 @@ export default function AdminCancelButtons({
             onClick={() => {
               setMode(null);
               setReason("");
+              setIssueCredit(true);
             }}
             disabled={loading}
             className="text-xs text-gray-600 underline"
