@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import AdminCancelButtons from "./admin-cancel-buttons";
+import RecurringScheduleClient from "./recurring-schedule-client";
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -26,27 +27,33 @@ export default async function AdminStudentPage({
 
   if (!student) notFound();
 
-  const [{ data: coach }, { data: nextSession }, { data: credits }] = await Promise.all([
-    student.assigned_coach_id
-      ? supabase.from("coaches").select("name").eq("id", student.assigned_coach_id).single()
-      : Promise.resolve({ data: null }),
-    supabase
-      .from("sessions")
-      .select("id, scheduled_at, duration_minutes, status")
-      .eq("student_id", student.id)
-      .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString())
-      .order("scheduled_at")
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("makeup_credits")
-      .select("id, type, used, expires_at, reason, duration_minutes")
-      .eq("student_id", student.id)
-      .eq("used", false)
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-      .order("expires_at", { ascending: true, nullsFirst: false }),
-  ]);
+  const [{ data: coach }, { data: nextSession }, { data: credits }, { data: recurringSchedule }] =
+    await Promise.all([
+      student.assigned_coach_id
+        ? supabase.from("coaches").select("name").eq("id", student.assigned_coach_id).single()
+        : Promise.resolve({ data: null }),
+      supabase
+        .from("sessions")
+        .select("id, scheduled_at, duration_minutes, status")
+        .eq("student_id", student.id)
+        .eq("status", "scheduled")
+        .gte("scheduled_at", new Date().toISOString())
+        .order("scheduled_at")
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("makeup_credits")
+        .select("id, type, used, expires_at, reason, duration_minutes")
+        .eq("student_id", student.id)
+        .eq("used", false)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order("expires_at", { ascending: true, nullsFirst: false }),
+      supabase
+        .from("recurring_schedules")
+        .select("day_of_week, start_time, duration_minutes")
+        .eq("student_id", student.id)
+        .maybeSingle(),
+    ]);
 
   const recordings = student.drive_folder_id
     ? await listStudentRecordings(student.drive_folder_id)
@@ -63,6 +70,23 @@ export default async function AdminStudentPage({
         {student.email} · {student.tier} · {student.subscription_status}
         {coach ? ` · coach: ${coach.name}` : " · no coach assigned"}
       </p>
+
+      <div className="mb-6 rounded border p-4">
+        <h2 className="mb-1 text-sm font-semibold text-gray-500">Weekly schedule</h2>
+        <RecurringScheduleClient
+          studentId={student.id}
+          hasCoach={!!student.assigned_coach_id}
+          schedule={
+            recurringSchedule
+              ? {
+                  dayOfWeek: recurringSchedule.day_of_week,
+                  startTime: recurringSchedule.start_time,
+                  durationMinutes: recurringSchedule.duration_minutes,
+                }
+              : null
+          }
+        />
+      </div>
 
       <div className="mb-6 rounded border p-4">
         <div className="mb-1 flex items-center justify-between">

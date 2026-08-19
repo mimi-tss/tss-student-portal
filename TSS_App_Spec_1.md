@@ -110,13 +110,22 @@ The student portal is an add-on library-card layer on top of Kajabi's own course
 
 ## 5. Scheduling & Booking Rules
 
-- Students can only book makeups/schedule changes against their **own assigned coach's** open slots — never a different coach (except admin-assigned substitutes, see below).
-- **Self-service, fully automatic:** students book makeups and recurring schedule changes themselves in-app; no coach or admin approval needed for standard bookings within policy caps.
+- Students can only book makeups against their **own assigned coach's** open slots — never a different coach (except admin-assigned substitutes, see below).
+- **Self-service, fully automatic, credit-redemption only (decided, built, supersedes the line below):** a student's regular weekly lesson comes from an **admin-set recurring schedule** (`recurring_schedules` table), not self-booking — students can't self-book a plain session at all, only redeem a session credit. Changing the recurring day/time is **admin-only**; a student who wants a different regular time contacts the studio. A student *can* still self-service-cancel a single upcoming occurrence of their recurring lesson (e.g. "I'm out this one Friday") — that goes through the exact same cancellation rules as any other session (24h notice → capped student-fault credit under the makeup rules, section 5 below), and doesn't touch the schedule itself, so next week's occurrence is untouched. ~~Self-service, fully automatic: students book makeups and recurring schedule changes themselves in-app; no coach or admin approval needed for standard bookings within policy caps.~~ (superseded)
 - **Coach availability:** coach has working hours (admin-entered, rarely changes) minus personal blocks (time off, usually ~2 weeks notice) minus existing bookings = open slots shown to students.
 - **Coaches cannot reschedule, cancel, or modify sessions** — scheduling is admin-only. Coaches are purely instructional. Students must contact the studio (not their coach) for scheduling/billing:
   > "Please contact the studio for scheduling: info@tarasimonstudios.com or +1-866-471-9454 (Text/Call/WhatsApp)"
   Coach chat should have this as a canned quick-reply for scheduling questions.
 - **Admin can override any makeup restriction** for special-case exemptions — logged with a required note and an `override_by_admin` flag for audit trail. Coach exceptions (admin-granted) can only be given to a student **once**.
+
+### Recurring weekly schedule (built)
+
+- Admin sets one weekly slot per student (day of week + wall-clock start time + duration) on the admin per-student page — `recurring_schedules`, one row per student, `start_time` interpreted in the **coach's own timezone** (same convention as `coaches.working_hours`).
+- The slot is materialized into real `sessions` rows (not a separate "virtual session" concept) — everything already built on `sessions` (coach calendar, attendance marking, payroll, cancellation/credit logic) keeps working unchanged. Occurrences are generated ~8 weeks ahead (`lib/scheduling/recurring.ts`), topped up daily via GitHub Actions (`materialize-recurring`, same pattern as `kajabi-sync` — Vercel Hobby's cron slot is already spoken for) and immediately on create/update from the admin route, so a new schedule shows up on the coach calendar right away rather than waiting for the next day's run.
+- Setting a slot outside the coach's working hours is rejected — an out-of-hours session would be invisible on the coach calendar grid, which only renders working-hours cells.
+- Changing or removing a schedule deletes only its own future *untouched* (`status = 'scheduled'`) occurrences — anything already cancelled or attended is real history and is never touched.
+- A student can still self-cancel a single upcoming occurrence (24h-notice rules apply, same as any session) — the schedule itself and every other future occurrence are unaffected, since occurrences are independent rows once created.
+- Admin is a strict superset of student: everything a student can do (cancel with the same rules, book with a credit), admin can also do, but not vice versa — admin additionally sets/changes the recurring schedule and can book a plain session with no credit on file.
 
 ### Trial lesson (Suite tier)
 
