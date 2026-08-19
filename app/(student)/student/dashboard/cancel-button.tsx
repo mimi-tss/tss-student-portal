@@ -4,13 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
+import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
 
 // Mirrors the policy in app/api/booking/cancel/route.ts and migration
 // 0012 — this is only used to preview the outcome in the confirm step;
 // the API route (and the RLS cap check) is what actually decides.
 const NOTICE_HOURS = 24;
-const MONTHLY_CAP = 1;
-const YEARLY_CAP = 6;
 
 function warningFor(
   scheduledAt: string,
@@ -62,6 +61,7 @@ export default function CancelButton({
   const [error, setError] = useState<string | null>(null);
 
   async function handleCancel() {
+    if (!reason.trim()) return;
     setLoading(true);
     setError(null);
 
@@ -97,25 +97,34 @@ export default function CancelButton({
   }
 
   if (confirming) {
+    const monthlyRemaining = Math.max(0, MONTHLY_CAP - monthlyCreditsUsed);
+    const yearlyRemaining = Math.max(0, YEARLY_CAP - yearlyCreditsUsed);
+
     return (
       <div className="max-w-sm rounded border border-gray-200 bg-gray-50 p-3 text-sm">
         <p className="mb-1 font-medium">
           Cancel your <FormattedDateTime value={scheduledAt} /> session?
         </p>
-        <p className="mb-3 text-gray-600">
+        <p className="mb-2 text-gray-600">
           {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed, isMakeup)}
         </p>
+        {!isMakeup && (
+          <p className="mb-3 text-xs font-medium text-gray-500">
+            Makeup credit cap remaining: {monthlyRemaining}/{MONTHLY_CAP} this month ·{" "}
+            {yearlyRemaining}/{YEARLY_CAP} this year
+          </p>
+        )}
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          placeholder="Reason (optional)"
+          placeholder="Reason"
           className="mb-3 w-full rounded border p-2 text-sm"
         />
         <div className="flex items-center gap-3">
           <button
             onClick={handleCancel}
-            disabled={loading}
+            disabled={loading || !reason.trim()}
             className="rounded bg-red-600 px-3 py-1 text-white disabled:opacity-50"
           >
             {loading ? "Cancelling…" : "Yes, cancel"}

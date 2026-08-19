@@ -31,12 +31,21 @@ export default async function AdminStudentPage({
 
   if (!student) notFound();
 
+  // Matches the cap windows enforced server-side (lib/booking/cancel-
+  // session.ts) — calendar month/year, not billing-anniversary — so the
+  // "remaining" count shown before a regular cancel is accurate.
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
+
   const [
     { data: coach },
     { data: nextSession },
     { data: credits },
     { data: recurringSchedule },
     { data: coaches },
+    { count: monthlyCreditsUsed },
+    { count: yearlyCreditsUsed },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -47,7 +56,7 @@ export default async function AdminStudentPage({
       : Promise.resolve({ data: null }),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes, status, actual_coach_id")
+      .select("id, scheduled_at, duration_minutes, status, actual_coach_id, is_makeup")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
@@ -67,6 +76,18 @@ export default async function AdminStudentPage({
       .eq("student_id", student.id)
       .maybeSingle(),
     supabase.from("coaches").select("id, name").order("name"),
+    supabase
+      .from("makeup_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", student.id)
+      .eq("type", "student-fault")
+      .gte("created_at", monthStart),
+    supabase
+      .from("makeup_credits")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", student.id)
+      .eq("type", "student-fault")
+      .gte("created_at", yearStart),
   ]);
 
   // The recurring schedule's coach can now differ from the student's
@@ -139,6 +160,9 @@ export default async function AdminStudentPage({
                 key={nextSession.id}
                 sessionId={nextSession.id}
                 scheduledAt={nextSession.scheduled_at}
+                isMakeup={nextSession.is_makeup}
+                monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
+                yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
               />
               <ReassignSessionCoach
                 sessionId={nextSession.id}
@@ -153,7 +177,12 @@ export default async function AdminStudentPage({
       </div>
 
       <div className="mb-6">
-        <AdminUpcomingSessions studentId={student.id} coaches={coaches ?? []} />
+        <AdminUpcomingSessions
+          studentId={student.id}
+          coaches={coaches ?? []}
+          monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
+          yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
+        />
       </div>
 
       <div className="mb-6 rounded border p-4">

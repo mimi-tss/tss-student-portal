@@ -27,9 +27,13 @@ interface Coach {
 export default function AdminUpcomingSessions({
   studentId,
   coaches,
+  monthlyCreditsUsed,
+  yearlyCreditsUsed,
 }: {
   studentId: string;
   coaches: Coach[];
+  monthlyCreditsUsed: number;
+  yearlyCreditsUsed: number;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -93,6 +97,9 @@ export default function AdminUpcomingSessions({
                 <AdminCancelButtons
                   sessionId={s.id}
                   scheduledAt={s.scheduled_at}
+                  isMakeup={s.is_makeup}
+                  monthlyCreditsUsed={monthlyCreditsUsed}
+                  yearlyCreditsUsed={yearlyCreditsUsed}
                   onSuccess={load}
                 />
                 <ReassignSessionCoach

@@ -3,14 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormattedDateTime } from "@/components/formatted-time";
+import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
 
 export default function AdminCancelButtons({
   sessionId,
   scheduledAt,
+  isMakeup,
+  monthlyCreditsUsed,
+  yearlyCreditsUsed,
   onSuccess,
 }: {
   sessionId: string;
   scheduledAt: string;
+  isMakeup: boolean;
+  monthlyCreditsUsed: number;
+  yearlyCreditsUsed: number;
   onSuccess?: () => void;
 }) {
   const router = useRouter();
@@ -21,13 +28,14 @@ export default function AdminCancelButtons({
   const [error, setError] = useState<string | null>(null);
 
   async function doRegularCancel() {
+    if (!reason.trim()) return;
     setLoading(true);
     setError(null);
 
     const res = await fetch("/api/admin/cancel-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, reason: reason.trim() || undefined }),
+      body: JSON.stringify({ sessionId, reason: reason.trim() }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -116,6 +124,9 @@ export default function AdminCancelButtons({
   }
 
   if (mode === "confirm-regular") {
+    const monthlyRemaining = Math.max(0, MONTHLY_CAP - monthlyCreditsUsed);
+    const yearlyRemaining = Math.max(0, YEARLY_CAP - yearlyCreditsUsed);
+
     return (
       <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
         <p className="mb-1 font-medium">
@@ -126,17 +137,23 @@ export default function AdminCancelButtons({
           credit is issued only with 24+ hours notice, and it counts against their
           monthly/yearly cap.
         </p>
+        {!isMakeup && (
+          <p className="mb-2 text-xs font-medium text-gray-500">
+            Makeup credit cap remaining: {monthlyRemaining}/{MONTHLY_CAP} this month ·{" "}
+            {yearlyRemaining}/{YEARLY_CAP} this year
+          </p>
+        )}
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          placeholder="Reason (optional)"
+          placeholder="Reason"
           className="mb-2 w-full rounded border p-2 text-sm"
         />
         <div className="flex items-center gap-3">
           <button
             onClick={doRegularCancel}
-            disabled={loading}
+            disabled={loading || !reason.trim()}
             className="rounded bg-red-600 px-3 py-1 text-xs text-white disabled:opacity-50"
           >
             {loading ? "Cancelling…" : "Confirm cancel"}

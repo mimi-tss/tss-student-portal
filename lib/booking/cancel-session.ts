@@ -1,9 +1,8 @@
 import type { createClient } from "@/lib/supabase/server";
+import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
 
 const NOTICE_HOURS = 24;
 const CREDIT_EXPIRY_DAYS = 30;
-const MONTHLY_CAP = 1;
-const YEARLY_CAP = 6;
 
 interface SessionForCancel {
   id: string;
