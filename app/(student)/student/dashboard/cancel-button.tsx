@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FormattedDateTime } from "@/components/formatted-time";
 
 // Mirrors the policy in app/api/booking/cancel/route.ts and migration
 // 0012 — this is only used to preview the outcome in the confirm step;
@@ -98,7 +99,9 @@ export default function CancelButton({
   if (confirming) {
     return (
       <div className="max-w-sm rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-        <p className="mb-1 font-medium">Are you sure you want to cancel this session?</p>
+        <p className="mb-1 font-medium">
+          Cancel your <FormattedDateTime value={scheduledAt} /> session?
+        </p>
         <p className="mb-3 text-gray-600">
           {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed, isMakeup)}
         </p>

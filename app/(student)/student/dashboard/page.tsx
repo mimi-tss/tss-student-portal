@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName } from "@/lib/booking/credit-display";
+import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import JoinButton from "./join-button";
 import CancelButton from "./cancel-button";
 import UpcomingSessions from "./upcoming-sessions";
@@ -88,7 +89,9 @@ export default async function StudentDashboardPage() {
       {nextSession && (
         <div className="mb-6 rounded border p-4">
           <div className="flex items-center justify-between">
-            <p>Next session: {new Date(nextSession.scheduled_at).toLocaleString()}</p>
+            <p>
+              Next session: <FormattedDateTime value={nextSession.scheduled_at} />
+            </p>
             {coach?.meet_link && (
               <JoinButton
                 scheduledAt={nextSession.scheduled_at}
@@ -122,9 +125,13 @@ export default async function StudentDashboardPage() {
               <li key={credit.id}>
                 {creditDisplayName(credit.duration_minutes ?? student.session_duration_minutes ?? 30)}
                 {" — "}
-                {credit.expires_at
-                  ? `expires ${new Date(credit.expires_at).toLocaleDateString()}`
-                  : "no expiration"}
+                {credit.expires_at ? (
+                  <>
+                    expires <FormattedDate value={credit.expires_at} />
+                  </>
+                ) : (
+                  "no expiration"
+                )}
               </li>
             ))}
           </ul>

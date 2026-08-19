@@ -2,17 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { zonedTimeToUtc } from "@/lib/timezone";
-import {
-  CANADA_TIMEZONES,
-  DEFAULT_TIMEZONE,
-  OTHER_COMMON_TIMEZONES,
-  US_TIMEZONES,
-  allTimezones,
-  detectTimezone,
-  timezoneLabel,
-} from "@/lib/timezones";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { zonedTimeToUtc, formatDateInZone, formatTimeInZone, timezoneAbbreviation } from "@/lib/timezone";
+import { useTimeZone } from "@/components/timezone-context";
+import TimeZoneSelect from "@/components/timezone-select";
 
 interface Slot {
   start: string;
@@ -39,12 +32,19 @@ function daysInMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// `year`/`month` are plain calendar-grid coordinates, not a real instant
+// — formatting them via Date+Intl+timeZone (the previous implementation,
+// hardcoded to "UTC") risks the opposite bug it looks like it's avoiding:
+// midnight UTC on the 1st reformatted into a zone behind UTC rolls back
+// to the last day of the *previous* month, naming the wrong month
+// entirely. A plain lookup has no zone to get wrong.
 function monthLabel(year: number, month: number) {
-  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
 function dateKeyInZone(date: Date, timeZone: string) {
@@ -73,8 +73,12 @@ export default function BookingClient({
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
 
   const now = new Date();
-  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [timezoneList, setTimezoneList] = useState<string[]>([]);
+  // Shared with every other page (dashboard, header selector) instead of
+  // a page-local choice — defaults to Eastern on first paint (no SSR/
+  // hydration mismatch), then the student layout's TimeZoneProvider
+  // swaps to the viewer's detected zone right after mount unless they've
+  // already picked an explicit override, same as everywhere else.
+  const { timeZone: timezone, setTimeZone: setTimezone } = useTimeZone();
   const [viewYear, setViewYear] = useState(now.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(now.getUTCMonth() + 1);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -100,18 +104,19 @@ export default function BookingClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creditsKey]);
 
-  // Auto-detect on mount (client-only — server/first paint use the ET
-  // default so there's no SSR/hydration mismatch), then re-center the
-  // calendar on "today" in that zone.
+  // Re-center the calendar on "today" in the viewing zone. Keeps doing
+  // this as `timezone` settles from its ET default to a stored
+  // preference or auto-detected zone (context resolves that a beat
+  // after this component's own mount, in the same commit) — but stops
+  // the moment the student manually pages the calendar, so a later zone
+  // change doesn't yank them back to today's month.
+  const hasNavigatedRef = useRef(false);
   useEffect(() => {
-    const detected = detectTimezone();
-    setTimezone(detected);
-    setTimezoneList(allTimezones());
-    const today = new Date();
-    const [y, m] = dateKeyInZone(today, detected).split("-").map(Number);
+    if (hasNavigatedRef.current) return;
+    const [y, m] = dateKeyInZone(new Date(), timezone).split("-").map(Number);
     setViewYear(y);
     setViewMonth(m);
-  }, []);
+  }, [timezone]);
 
   // Trial mode: student picks any coach first (section 5 — no
   // assigned_coach_id needed for the one-time trial lesson).
@@ -289,7 +294,7 @@ export default function BookingClient({
           This booking will use a {availableCredits[0].duration_minutes ?? 30}-min session credit
           ({availableCredits.length} available
           {availableCredits[0].expires_at
-            ? `, earliest expires ${new Date(availableCredits[0].expires_at).toLocaleDateString()}`
+            ? `, earliest expires ${formatDateInZone(availableCredits[0].expires_at, timezone)}`
             : ""}
           )
         </div>
@@ -317,53 +322,8 @@ export default function BookingClient({
 
       <div className="mb-4 flex items-center justify-between text-sm">
         <label className="flex items-center gap-2">
-          <span className="text-gray-600">Timezone</span>
-          <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            className="rounded border p-1"
-          >
-            {!timezoneList.includes(timezone) &&
-              !US_TIMEZONES.some((z) => z.tz === timezone) &&
-              !CANADA_TIMEZONES.some((z) => z.tz === timezone) && (
-                <option value={timezone}>{timezoneLabel(timezone)}</option>
-              )}
-            <optgroup label="United States">
-              {US_TIMEZONES.map((z) => (
-                <option key={z.tz} value={z.tz}>
-                  {z.label}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Canada">
-              {CANADA_TIMEZONES.map((z) => (
-                <option key={z.tz} value={z.tz}>
-                  {z.label}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Other">
-              {OTHER_COMMON_TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {timezoneLabel(tz)}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="All timezones">
-              {timezoneList
-                .filter(
-                  (tz) =>
-                    !US_TIMEZONES.some((z) => z.tz === tz) &&
-                    !CANADA_TIMEZONES.some((z) => z.tz === tz) &&
-                    !OTHER_COMMON_TIMEZONES.includes(tz),
-                )
-                .map((tz) => (
-                  <option key={tz} value={tz}>
-                    {timezoneLabel(tz)}
-                  </option>
-                ))}
-            </optgroup>
-          </select>
+          <span className="text-gray-600">Timezone ({timezoneAbbreviation(timezone)})</span>
+          <TimeZoneSelect value={timezone} onChange={setTimezone} />
         </label>
       </div>
 
@@ -375,15 +335,9 @@ export default function BookingClient({
           <p className="mb-3 text-gray-700">
             Your session credit expires{" "}
             {availableCredits[0]?.expires_at
-              ? new Date(availableCredits[0].expires_at).toLocaleDateString("en-US", {
-                  timeZone: timezone,
-                })
+              ? formatDateInZone(availableCredits[0].expires_at, timezone)
               : ""}
-            , before{" "}
-            {new Date(expiryWarningSlot.start).toLocaleDateString("en-US", {
-              timeZone: timezone,
-            })}
-            .{" "}
+            , before {formatDateInZone(expiryWarningSlot.start, timezone)}.{" "}
             {canBookWithoutCredit
               ? "It won't be applied to this booking."
               : "This student's plan doesn't include booking without a credit, so please pick an earlier date instead."}
@@ -412,6 +366,7 @@ export default function BookingClient({
           <div className="mb-2 flex items-center justify-between">
             <button
               onClick={() => {
+                hasNavigatedRef.current = true;
                 const prev = addMonths(viewYear, viewMonth, -1);
                 setViewYear(prev.year);
                 setViewMonth(prev.month);
@@ -424,6 +379,7 @@ export default function BookingClient({
             <span className="font-medium">{monthLabel(viewYear, viewMonth)}</span>
             <button
               onClick={() => {
+                hasNavigatedRef.current = true;
                 const next = addMonths(viewYear, viewMonth, 1);
                 setViewYear(next.year);
                 setViewMonth(next.month);
@@ -483,18 +439,15 @@ export default function BookingClient({
                   month: "long",
                   day: "numeric",
                   timeZone: timezone,
-                })}
+                })}{" "}
+                <span className="font-normal text-gray-500">
+                  ({timezoneAbbreviation(timezone)})
+                </span>
               </p>
               <ul className="space-y-2">
                 {selectedSlots.map((slot) => (
                   <li key={slot.start} className="flex items-center justify-between rounded border p-2">
-                    <span>
-                      {new Date(slot.start).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        timeZone: timezone,
-                      })}
-                    </span>
+                    <span>{formatTimeInZone(slot.start, timezone)}</span>
                     <button
                       onClick={() => handleBook(slot)}
                       disabled={bookingStart === slot.start || blockedNoCredits}

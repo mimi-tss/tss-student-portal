@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FormattedDateTime } from "./formatted-time";
 
 interface Message {
   id: string;
@@ -180,7 +181,7 @@ export default function ChatPanel({
                   </div>
                 )}
                 <p className={`mt-1 text-[10px] ${mine ? "opacity-70" : "text-gray-400"}`}>
-                  {new Date(m.created_at).toLocaleString()}
+                  <FormattedDateTime value={m.created_at} />
                 </p>
               </div>
             </div>

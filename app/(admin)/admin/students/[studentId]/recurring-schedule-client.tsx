@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { DAY_NAMES } from "@/lib/scheduling/recurring";
+import { DAY_NAMES, nextWeeklySlotInstant } from "@/lib/scheduling/recurring";
+import { formatTimeInZone } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { useTimeZone } from "@/components/timezone-context";
 
 interface Schedule {
   dayOfWeek: number;
@@ -11,20 +14,30 @@ interface Schedule {
   startDate: string;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+// "Today" as a plain YYYY-MM-DD, anchored to the coach's own zone (the
+// zone the schedule's day/time itself is defined in) rather than the
+// browser's local zone or raw UTC — matters right at the coach's own
+// day boundary, where UTC "today" can already be tomorrow.
+function todayInZone(timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
 }
 
 export default function RecurringScheduleClient({
   studentId,
   hasCoach,
+  coachTimeZone,
   schedule,
 }: {
   studentId: string;
   hasCoach: boolean;
+  coachTimeZone: string | null;
   schedule: Schedule | null;
 }) {
   const router = useRouter();
+  const { timeZone: viewTimeZone } = useTimeZone();
+  const effectiveCoachZone = coachTimeZone ?? DEFAULT_TIMEZONE;
+  const today = todayInZone(effectiveCoachZone);
+
   const [editing, setEditing] = useState(false);
   const [dayOfWeek, setDayOfWeek] = useState(schedule?.dayOfWeek ?? 1);
   const [startTime, setStartTime] = useState(schedule?.startTime ?? "16:00");
@@ -33,7 +46,7 @@ export default function RecurringScheduleClient({
   // away); defaults to today for a change too, so by default a change
   // applies immediately unless the admin picks a future date — matching
   // how "Change" behaved before start_date existed.
-  const [startDate, setStartDate] = useState(today());
+  const [startDate, setStartDate] = useState(today);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,22 +98,36 @@ export default function RecurringScheduleClient({
   }
 
   if (!editing) {
+    let scheduleLabel: ReactNode = null;
+    if (schedule) {
+      // start_time is wall-clock in the COACH's own zone — convert to a
+      // real instant, then reformat in whatever zone the viewer has
+      // selected (defaults to Eastern for admin), so the weekday and
+      // time shown are actually correct for the viewer, not just the
+      // coach's own raw numbers relabeled.
+      const instant = nextWeeklySlotInstant(
+        schedule.dayOfWeek,
+        schedule.startTime,
+        effectiveCoachZone,
+      );
+      const weekday = new Intl.DateTimeFormat("en-US", {
+        timeZone: viewTimeZone,
+        weekday: "long",
+      }).format(instant);
+      scheduleLabel = (
+        <>
+          {weekday}s at {formatTimeInZone(instant, viewTimeZone)} ({schedule.durationMinutes} min)
+          {schedule.startDate > today ? ` — starting ${schedule.startDate}` : ""}
+        </>
+      );
+    }
+
     return (
       <div>
         {error && <p className="mb-1 text-xs text-red-600">{error}</p>}
         {schedule ? (
           <div className="flex items-center gap-3 text-sm">
-            <span>
-              {DAY_NAMES[schedule.dayOfWeek]}s at{" "}
-              {new Date(`2000-01-01T${schedule.startTime}`).toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}{" "}
-              ({schedule.durationMinutes} min)
-              {new Date(schedule.startDate) > new Date(today())
-                ? ` — starting ${new Date(`${schedule.startDate}T00:00:00Z`).toLocaleDateString()}`
-                : ""}
-            </span>
+            <span>{scheduleLabel}</span>
             <button onClick={() => setEditing(true)} className="text-blue-600 underline">
               Change
             </button>
@@ -136,6 +163,7 @@ export default function RecurringScheduleClient({
         onChange={(e) => setStartTime(e.target.value)}
         className="rounded border px-2 py-1"
       />
+      <span className="text-xs text-gray-500">({effectiveCoachZone.replace(/_/g, " ")})</span>
       <select
         value={durationMinutes}
         onChange={(e) => setDurationMinutes(Number(e.target.value))}
@@ -149,7 +177,7 @@ export default function RecurringScheduleClient({
         <input
           type="date"
           value={startDate}
-          min={today()}
+          min={today}
           onChange={(e) => setStartDate(e.target.value)}
           className="rounded border px-2 py-1 text-sm text-black"
         />

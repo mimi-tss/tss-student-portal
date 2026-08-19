@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FormattedDateTime } from "@/components/formatted-time";
 import CancelButton from "./cancel-button";
 
 interface UpcomingSession {
@@ -77,7 +78,9 @@ export default function UpcomingSessions({
         <ul className="space-y-3">
           {sessions.map((s) => (
             <li key={s.id} className="border-t pt-3 first:border-t-0 first:pt-0">
-              <p className="text-sm">{new Date(s.scheduled_at).toLocaleString()}</p>
+              <p className="text-sm">
+                <FormattedDateTime value={s.scheduled_at} />
+              </p>
               <div className="mt-1">
                 <CancelButton
                   sessionId={s.id}

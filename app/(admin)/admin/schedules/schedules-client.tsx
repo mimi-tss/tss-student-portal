@@ -8,10 +8,11 @@ interface Coach {
   name: string;
 }
 
-// Admin views any coach's calendar, always normalized to Eastern
-// (TSS_App_Spec_1.md section 8) regardless of that coach's own
-// timezone — CoachCalendar's displayTimeZone override handles the actual
-// conversion; this just picks which coach to look at.
+// Admin views any coach's calendar, normalized by default to Eastern
+// (TSS_App_Spec_1.md section 8) regardless of that coach's own timezone
+// — CoachCalendar reads the shared header timezone selector to do the
+// actual conversion (defaults to Eastern for admin, but admin can
+// switch it); this component just picks which coach to look at.
 export default function SchedulesClient({ coaches }: { coaches: Coach[] }) {
   const [search, setSearch] = useState("");
   const [selectedCoachId, setSelectedCoachId] = useState(coaches[0]?.id ?? "");
@@ -54,7 +55,6 @@ export default function SchedulesClient({ coaches }: { coaches: Coach[] }) {
           {selectedCoachId ? (
             <CoachCalendar
               scheduleEndpoint={`/api/admin/coach-schedule?coachId=${selectedCoachId}`}
-              displayTimeZone="America/New_York"
               studentLinkBase="/admin/students"
             />
           ) : (

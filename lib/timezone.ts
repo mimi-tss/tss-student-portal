@@ -94,6 +94,57 @@ export function zonedHourMinute(date: Date, timeZone: string): [number, number] 
   return [Number(parts.hour), Number(parts.minute)];
 }
 
+// Display formatting — every time shown anywhere in the app must name
+// its zone explicitly (e.g. "8:00 PM ET"), never show seconds, and use
+// US-style numeric dates (M/D/YYYY). `timeZoneName: "shortGeneric"`
+// gives the DST-invariant abbreviation ("ET" year-round) rather than
+// the DST-specific one ("EDT"/"EST") — matches how the studio and
+// students actually talk about lesson times. For the list of selectable
+// zones and the studio's default, see lib/timezones.ts (DEFAULT_TIMEZONE,
+// detectTimezone, US_TIMEZONES/CANADA_TIMEZONES/OTHER_COMMON_TIMEZONES) —
+// that file already had this and predates these formatters.
+
+export function formatDateInZone(date: Date | string, timeZone: string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(d);
+}
+
+export function formatTimeInZone(date: Date | string, timeZone: string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  // "shortGeneric" renders UTC as "GMT+0" (no DST, so there's no
+  // year-round-stable abbreviation to prefer over the plain name).
+  if (timeZone === "UTC") {
+    return `${new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit", hour12: true }).format(d)} UTC`;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "shortGeneric",
+  }).format(d);
+}
+
+export function formatDateTimeInZone(date: Date | string, timeZone: string): string {
+  return `${formatDateInZone(date, timeZone)}, ${formatTimeInZone(date, timeZone)}`;
+}
+
+// Just the short label ("ET", "PT", "UTC") — for headers/badges that name
+// a zone without attaching it to one specific time.
+export function timezoneAbbreviation(timeZone: string, date: Date = new Date()): string {
+  if (timeZone === "UTC") return "UTC";
+  return (
+    new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortGeneric" })
+      .formatToParts(date)
+      .find((p) => p.type === "timeZoneName")?.value ?? timeZone
+  );
+}
+
 export function zonedYearMonthDay(date: Date, timeZone: string): [number, number, number] {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FormattedDateTime } from "@/components/formatted-time";
 import AdminCancelButtons from "./admin-cancel-buttons";
 
 interface UpcomingSession {
@@ -70,8 +71,10 @@ export default function AdminUpcomingSessions({ studentId }: { studentId: string
         <ul className="space-y-3">
           {sessions.map((s) => (
             <li key={s.id} className="border-t pt-3 first:border-t-0 first:pt-0">
-              <p className="text-sm">{new Date(s.scheduled_at).toLocaleString()}</p>
-              <AdminCancelButtons sessionId={s.id} onSuccess={load} />
+              <p className="text-sm">
+                <FormattedDateTime value={s.scheduled_at} />
+              </p>
+              <AdminCancelButtons sessionId={s.id} scheduledAt={s.scheduled_at} onSuccess={load} />
             </li>
           ))}
         </ul>

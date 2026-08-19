@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { zonedTimeToUtc, zonedHourMinute, zonedDayKey } from "@/lib/timezone";
+import {
+  zonedTimeToUtc,
+  zonedHourMinute,
+  zonedDayKey,
+  formatDateInZone,
+  formatDateTimeInZone,
+  timezoneAbbreviation,
+} from "@/lib/timezone";
+import { useTimeZone } from "./timezone-context";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const SLOT_MINUTES = 30;
@@ -76,30 +84,30 @@ function formatTimeLabel(minutesFromMidnight: number) {
 }
 
 // Shared by the coach's own dashboard and the admin all-coaches view.
-// `scheduleEndpoint` is the base URL (start/end get appended); omit
-// `displayTimeZone` to show the calendar in the coach's own zone
-// (their own dashboard), or force one (e.g. Eastern) to normalize every
-// coach's calendar to the same display zone for admin — the coach's
-// actual working-hours windows still get checked against *their own*
-// zone regardless of what the grid is displayed in.
+// `scheduleEndpoint` is the base URL (start/end get appended). The grid
+// always displays in the viewer's chosen timezone (useTimeZone(),
+// defaulting to the coach's own zone on their own dashboard, or Eastern
+// on admin's cross-coach view — see the layouts) and that zone is always
+// changeable via the header selector — the coach's actual working-hours
+// windows still get checked against *their own* zone regardless of what
+// the grid is displayed in.
 //
 // `canMarkAttendance` enables click-to-mark on past sessions (the
 // coach's own dashboard only — admin browses, doesn't mark attendance
 // for someone else's session, per section 8).
 export default function CoachCalendar({
   scheduleEndpoint,
-  displayTimeZone,
   canMarkAttendance = false,
   studentLinkBase,
 }: {
   scheduleEndpoint: string;
-  displayTimeZone?: string;
   canMarkAttendance?: boolean;
   // When set (admin's Coach Schedules page only — a coach can't reach
   // /admin/students), the student's name in each session block links to
   // their admin dashboard view, e.g. "/admin/students".
   studentLinkBase?: string;
 }) {
+  const { timeZone: displayTimeZone } = useTimeZone();
   const [view, setView] = useState<"day" | "week">("week");
   const [anchorKey, setAnchorKey] = useState(() => toDateKey(new Date()));
   const [data, setData] = useState<ScheduleData | null>(null);
@@ -224,11 +232,9 @@ export default function CoachCalendar({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">
           {data?.coach.name ?? "Coach"}&apos;s Schedule
-          {displayTimeZone && (
-            <span className="ml-2 text-xs font-normal text-gray-500">
-              ({displayTimeZone})
-            </span>
-          )}
+          <span className="ml-2 text-xs font-normal text-gray-500">
+            ({timezoneAbbreviation(gridTimeZone)})
+          </span>
         </h2>
         <div className="flex items-center gap-2">
           <button
@@ -289,7 +295,7 @@ export default function CoachCalendar({
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded border bg-gray-50 p-3 text-sm">
           <span className="font-medium">
             {selectedSession.studentName} —{" "}
-            {new Date(selectedSession.scheduledAt).toLocaleString()}
+            {formatDateTimeInZone(selectedSession.scheduledAt, gridTimeZone)}
             {selectedSession.status !== "scheduled" && (
               <span className="ml-2 text-gray-500">
                 (currently: {selectedSession.status})
@@ -324,7 +330,7 @@ export default function CoachCalendar({
             <div />
             {dayKeys.map((key) => (
               <div key={key} className="border-b p-2 text-center font-medium">
-                {parseDateKey(key).toLocaleDateString(undefined, {
+                {parseDateKey(key).toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",

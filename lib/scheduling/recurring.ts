@@ -19,11 +19,41 @@ const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 type WorkingHours = Record<string, [string, string][]>;
 
-export function formatSlotLabel(dayOfWeek: number, startTime: string) {
-  const [h, m] = startTime.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const displayHour = h % 12 === 0 ? 12 : h % 12;
-  return `${DAY_NAMES[dayOfWeek]}s at ${displayHour}:${String(m).padStart(2, "0")} ${period}`;
+// `start_time` is wall-clock in the COACH's own zone, not necessarily
+// the zone it's being displayed in (an admin viewing in Eastern for a
+// Pacific coach, or a student viewing in their own local zone) — so
+// showing it as a bare string would silently show the wrong time to
+// anyone not in the coach's zone. This picks the nearest real instant
+// (today or later) that actually falls on `dayOfWeek` at `startTime` in
+// `coachTimeZone`, so callers can reformat it into any viewer's zone via
+// formatTimeInZone/formatDateTimeInZone (lib/timezone.ts) and get both
+// the correct clock time AND, in the rare case the zone gap crosses
+// midnight, the correct day. Purely a display helper — not used for
+// generating real occurrences (see occurrencesFor for that).
+export function nextWeeklySlotInstant(
+  dayOfWeek: number,
+  startTime: string,
+  coachTimeZone: string,
+  from: Date = new Date(),
+): Date {
+  const [hh, mm] = startTime.split(":").map(Number);
+  const [y, m, d] = zonedYearMonthDay(from, coachTimeZone);
+
+  for (let i = 0; i < 7; i++) {
+    const dateOnly = new Date(Date.UTC(y, m - 1, d + i));
+    if (dateOnly.getUTCDay() !== dayOfWeek) continue;
+    return zonedTimeToUtc(
+      dateOnly.getUTCFullYear(),
+      dateOnly.getUTCMonth() + 1,
+      dateOnly.getUTCDate(),
+      hh,
+      mm,
+      coachTimeZone,
+    );
+  }
+
+  // Unreachable — every 7-day window contains each weekday exactly once.
+  return from;
 }
 
 // Pro/Elite entitlement is 4 weekly sessions per billing cycle (spec

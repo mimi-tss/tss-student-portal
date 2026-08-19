@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
+import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
@@ -31,7 +32,11 @@ export default async function AdminStudentPage({
   const [{ data: coach }, { data: nextSession }, { data: credits }, { data: recurringSchedule }] =
     await Promise.all([
       student.assigned_coach_id
-        ? supabase.from("coaches").select("name").eq("id", student.assigned_coach_id).single()
+        ? supabase
+            .from("coaches")
+            .select("name, timezone")
+            .eq("id", student.assigned_coach_id)
+            .single()
         : Promise.resolve({ data: null }),
       supabase
         .from("sessions")
@@ -77,6 +82,7 @@ export default async function AdminStudentPage({
         <RecurringScheduleClient
           studentId={student.id}
           hasCoach={!!student.assigned_coach_id}
+          coachTimeZone={coach?.timezone ?? null}
           schedule={
             recurringSchedule
               ? {
@@ -102,8 +108,14 @@ export default async function AdminStudentPage({
         </div>
         {nextSession ? (
           <>
-            <p>{new Date(nextSession.scheduled_at).toLocaleString()}</p>
-            <AdminCancelButtons key={nextSession.id} sessionId={nextSession.id} />
+            <p>
+              <FormattedDateTime value={nextSession.scheduled_at} />
+            </p>
+            <AdminCancelButtons
+              key={nextSession.id}
+              sessionId={nextSession.id}
+              scheduledAt={nextSession.scheduled_at}
+            />
           </>
         ) : (
           <p className="text-gray-500">Nothing scheduled.</p>
@@ -123,9 +135,13 @@ export default async function AdminStudentPage({
                 <p>
                   {creditDisplayName(c.duration_minutes ?? student.session_duration_minutes ?? 30)}
                   {" — "}
-                  {c.expires_at
-                    ? `expires ${new Date(c.expires_at).toLocaleDateString()}`
-                    : "no expiration"}
+                  {c.expires_at ? (
+                    <>
+                      expires <FormattedDate value={c.expires_at} />
+                    </>
+                  ) : (
+                    "no expiration"
+                  )}
                 </p>
                 <p className="text-xs text-gray-500">
                   {creditTypeLabel(c.type)}

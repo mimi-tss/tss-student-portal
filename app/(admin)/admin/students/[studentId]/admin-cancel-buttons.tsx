@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { FormattedDateTime } from "@/components/formatted-time";
 
 export default function AdminCancelButtons({
   sessionId,
+  scheduledAt,
   onSuccess,
 }: {
   sessionId: string;
+  scheduledAt: string;
   onSuccess?: () => void;
 }) {
   const router = useRouter();
@@ -75,7 +78,9 @@ export default function AdminCancelButtons({
   if (mode === "staff-reason") {
     return (
       <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-        <p className="mb-1 font-medium">Staff cancel — reason required</p>
+        <p className="mb-1 font-medium">
+          Staff cancel <FormattedDateTime value={scheduledAt} /> — reason required
+        </p>
         <p className="mb-2 text-gray-600">
           Always issues a session credit (no cap, no expiry) and logs this note for audit —
           use for studio-side reasons, not the student&apos;s own late cancellation.
@@ -113,6 +118,9 @@ export default function AdminCancelButtons({
   if (mode === "confirm-regular") {
     return (
       <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
+        <p className="mb-1 font-medium">
+          Cancel the <FormattedDateTime value={scheduledAt} /> session?
+        </p>
         <p className="mb-2 text-gray-700">
           Cancels exactly like the student&apos;s own self-service cancellation — a session
           credit is issued only with 24+ hours notice, and it counts against their
