@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, assigned_coach_id")
+    .select("id, assigned_coach_id, billing_anniversary_date")
     .eq("id", studentId)
     .maybeSingle();
 
@@ -41,6 +41,20 @@ export async function POST(req: NextRequest) {
       { error: "assign a coach before setting a recurring schedule" },
       { status: 400 },
     );
+  }
+
+  // Backfill for students who predate billing_anniversary_date being set
+  // automatically (webhook/provisioning) — without it, the 4-per-cycle
+  // cap in materializeRecurringSessions has nothing to anchor to and
+  // silently doesn't apply. Today is a reasonable stand-in: it's not
+  // necessarily their real Kajabi invoice date, but it's the best anchor
+  // available and keeps the weekly cadence correctly capped from here on.
+  if (!student.billing_anniversary_date) {
+    await supabase
+      .from("students")
+      .update({ billing_anniversary_date: new Date().toISOString().slice(0, 10) })
+      .eq("id", student.id)
+      .is("billing_anniversary_date", null);
   }
 
   const { data: coach } = await supabase

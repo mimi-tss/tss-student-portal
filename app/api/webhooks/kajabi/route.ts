@@ -128,6 +128,20 @@ export async function POST(req: NextRequest) {
         .select("id, profile_id")
         .single();
 
+      // Anchors the 4-per-billing-cycle recurring-session cap (spec
+      // section 4). Set only once, guarded by `.is(...null)` — this
+      // upsert re-fires on every later purchase (add-ons, upgrades) for
+      // the same contact, and overwriting it then would shift the
+      // student's whole cycle to match whatever they bought most
+      // recently instead of when their billing actually started.
+      if (student) {
+        await admin
+          .from("students")
+          .update({ billing_anniversary_date: new Date().toISOString().slice(0, 10) })
+          .eq("id", student.id)
+          .is("billing_anniversary_date", null);
+      }
+
       // First time we've seen this contact: create their (passwordless)
       // Supabase auth user + profile now, so the login route never has to.
       if (student && !student.profile_id) {

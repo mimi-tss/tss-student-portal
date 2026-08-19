@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
       subscription_status: "active",
       payment_status: "ok",
       session_duration_minutes: sessionDurationMinutes === 60 ? 60 : 30,
+      // Anchors the 4-per-billing-cycle recurring-session cap (spec
+      // section 4) — Stripe-billed students never fire a Kajabi webhook
+      // to set this any other way.
+      billing_anniversary_date: new Date().toISOString().slice(0, 10),
     })
     .select("id")
     .single();

@@ -26,6 +26,53 @@ export function formatSlotLabel(dayOfWeek: number, startTime: string) {
   return `${DAY_NAMES[dayOfWeek]}s at ${displayHour}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+// Pro/Elite entitlement is 4 weekly sessions per billing cycle (spec
+// section 4), not per calendar month — cycles are anchored to each
+// student's own billing_anniversary_date, not a shared 1st-of-month.
+// A weekly cadence doesn't divide evenly into a ~30-31 day cycle, so
+// some cycles naturally contain a 5th weekly occurrence; that leftover
+// occurrence simply isn't scheduled ("week off"), not billed or booked.
+const CYCLE_SESSION_CAP = 4;
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+// The cycle-start calendar date that (year, month, day) falls into,
+// anchored on the same day-of-month every month — clamped for short
+// months, e.g. an anchor of the 31st becomes the 30th in a 30-day month
+// or the 28th/29th in February, matching how a real monthly billing
+// anniversary behaves.
+function cycleStartForDate(
+  year: number,
+  month: number,
+  day: number,
+  anchorDay: number,
+): [number, number, number] {
+  const effectiveThisMonth = Math.min(anchorDay, daysInMonth(year, month));
+  if (day >= effectiveThisMonth) {
+    return [year, month, effectiveThisMonth];
+  }
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const effectivePrevMonth = Math.min(anchorDay, daysInMonth(prevYear, prevMonth));
+  return [prevYear, prevMonth, effectivePrevMonth];
+}
+
+// 1-indexed position of `instant` among same-weekday occurrences within
+// its billing cycle — e.g. the 1st, 2nd, 3rd, 4th, or (skipped) 5th
+// Wednesday since the cycle started. Cycle-date arithmetic is done in
+// the coach's own zone, the same frame occurrences are already
+// generated in.
+function cycleOccurrenceNumber(instant: Date, anchorDay: number, timeZone: string): number {
+  const [y, m, d] = zonedYearMonthDay(instant, timeZone);
+  const [cy, cm, cd] = cycleStartForDate(y, m, d, anchorDay);
+  const cycleStart = Date.UTC(cy, cm - 1, cd);
+  const dateOnly = Date.UTC(y, m - 1, d);
+  const daysSinceCycleStart = Math.round((dateOnly - cycleStart) / 86_400_000);
+  return Math.floor(daysSinceCycleStart / 7) + 1;
+}
+
 // A recurring slot must sit inside the coach's working hours, otherwise
 // the generated sessions would be invisible on the coach calendar — that
 // grid only renders cells that fall within working hours, so an
@@ -52,17 +99,24 @@ export function slotFitsWorkingHours(
 // Every future occurrence of the slot within the horizon, as real UTC
 // instants. Walks calendar dates in the coach's zone and converts each
 // one individually so a DST shift moves the UTC instant but keeps the
-// wall-clock lesson time put.
+// wall-clock lesson time put. When billingAnniversaryDate is given, any
+// occurrence that would be the 5th of that weekday in its billing cycle
+// is left out entirely (spec section 4) — no session row is ever
+// created for it, rather than creating then hiding one.
 export function occurrencesFor(
   dayOfWeek: number,
   startTime: string,
   timeZone: string,
   from: Date,
   weeksAhead = WEEKS_AHEAD,
+  billingAnniversaryDate?: string | null,
 ): Date[] {
   const [hh, mm] = startTime.split(":").map(Number);
   const [y, m, d] = zonedYearMonthDay(from, timeZone);
   const out: Date[] = [];
+  const anchorDay = billingAnniversaryDate
+    ? new Date(`${billingAnniversaryDate}T00:00:00Z`).getUTCDate()
+    : null;
 
   for (let i = 0; i < weeksAhead * 7; i++) {
     const dateOnly = new Date(Date.UTC(y, m - 1, d + i));
@@ -76,7 +130,14 @@ export function occurrencesFor(
       mm,
       timeZone,
     );
-    if (instant > from) out.push(instant);
+    if (instant <= from) continue;
+
+    if (anchorDay !== null) {
+      const occurrenceNumber = cycleOccurrenceNumber(instant, anchorDay, timeZone);
+      if (occurrenceNumber > CYCLE_SESSION_CAP) continue;
+    }
+
+    out.push(instant);
   }
 
   return out;
@@ -112,11 +173,14 @@ export async function materializeRecurringSessions(
   let skipped = 0;
 
   for (const schedule of schedules ?? []) {
-    const { data: coach } = await supabase
-      .from("coaches")
-      .select("timezone")
-      .eq("id", schedule.coach_id)
-      .single();
+    const [{ data: coach }, { data: student }] = await Promise.all([
+      supabase.from("coaches").select("timezone").eq("id", schedule.coach_id).single(),
+      supabase
+        .from("students")
+        .select("billing_anniversary_date")
+        .eq("id", schedule.student_id)
+        .single(),
+    ]);
 
     const timeZone = coach?.timezone ?? "America/New_York";
     const instants = occurrencesFor(
@@ -124,6 +188,8 @@ export async function materializeRecurringSessions(
       schedule.start_time,
       timeZone,
       now,
+      WEEKS_AHEAD,
+      student?.billing_anniversary_date,
     );
 
     if (instants.length === 0) continue;
