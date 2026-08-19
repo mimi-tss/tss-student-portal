@@ -136,26 +136,55 @@ export default function CoachCalendar({
   const coachTimeZone = data?.coach.timezone ?? "America/New_York";
   const gridTimeZone = displayTimeZone ?? coachTimeZone;
 
+  // Working-hours windows are wall-clock in the COACH's zone, but the row
+  // axis itself is labeled (and must be bounded) in gridTimeZone — when
+  // an admin views a coach in a different zone, a window's minute range
+  // shifts, and using the coach's raw numbers as the row bounds would
+  // silently clip off real available/booked time that falls outside
+  // those now-mislabeled rows (caught live: a coach's 9am-5pm ET clipped
+  // to only "9:00 AM"-"2:00 PM" once viewed in Pacific, hiding the
+  // earlier 6-9am PT portion entirely). Convert each window's start/end
+  // to a real instant on a representative date for that weekday (this
+  // week, for DST correctness), then read its gridTimeZone minutes.
+  const weekStartKey = startOfWeekKey(anchorKey);
   const { rowStartMinutes, rowEndMinutes } = useMemo(() => {
     let min = 9 * 60;
     let max = 17 * 60;
     let found = false;
-    for (const windows of Object.values(workingHours)) {
+    for (const [dayName, windows] of Object.entries(workingHours)) {
+      const dow = DAY_KEYS.indexOf(dayName as (typeof DAY_KEYS)[number]);
+      if (dow === -1) continue;
+      const refDate = parseDateKey(addDaysToKey(weekStartKey, dow));
+      const year = refDate.getFullYear();
+      const month = refDate.getMonth() + 1;
+      const day = refDate.getDate();
+
       for (const [start, end] of windows) {
         const [sh, sm] = start.split(":").map(Number);
         const [eh, em] = end.split(":").map(Number);
+        const startInstant = zonedTimeToUtc(year, month, day, sh, sm, coachTimeZone);
+        const endInstant = zonedTimeToUtc(year, month, day, eh, em, coachTimeZone);
+        const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
+        const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
+        const gStart = gsh * 60 + gsm;
+        // An end exactly on midnight in the grid zone (e.g. a window
+        // that runs into the next calendar day once shifted) reads as
+        // 0 — treat it as end-of-day rather than collapsing the range.
+        const gEnd = geh === 0 && gem === 0 ? 24 * 60 : geh * 60 + gem;
+
         if (!found) {
-          min = sh * 60 + sm;
-          max = eh * 60 + em;
+          min = gStart;
+          max = gEnd;
           found = true;
         } else {
-          min = Math.min(min, sh * 60 + sm);
-          max = Math.max(max, eh * 60 + em);
+          min = Math.min(min, gStart);
+          max = Math.max(max, gEnd);
         }
       }
     }
     return { rowStartMinutes: min, rowEndMinutes: max };
-  }, [workingHours]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workingHours, coachTimeZone, gridTimeZone, weekStartKey]);
 
   const rows: number[] = [];
   for (let m = rowStartMinutes; m < rowEndMinutes; m += SLOT_MINUTES) rows.push(m);
