@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AdminCancelButtons({ sessionId }: { sessionId: string }) {
+export default function AdminCancelButtons({
+  sessionId,
+  onSuccess,
+}: {
+  sessionId: string;
+  onSuccess?: () => void;
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<null | "confirm-regular" | "staff-reason">(null);
   const [reason, setReason] = useState("");
@@ -33,6 +39,7 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
     setMode(null);
     setReason("");
     router.refresh();
+    onSuccess?.();
   }
 
   async function doStaffCancel() {
@@ -58,6 +65,7 @@ export default function AdminCancelButtons({ sessionId }: { sessionId: string })
     setMode(null);
     setReason("");
     router.refresh();
+    onSuccess?.();
   }
 
   if (message) {

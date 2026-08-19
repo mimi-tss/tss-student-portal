@@ -5,6 +5,7 @@ import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
+import AdminUpcomingSessions from "./admin-upcoming-sessions";
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -50,7 +51,7 @@ export default async function AdminStudentPage({
         .order("expires_at", { ascending: true, nullsFirst: false }),
       supabase
         .from("recurring_schedules")
-        .select("day_of_week, start_time, duration_minutes")
+        .select("day_of_week, start_time, duration_minutes, start_date")
         .eq("student_id", student.id)
         .maybeSingle(),
     ]);
@@ -82,6 +83,7 @@ export default async function AdminStudentPage({
                   dayOfWeek: recurringSchedule.day_of_week,
                   startTime: recurringSchedule.start_time,
                   durationMinutes: recurringSchedule.duration_minutes,
+                  startDate: recurringSchedule.start_date,
                 }
               : null
           }
@@ -106,6 +108,10 @@ export default async function AdminStudentPage({
         ) : (
           <p className="text-gray-500">Nothing scheduled.</p>
         )}
+      </div>
+
+      <div className="mb-6">
+        <AdminUpcomingSessions studentId={student.id} />
       </div>
 
       <div className="mb-6 rounded border p-4">

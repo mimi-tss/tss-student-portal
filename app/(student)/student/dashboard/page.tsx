@@ -5,6 +5,7 @@ import { listStudentRecordings } from "@/lib/google/drive";
 import { creditDisplayName } from "@/lib/booking/credit-display";
 import JoinButton from "./join-button";
 import CancelButton from "./cancel-button";
+import UpcomingSessions from "./upcoming-sessions";
 
 // Student dashboard: next session + Join button (opens 10 min early,
 // section [today's addition]), recordings from their own Drive
@@ -132,10 +133,17 @@ export default async function StudentDashboardPage() {
 
       <Link
         href="/student/book"
-        className="mb-8 inline-block rounded bg-black px-4 py-2 text-white"
+        className="mb-4 inline-block rounded bg-black px-4 py-2 text-white"
       >
         Book / reschedule a session
       </Link>
+
+      <div className="mb-8">
+        <UpcomingSessions
+          monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
+          yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
+        />
+      </div>
 
       <h2 className="mb-2 mt-8 text-lg font-semibold">Your recordings</h2>
 

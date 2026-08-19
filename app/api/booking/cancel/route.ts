@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
+import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
 
 // Self-service cancellation (spec section 5/6) — see
 // lib/booking/cancel-session.ts for the actual notice/credit rules,
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id")
+    .select("id, billing_anniversary_date")
     .eq("profile_id", user.id)
     .single();
 
@@ -48,6 +49,17 @@ export async function POST(req: NextRequest) {
   const scheduledAt = new Date(session.scheduled_at);
   if (scheduledAt.getTime() <= Date.now()) {
     return NextResponse.json({ error: "session has already passed" }, { status: 409 });
+  }
+
+  // Only the current billing cycle is actually paid for — a session in a
+  // future cycle can't be cancelled for a credit that hasn't been earned
+  // yet. Doesn't apply to staff-cancel, which is an admin override.
+  const { end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
+  if (scheduledAt.getTime() >= cycleEnd.getTime()) {
+    return NextResponse.json(
+      { error: "This session is in a future billing cycle and can't be cancelled yet." },
+      { status: 403 },
+    );
   }
 
   const outcome = await applyCancellationCredit(supabase, session, reason);

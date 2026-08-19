@@ -10,7 +10,7 @@ import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/schedu
 // daily cron top-up uses, so the change shows up on the coach calendar
 // right away rather than waiting for tomorrow's run.
 export async function POST(req: NextRequest) {
-  const { studentId, dayOfWeek, startTime, durationMinutes } = await req.json();
+  const { studentId, dayOfWeek, startTime, durationMinutes, startDate } = await req.json();
 
   if (
     !studentId ||
@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Defaults to today when the caller doesn't specify one (e.g. a brand
+  // new schedule taking effect right away).
+  const effectiveStartDate: string = startDate || new Date().toISOString().slice(0, 10);
 
   const supabase = await createClient();
 
@@ -73,9 +77,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Replacing an existing schedule (new day/time, or reassigned coach):
-  // drop its own not-yet-happened, untouched occurrences first, so the
-  // old slot doesn't linger alongside the new one. Anything already
-  // cancelled or attended is real history and stays untouched.
+  // drop its own not-yet-happened, untouched occurrences from the new
+  // start date onward, so the old slot doesn't linger alongside the new
+  // one. Occurrences BEFORE the new start date belong to the old pattern
+  // and are deliberately left in place — that's how "Fridays 3:30pm
+  // starting now, Fridays 6pm starting Oct 1" keeps the September
+  // Friday-3:30pm sessions intact. Anything already cancelled or
+  // attended is real history and stays untouched regardless.
   const { data: existingSchedule } = await supabase
     .from("recurring_schedules")
     .select("id")
@@ -88,7 +96,7 @@ export async function POST(req: NextRequest) {
       .delete()
       .eq("recurring_schedule_id", existingSchedule.id)
       .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString());
+      .gte("scheduled_at", new Date(`${effectiveStartDate}T00:00:00Z`).toISOString());
   }
 
   const { data: schedule, error } = await supabase
@@ -100,6 +108,7 @@ export async function POST(req: NextRequest) {
         day_of_week: dayOfWeek,
         start_time: startTime,
         duration_minutes: durationMinutes,
+        start_date: effectiveStartDate,
         active: true,
         updated_at: new Date().toISOString(),
       },

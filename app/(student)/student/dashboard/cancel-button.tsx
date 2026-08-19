@@ -44,12 +44,14 @@ export default function CancelButton({
   isMakeup,
   monthlyCreditsUsed,
   yearlyCreditsUsed,
+  onSuccess,
 }: {
   sessionId: string;
   scheduledAt: string;
   isMakeup: boolean;
   monthlyCreditsUsed: number;
   yearlyCreditsUsed: number;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -79,6 +81,7 @@ export default function CancelButton({
 
     setMessage(body.message);
     router.refresh();
+    onSuccess?.();
   }
 
   if (message) {

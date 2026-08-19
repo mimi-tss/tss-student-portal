@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
+import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
 
 // Admin-triggered version of the student's own self-service cancel — same
 // rules either way (see lib/booking/cancel-session.ts), just reachable
@@ -27,6 +28,24 @@ export async function POST(req: NextRequest) {
   }
   if (session.status !== "scheduled") {
     return NextResponse.json({ error: "session is not scheduled" }, { status: 409 });
+  }
+
+  // Mirrors the self-service guard exactly (spec section 6) — "regular
+  // cancel" follows the same makeup rules as the student's own
+  // cancellation, including that a future/unpaid billing cycle can't be
+  // cancelled yet. Staff-cancel is the deliberate override for this.
+  const { data: student } = await supabase
+    .from("students")
+    .select("billing_anniversary_date")
+    .eq("id", session.student_id)
+    .single();
+
+  const { end: cycleEnd } = currentBillingCycleRange(student?.billing_anniversary_date);
+  if (new Date(session.scheduled_at).getTime() >= cycleEnd.getTime()) {
+    return NextResponse.json(
+      { error: "This session is in a future billing cycle and can't be cancelled yet." },
+      { status: 403 },
+    );
   }
 
   const outcome = await applyCancellationCredit(supabase, session, reason);

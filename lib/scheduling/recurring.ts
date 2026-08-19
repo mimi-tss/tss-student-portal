@@ -73,6 +73,39 @@ function cycleOccurrenceNumber(instant: Date, anchorDay: number, timeZone: strin
   return Math.floor(daysSinceCycleStart / 7) + 1;
 }
 
+// The [start, end) instants of the billing cycle `now` currently falls
+// in — used to decide what's actually "paid for" and safe to show/cancel
+// (e.g. the upcoming-sessions list). Kajabi doesn't reliably expose the
+// real billing interval (monthly/quarterly/semi-annual/annual all
+// exist), so this deliberately always uses a plain 1-month window rather
+// than guessing the interval — the safe default per spec section 4,
+// never over-showing what's confirmed paid. Falls back to a plain
+// calendar month if the student has no billing_anniversary_date at all.
+export function currentBillingCycleRange(
+  billingAnniversaryDate: string | null | undefined,
+  now: Date = new Date(),
+): { start: Date; end: Date } {
+  if (!billingAnniversaryDate) {
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
+    return { start: new Date(Date.UTC(y, m, 1)), end: new Date(Date.UTC(y, m + 1, 1)) };
+  }
+
+  const anchorDay = new Date(`${billingAnniversaryDate}T00:00:00Z`).getUTCDate();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth() + 1;
+  const d = now.getUTCDate();
+  const [cy, cm, cd] = cycleStartForDate(y, m, d, anchorDay);
+  const start = new Date(Date.UTC(cy, cm - 1, cd));
+
+  const nextMonth = cm === 12 ? 1 : cm + 1;
+  const nextYear = cm === 12 ? cy + 1 : cy;
+  const endDay = Math.min(anchorDay, daysInMonth(nextYear, nextMonth));
+  const end = new Date(Date.UTC(nextYear, nextMonth - 1, endDay));
+
+  return { start, end };
+}
+
 // A recurring slot must sit inside the coach's working hours, otherwise
 // the generated sessions would be invisible on the coach calendar — that
 // grid only renders cells that fall within working hours, so an
@@ -161,7 +194,7 @@ export async function materializeRecurringSessions(
 ): Promise<MaterializeResult> {
   let query = supabase
     .from("recurring_schedules")
-    .select("id, student_id, coach_id, day_of_week, start_time, duration_minutes")
+    .select("id, student_id, coach_id, day_of_week, start_time, duration_minutes, start_date")
     .eq("active", true);
 
   if (opts.studentId) query = query.eq("student_id", opts.studentId);
@@ -183,11 +216,22 @@ export async function materializeRecurringSessions(
     ]);
 
     const timeZone = coach?.timezone ?? "America/New_York";
+
+    // A schedule change can be set to take effect on a future date (see
+    // app/api/admin/recurring-schedule/route.ts) rather than immediately
+    // — occurrences before that date belong to whatever pattern created
+    // them and are left alone, so materialization never walks earlier
+    // than start_date even though it always starts scanning from `now`.
+    const startDate = schedule.start_date
+      ? new Date(`${schedule.start_date}T00:00:00Z`)
+      : null;
+    const effectiveFrom = startDate && startDate > now ? startDate : now;
+
     const instants = occurrencesFor(
       schedule.day_of_week,
       schedule.start_time,
       timeZone,
-      now,
+      effectiveFrom,
       WEEKS_AHEAD,
       student?.billing_anniversary_date,
     );

@@ -8,6 +8,11 @@ interface Schedule {
   dayOfWeek: number;
   startTime: string;
   durationMinutes: number;
+  startDate: string;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function RecurringScheduleClient({
@@ -24,6 +29,11 @@ export default function RecurringScheduleClient({
   const [dayOfWeek, setDayOfWeek] = useState(schedule?.dayOfWeek ?? 1);
   const [startTime, setStartTime] = useState(schedule?.startTime ?? "16:00");
   const [durationMinutes, setDurationMinutes] = useState(schedule?.durationMinutes ?? 30);
+  // Defaults to today for a brand new schedule (takes effect right
+  // away); defaults to today for a change too, so by default a change
+  // applies immediately unless the admin picks a future date — matching
+  // how "Change" behaved before start_date existed.
+  const [startDate, setStartDate] = useState(today());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +44,7 @@ export default function RecurringScheduleClient({
     const res = await fetch("/api/admin/recurring-schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes }),
+      body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes, startDate }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -87,6 +97,9 @@ export default function RecurringScheduleClient({
                 minute: "2-digit",
               })}{" "}
               ({schedule.durationMinutes} min)
+              {new Date(schedule.startDate) > new Date(today())
+                ? ` — starting ${new Date(`${schedule.startDate}T00:00:00Z`).toLocaleDateString()}`
+                : ""}
             </span>
             <button onClick={() => setEditing(true)} className="text-blue-600 underline">
               Change
@@ -131,6 +144,16 @@ export default function RecurringScheduleClient({
         <option value={30}>30 min</option>
         <option value={60}>60 min</option>
       </select>
+      <label className="flex items-center gap-1 text-xs text-gray-500">
+        Starting
+        <input
+          type="date"
+          value={startDate}
+          min={today()}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="rounded border px-2 py-1 text-sm text-black"
+        />
+      </label>
       <button
         onClick={handleSave}
         disabled={saving}
