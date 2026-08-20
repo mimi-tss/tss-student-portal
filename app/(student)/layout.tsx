@@ -48,13 +48,15 @@ export default async function StudentLayout({
           </div>
           <nav className={styles.nav}>
             <Link href="/student/dashboard" className={styles.navLinkActive}>
-              Dashboard
+              Coaching Studio
             </Link>
+            {/* Courses/Community aren't real features yet (no Kajabi
+                tie-in built) — shown to match the mockup's nav layout,
+                but as inert labels rather than links to nowhere. */}
+            <span className={styles.navLink}>Courses</span>
+            <span className={styles.navLink}>Community</span>
             <Link href="/student/book" className={styles.navLink}>
-              Book / reschedule
-            </Link>
-            <Link href="/student/chat" className={styles.navLink}>
-              Chat
+              Scheduler
             </Link>
             <TimeZoneNavControl dark />
           </nav>
