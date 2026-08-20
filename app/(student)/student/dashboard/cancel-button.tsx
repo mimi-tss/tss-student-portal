@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
+import styles from "../../student.module.css";
 
 // Mirrors the policy in app/api/booking/cancel/route.ts and migration
 // 0012 — this is only used to preview the outcome in the confirm step;
@@ -87,9 +88,9 @@ export default function CancelButton({
 
   if (message) {
     return (
-      <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-        <p className="mb-2">{message}</p>
-        <Link href="/student/book" className="font-medium text-blue-600 underline">
+      <div className={styles.successCard}>
+        <p style={{ margin: "0 0 10px" }}>{message}</p>
+        <Link href="/student/book" className={styles.linkBtn}>
           Pick a new time now
         </Link>
       </div>
@@ -101,15 +102,15 @@ export default function CancelButton({
     const yearlyRemaining = Math.max(0, YEARLY_CAP - yearlyCreditsUsed);
 
     return (
-      <div className="max-w-sm rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-        <p className="mb-1 font-medium">
+      <div className={styles.confirmCard}>
+        <p className={styles.confirmTitle}>
           Cancel your <FormattedDateTime value={scheduledAt} /> session?
         </p>
-        <p className="mb-2 text-gray-600">
+        <p className={styles.confirmText}>
           {warningFor(scheduledAt, monthlyCreditsUsed, yearlyCreditsUsed, isMakeup)}
         </p>
         {!isMakeup && (
-          <p className="mb-3 text-xs font-medium text-gray-500">
+          <p className={styles.capLine}>
             Makeup credit cap remaining: {monthlyRemaining}/{MONTHLY_CAP} this month ·{" "}
             {yearlyRemaining}/{YEARLY_CAP} this year
           </p>
@@ -119,13 +120,13 @@ export default function CancelButton({
           onChange={(e) => setReason(e.target.value)}
           rows={2}
           placeholder="Reason"
-          className="mb-3 w-full rounded border p-2 text-sm"
+          className={styles.textarea}
         />
-        <div className="flex items-center gap-3">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={handleCancel}
             disabled={loading || !reason.trim()}
-            className="rounded bg-red-600 px-3 py-1 text-white disabled:opacity-50"
+            className={styles.btnDanger}
           >
             {loading ? "Cancelling…" : "Yes, cancel"}
           </button>
@@ -135,7 +136,7 @@ export default function CancelButton({
               setReason("");
             }}
             disabled={loading}
-            className="text-gray-500 underline"
+            className={styles.linkBtn}
           >
             Never mind
           </button>
@@ -146,11 +147,8 @@ export default function CancelButton({
 
   return (
     <div>
-      {error && <p className="mb-1 text-sm text-red-600">{error}</p>}
-      <button
-        onClick={() => setConfirming(true)}
-        className="rounded border px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
-      >
+      {error && <p className={styles.errorText}>{error}</p>}
+      <button onClick={() => setConfirming(true)} className={styles.btnGhost}>
         Cancel session
       </button>
     </div>

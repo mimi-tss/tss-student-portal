@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ChatPanel from "@/components/chat-panel";
+import styles from "../../student.module.css";
 
 // Chat with your assigned coach (spec section 9) — thread is
 // auto-created the moment a coach is assigned, so a student with none
@@ -21,15 +22,17 @@ export default async function StudentChatPage() {
   if (!student) redirect("/login");
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <h1 className="mb-4 text-xl font-semibold">Chat with your coach</h1>
+    <div className={styles.wrap} style={{ maxWidth: 720 }}>
+      <div className={styles.sectionTitle} style={{ marginTop: 32 }}>
+        <h2>Chat with your coach</h2>
+      </div>
       {student.assigned_coach_id ? (
-        <ChatPanel studentId={student.id} currentProfileId={user.id} />
+        <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
       ) : (
-        <p className="text-gray-500">
+        <p className={styles.panelText}>
           You&apos;ll be able to chat here once a coach is assigned to you.
         </p>
       )}
-    </main>
+    </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import CancelButton from "./cancel-button";
+import styles from "../../student.module.css";
 
 interface UpcomingSession {
   id: string;
@@ -49,7 +50,7 @@ export default function UpcomingSessions({
           setOpen(true);
           load();
         }}
-        className="text-sm text-blue-600 underline"
+        className={styles.linkBtn}
       >
         Show all sessions this billing cycle
       </button>
@@ -57,40 +58,36 @@ export default function UpcomingSessions({
   }
 
   return (
-    <div className="rounded border p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500">
-          All sessions this billing cycle
-        </h2>
-        <button onClick={() => setOpen(false)} className="text-xs text-gray-500 underline">
+    <div className={styles.panel}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <h3 style={{ margin: 0 }}>All sessions this billing cycle</h3>
+        <button onClick={() => setOpen(false)} className={styles.linkBtn}>
           Hide
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
+      {error && <p className={styles.errorText}>{error}</p>}
+      {loading && <p className={styles.panelText}>Loading…</p>}
 
       {!loading && sessions && sessions.length === 0 && (
-        <p className="text-sm text-gray-500">No other sessions scheduled this cycle.</p>
+        <p className={styles.panelText}>No other sessions scheduled this cycle.</p>
       )}
 
       {!loading && sessions && sessions.length > 0 && (
-        <ul className="space-y-3">
+        <ul className={styles.sessionList}>
           {sessions.map((s) => (
-            <li key={s.id} className="border-t pt-3 first:border-t-0 first:pt-0">
-              <p className="text-sm">
+            <li key={s.id} className={styles.sessionListItem}>
+              <p style={{ margin: 0, fontSize: 14 }}>
                 <FormattedDateTime value={s.scheduled_at} />
               </p>
-              <div className="mt-1">
-                <CancelButton
-                  sessionId={s.id}
-                  scheduledAt={s.scheduled_at}
-                  isMakeup={s.is_makeup}
-                  monthlyCreditsUsed={monthlyCreditsUsed}
-                  yearlyCreditsUsed={yearlyCreditsUsed}
-                  onSuccess={load}
-                />
-              </div>
+              <CancelButton
+                sessionId={s.id}
+                scheduledAt={s.scheduled_at}
+                isMakeup={s.is_makeup}
+                monthlyCreditsUsed={monthlyCreditsUsed}
+                yearlyCreditsUsed={yearlyCreditsUsed}
+                onSuccess={load}
+              />
             </li>
           ))}
         </ul>

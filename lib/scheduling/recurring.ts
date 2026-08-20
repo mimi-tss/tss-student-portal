@@ -62,7 +62,7 @@ export function nextWeeklySlotInstant(
 // A weekly cadence doesn't divide evenly into a ~30-31 day cycle, so
 // some cycles naturally contain a 5th weekly occurrence; that leftover
 // occurrence simply isn't scheduled ("week off"), not billed or booked.
-const CYCLE_SESSION_CAP = 4;
+export const CYCLE_SESSION_CAP = 4;
 
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();

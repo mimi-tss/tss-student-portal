@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import styles from "../../student.module.css";
 
 // Only visible starting 10 minutes before the session and until it ends
 // — re-checks every 15s so it appears on its own without a page reload.
@@ -32,12 +33,7 @@ export default function JoinButton({
   if (!visible) return null;
 
   return (
-    <a
-      href={meetLink}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-block rounded bg-green-600 px-4 py-2 text-white"
-    >
+    <a href={meetLink} target="_blank" rel="noopener noreferrer" className={styles.joinBtn}>
       Join session
     </a>
   );

@@ -1,0 +1,584 @@
+/* Dark theme for the student-facing app only (admin/coach stay on the
+   plain light Tailwind styling) — see TSS_App_Spec_1.md section 8 for
+   the decision. Scoped entirely under .root so nothing here can leak
+   into a page that doesn't import this module. Fonts are loaded via
+   next/font/google in layout.tsx, which exposes them as the
+   --font-anton/--font-inter/--font-caveat variables referenced below. */
+
+.root {
+  --bg: #101018;
+  --surface: #1a1a26;
+  --surface-2: #20202f;
+  --border: #2c2c3d;
+  --gold: #a78bfa;
+  --gold-dim: #332752;
+  --gold-text: #241a3d;
+  --coral: #e85c86;
+  --coral-text: #3d1425;
+  --text: #f4f0e6;
+  --text-muted: #9997ab;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), sans-serif;
+  min-height: 100vh;
+}
+
+/* header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(16, 16, 24, 0.92);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.logoMark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logoPlaceholder {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1.5px dashed var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+  text-align: center;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.navLink {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.navLink:hover {
+  color: var(--text);
+}
+.navLinkActive {
+  color: var(--text);
+}
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--coral-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 32px 60px;
+}
+
+/* hero */
+.hero {
+  margin: 40px 0 8px;
+  padding: 36px 40px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1c1c2c 0%, #231a1f 100%);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.heroLeft {
+  max-width: 520px;
+}
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.heroTitle {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 32px;
+  letter-spacing: 0.5px;
+  margin: 0 0 10px;
+  line-height: 1.1;
+  font-weight: 400;
+}
+.heroText {
+  color: var(--text-muted);
+  font-size: 15px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.sessionCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  min-width: 230px;
+}
+.sessionLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.sessionTime {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 24px;
+  color: var(--gold);
+  margin-bottom: 4px;
+  font-weight: 400;
+}
+.sessionCoach {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.sessionEmpty {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* buttons */
+.cta {
+  display: inline-block;
+  background: var(--gold);
+  color: var(--gold-text);
+  font-weight: 700;
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.joinBtn {
+  width: 100%;
+  background: var(--coral);
+  color: var(--coral-text);
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+}
+.btnDanger {
+  background: var(--coral);
+  color: var(--coral-text);
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btnDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btnGhost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* handwritten note callout */
+.note {
+  margin: 28px 0;
+  padding: 22px 26px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.noteFrom {
+  font-family: var(--font-caveat), cursive;
+  font-size: 20px;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+.noteText {
+  font-family: var(--font-caveat), cursive;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* section titles */
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 44px 0 16px;
+}
+.sectionTitle h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* generic panel */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+.panel h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.panelText {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.statRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.statKey {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.statValue {
+  font-size: 14px;
+  font-weight: 600;
+}
+.tierBadge {
+  display: inline-block;
+  background: rgba(167, 139, 250, 0.18);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* chat */
+.chatPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.chatThread {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.msg {
+  max-width: 78%;
+}
+.msgStudent {
+  align-self: flex-end;
+  text-align: right;
+}
+.bubble {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+.bubbleCoach {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.bubbleStudent {
+  background: var(--gold);
+  color: var(--gold-text);
+  border-bottom-right-radius: 4px;
+}
+.attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.msgTime {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+.chatInputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.attachBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chatInput {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+}
+.chatInput::placeholder {
+  color: var(--text-muted);
+}
+.sendBtn {
+  background: var(--gold);
+  color: var(--gold-text);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.sendBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* recordings, styled like the mockup's shared-folder panel but scoped
+   to what's actually real: read-only files from the coach's Drive
+   uploads, no in-app upload/shortcut/remove yet. */
+.folderPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.folderHeader {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+.folderList {
+  padding: 8px 10px;
+}
+.folderItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.folderItem:hover {
+  background: var(--surface-2);
+}
+.ficon {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.finfo {
+  flex: 1;
+  min-width: 0;
+}
+.fname {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.emptyState {
+  padding: 16px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sessionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sessionListItem {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.sessionListItem:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-top: 44px;
+}
+@media (min-width: 720px) {
+  .grid2 {
+    grid-template-columns: 1.3fr 1fr;
+  }
+}
+
+/* cancel/session confirmation cards */
+.confirmCard {
+  margin-top: 12px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.confirmTitle {
+  font-weight: 600;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.confirmText {
+  color: var(--text-muted);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.capLine {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+.textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 10px;
+}
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+.errorText {
+  color: var(--coral);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.successCard {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* legacy pages (booking) that haven't been redesigned yet — kept as a
+   plain white card floating on the dark page background, since their
+   internals still use light-on-white Tailwind classes. A light touch so
+   they don't look broken under the new dark header, without redesigning
+   their internals. */
+.legacyCard {
+  max-width: 720px;
+  margin: 32px auto;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+}

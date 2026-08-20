@@ -1,6 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BookingClient from "./booking-client";
+import styles from "../../student.module.css";
+
+// BookingClient is shared with admin's book-on-behalf-of page and
+// stays on its existing light styling for both — this page just wraps
+// it in a plain white card so it doesn't look broken sitting under the
+// student layout's new dark header (TSS_App_Spec_1.md section 8). Not
+// a redesign of the booking flow itself, which wasn't part of the
+// mockup this pass is based on.
 
 // Booking/reschedule flow — deliberately its own route, separate from
 // /student/dashboard, so it can be linked to directly (e.g. from a
@@ -40,16 +48,18 @@ export default async function BookPage() {
       .order("expires_at", { ascending: true, nullsFirst: false });
 
     return (
-      <BookingClient
-        studentId={student.id}
-        mode="full"
-        coachId={student.assigned_coach_id}
-        credits={credits ?? []}
-        // Students never self-book a plain session — their weekly lessons
-        // come from the admin-set recurring schedule, so this page is only
-        // for redeeming a credit (section 5).
-        canBookWithoutCredit={false}
-      />
+      <div className={styles.legacyCard}>
+        <BookingClient
+          studentId={student.id}
+          mode="full"
+          coachId={student.assigned_coach_id}
+          credits={credits ?? []}
+          // Students never self-book a plain session — their weekly lessons
+          // come from the admin-set recurring schedule, so this page is only
+          // for redeeming a credit (section 5).
+          canBookWithoutCredit={false}
+        />
+      </div>
     );
   }
 
@@ -63,17 +73,23 @@ export default async function BookPage() {
     .maybeSingle();
 
   if (entitlement && !entitlement.used) {
-    return <BookingClient studentId={student.id} mode="trial" coachId={null} />;
+    return (
+      <div className={styles.legacyCard}>
+        <BookingClient studentId={student.id} mode="trial" coachId={null} />
+      </div>
+    );
   }
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <h1 className="mb-2 text-xl font-semibold">Book a session</h1>
-      <p className="text-gray-500">
-        Your plan doesn&apos;t include new bookings right now — you can still
-        view past recordings and homework notes from your dashboard.
-        Upgrade to Pro for weekly sessions.
-      </p>
-    </main>
+    <div className={styles.legacyCard}>
+      <main className="mx-auto max-w-lg p-8">
+        <h1 className="mb-2 text-xl font-semibold">Book a session</h1>
+        <p className="text-gray-500">
+          Your plan doesn&apos;t include new bookings right now — you can still
+          view past recordings and homework notes from your dashboard.
+          Upgrade to Pro for weekly sessions.
+        </p>
+      </main>
+    </div>
   );
 }
