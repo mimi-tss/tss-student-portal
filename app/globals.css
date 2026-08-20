@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Stops Safari/iOS's elastic overscroll bounce past the top/bottom edge
+   of the page — without this, dragging past either edge (a trackpad
+   swipe, a touch scroll, or Safari's Responsive Design Mode) briefly
+   reveals the plain white <body> background underneath the student
+   theme's dark page, which reads as a broken/unstyled flash even though
+   the actual layout underneath is correct. Harmless for the light
+   admin/coach pages too — just removes the bounce animation. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
