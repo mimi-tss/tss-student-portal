@@ -64,9 +64,11 @@
 .nav {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 20px;
   font-size: 14px;
   color: var(--text-muted);
+  min-width: 0;
 }
 .navLink {
   color: var(--text-muted);

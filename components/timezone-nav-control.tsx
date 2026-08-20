@@ -30,7 +30,7 @@ export default function TimeZoneNavControl({ dark = false }: { dark?: boolean })
         onChange={setTimeZone}
         className={
           dark
-            ? "rounded border border-[#2c2c3d] bg-[#20202f] px-1.5 py-0.5 text-xs text-[#f4f0e6]"
+            ? "max-w-[45vw] rounded border border-[#2c2c3d] bg-[#20202f] px-1.5 py-0.5 text-xs text-[#f4f0e6]"
             : "rounded border px-1.5 py-0.5 text-xs"
         }
       />
