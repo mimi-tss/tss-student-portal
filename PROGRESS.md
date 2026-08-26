@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Real-mobile follow-up: login loop confirmed fixed, new zoom bug found (2026-08-26)
+
+You confirmed the login loop fix worked — got past login on the real
+iPhone this time. Two new things came out of that same test:
+
+- **"Just gray background for so long" after logging in, chat box
+  zoomed in, had to scroll up to find the header.** Root cause: the
+  email field on `/login` renders at 14px, and several other fields
+  across the app (chat, notes, booking forms) are under 16px too — iOS
+  Safari auto-zooms the whole page in when a focused field's font-size
+  is below 16px. Inside the Kajabi iframe, that zoom state didn't reset
+  on the next page (a plain `window.location` navigation, not a fresh
+  tab), so it carried straight into the dashboard already zoomed to
+  wherever the chat box happened to land — with no visible cue why.
+  Fixed with one global rule in
+  [globals.css](app/globals.css): every `input`/`textarea`/`select`
+  forced to 16px on screens ≤640px, rather than hunting down and
+  raising each individual component's font-size by hand.
+- **Login card "still too small."** Confirmed this is at least two
+  separate things layered together: the 14px-input zoom-triggering
+  above (now fixed, should itself make the field read as less cramped),
+  and the outer iframe box's `height:100vh` (Kajabi Custom Code side,
+  not this repo) potentially sizing taller than the visible screen on
+  mobile Safari. Still flagged from last round: if it still looks
+  small/floaty after this deploys, try `height:100dvh` on the Kajabi
+  `<iframe>` tag itself.
+
+`npx tsc --noEmit -p .` and `next build` clean. Verified the 16px rule
+actually applies at mobile width via computed-style check in a dev-server
+mock (`getComputedStyle` confirmed `16px` on the email input at 375px
+viewport) — the real "does the zoom-on-focus problem stop happening"
+question still needs you to retest live on your phone, same as before.
+
 ## Real-mobile login loop — Safari cross-iframe cookie fix (2026-08-26)
 
 Every login test so far had been either desktop Chrome or Chrome's mobile
