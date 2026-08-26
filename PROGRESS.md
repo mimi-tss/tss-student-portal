@@ -3,6 +3,40 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Unregistered-email error, and the Coach Access Kajabi setup (2026-08-26)
+
+**Coach Access iframe embed working.** Same issue as Student Access at
+first: a page-level Custom Code block doesn't override a Product page's
+content, and this time `app.liquid` alone didn't help either — Kajabi's
+own theme docs confirm `theme.liquid` is the actual default layout, and
+a specific template only uses another layout via an explicit
+`{% layout %}` directive at its top; simply naming a file `app.liquid`
+doesn't make Kajabi use it. Ultimately unblocked by duplicating the
+already-working Student Access product/theme and swapping the URL to
+`/coach/dashboard` — more reliable than fighting the theme structure
+from scratch. Same duplicate-and-swap approach recommended for Admin
+Access when that's next.
+
+**Unregistered-email login now shows a real error instead of a dead
+end.** Surfaced by testing with an email that wasn't provisioned as a
+coach — the code page displayed as if a code had been sent, but nothing
+ever would have arrived, no explanation given. `request-login-code`
+([route.ts](app/api/auth/request-login-code/route.ts)) used to stay
+silent either way as a deliberate anti-enumeration measure (documented
+in an earlier session). **You explicitly asked to reverse that** — this
+is a small, invite-only studio roster, not a public consumer app, and a
+confused, stuck user is the worse real-world failure mode here. Now
+shows "You don't have permission to enter this studio. Please contact
+admin at info@tarasimonstudios.com." and stays on the email step. A
+genuine email-delivery failure for a real account still falls through
+to the generic success response — only "no account exists for this
+email at all" gets the explicit message, so it can't be mistaken for a
+delivery hiccup.
+
+`npx tsc --noEmit -p .` and `next build` clean. Verified in the dev
+server: an unregistered email shows the error inline, stays on the
+email step, no code-entry dead end.
+
 ## Kajabi-side: mobile Safari fixed via a dedicated theme; branded-app path noted for later (2026-08-26)
 
 **Mobile Safari is confirmed fully working now** — you found the real
