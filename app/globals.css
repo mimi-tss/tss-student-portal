@@ -13,3 +13,22 @@ html,
 body {
   overscroll-behavior-y: none;
 }
+
+/* iOS Safari auto-zooms the whole page in when a focused form field's
+   font-size is under 16px — the login/verify-code fields (and several
+   others across the app) are smaller than that for visual sizing, which
+   is fine everywhere else but triggers this specific zoom on a real
+   phone. Inside the Kajabi iframe that zoom state doesn't reliably reset
+   on the next page (a plain window.location navigation), so it carried
+   into the dashboard and left it scrolled into the middle of the page
+   until the student manually zoomed/scrolled back out — confusing, with
+   no visible cue what happened. Force every field to 16px on narrow
+   viewports rather than hunting down and raising each individual
+   component's font-size by hand. */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
