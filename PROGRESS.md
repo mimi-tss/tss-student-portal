@@ -3,6 +3,64 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Real-mobile login loop — Safari cross-iframe cookie fix (2026-08-26)
+
+Every login test so far had been either desktop Chrome or Chrome's mobile
+*emulation* (a narrowed window, still directly on portal.tarasimonstudios.com
+— never actually inside the Kajabi iframe). First real test on an actual
+iPhone, through the real Kajabi embed, hit a hard login loop: enter code,
+"verify" appears to succeed, gets bounced straight back to
+`/login?error=not_logged_in`. 3 attempts, same result.
+
+**Root cause:** [verify-login-code/route.ts](app/api/auth/verify-login-code/route.ts)
+minted a Supabase magic link and had the client redeem it — visiting
+Supabase's own domain, then `/auth/callback`, which calls the *client-side*
+`supabase.auth.setSession()` (writes the session cookie via
+`document.cookie`, not a `Set-Cookie` header). Inside the Kajabi iframe
+(`portal.tarasimonstudios.com` framed by `app.tarasimonstudios.com`),
+Safari's Intelligent Tracking Prevention was blocking that JS-written
+cookie — the session never persisted, so the very next request found no
+session and bounced back to login. This never showed up in any prior
+test because none of them went through a real cross-origin iframe on
+Safari specifically.
+
+**Fix:** `verify-login-code` now redeems the token itself, server-side,
+via `supabase.auth.verifyOtp({ token_hash, type: "magiclink" })` on the
+request's own server Supabase client
+([lib/supabase/server.ts](lib/supabase/server.ts)) — the session gets
+set through a real `Set-Cookie` response header on a same-origin
+request. No client-side cookie write, no bounce through Supabase's
+domain, nothing for Safari's cross-iframe blocking to catch.
+[app/auth/callback/page.tsx](app/auth/callback/page.tsx) is untouched —
+still needed for the coach/admin provisioning magic-link-**email** flow,
+which opens as a normal top-level tab (not iframed) and never had this
+problem.
+
+Also: the login card looked like it was floating in a huge empty dark
+void on the real phone — `100vh` on mobile Safari is measured against
+the tallest possible viewport (address bar collapsed), not what's
+actually on screen, and the Kajabi Custom Code block's `<iframe>` is
+itself sized via `height:100vh`, so the box our page centers in was
+taller than the visible area. Swapped `min-height: 100vh` (and
+`.appSidebar`'s `height: 100vh` in admin) for `100dvh` with a `100vh`
+fallback across every full-height root — student/coach/admin/login. This
+only fixes *our own* content's sizing within whatever box height the
+iframe ends up being, though — if the Kajabi Custom Code snippet itself
+still uses `height:100vh` on the `<iframe>` tag, the outer box can still
+end up taller than the visible screen on Safari. **If the card still
+looks too small/floaty after this deploys, the real fix is changing that
+`<iframe>` tag's `height:100vh` to `height:100dvh` in the Kajabi Custom
+Code block itself** — that's Kajabi-side content, not something in this
+repo.
+
+`npx tsc --noEmit -p .` and `next build` clean. **Could not verify this
+end-to-end myself** — no Safari environment available in this session's
+tooling, and directly seeding a test code into the live `login_codes`
+table to bypass email was blocked by this environment's own safety
+guardrails (reasonably — that's real production data). This one
+genuinely needs you to retest live on your phone through the actual
+Kajabi embed before it's considered confirmed fixed.
+
 ## Kajabi nav links — same-tab navigation (2026-08-26)
 
 You asked whether "My Library"/"Backstage" could "open in app" for a
