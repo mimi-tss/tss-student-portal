@@ -3,6 +3,27 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin Access set up, all three roles confirmed working live (2026-08-26)
+
+Admin login was still failing after the pagination fix above — turned
+out to be two genuinely missing pieces, not a code bug this time: no
+Supabase auth user existed yet for `mimi@tarasimonstudios.com` at all,
+and after that got created, no matching `profiles` row existed either.
+Both created directly in Supabase (auth user, then a `profiles` row with
+`role: admin_finance`). Confirmed via the auth Users list and the
+`profiles` table directly — six other test/seed rows already existed
+there (`test-admin@`, `test-coach@`, `mimiorac@gmail.com`, etc.) but none
+for this specific account, which is why the earlier round of debugging
+kept coming back to "not registered" even after the pagination bug was
+fixed — that bug was real, but wasn't what was blocking this login.
+
+**End state: student, coach, and admin all confirmed logging in
+successfully through their respective Kajabi Library Card iframe embeds
+on a real phone.** Admin Access was set up the same way Coach Access
+was — duplicating the already-working product/theme rather than
+rebuilding the `{% layout none %}` / `product.liquid` wiring from
+scratch, `src` swapped to `/admin/overview`.
+
 ## Admin login lookup bug: only checked the first page of auth users (2026-08-26)
 
 Setting up Admin Access surfaced this immediately: you created a
