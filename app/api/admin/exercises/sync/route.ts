@@ -25,7 +25,11 @@ export async function POST() {
     return NextResponse.json({ error: "admin only" }, { status: 403 });
   }
 
-  const folderId = process.env.GOOGLE_EXERCISES_FOLDER_ID;
+  // Trimmed defensively — a stray trailing space/newline from a
+  // copy-paste into Vercel's env var UI is a real, easy-to-hit mistake
+  // and Drive's API error for a mangled id ("File not found: <id>.")
+  // doesn't make the cause obvious.
+  const folderId = process.env.GOOGLE_EXERCISES_FOLDER_ID?.trim();
   if (!folderId) {
     return NextResponse.json({ error: "GOOGLE_EXERCISES_FOLDER_ID not configured" }, { status: 500 });
   }

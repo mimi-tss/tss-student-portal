@@ -22,7 +22,15 @@ export interface DriveAudioFile {
 export async function listAudioFilesInFolder(folderId: string): Promise<DriveAudioFile[]> {
   const drive = getDriveClient();
   const res = await drive.files.list({
-    q: `'${folderId}' in parents and trashed = false and mimeType contains 'audio/'`,
+    // `mimeType contains 'audio/'` alone misses real-world exercise
+    // files recorded/exported as .mp4 (voice-memo and screen-recording
+    // apps commonly save audio-only content in an mp4 container, which
+    // Drive tags video/mp4 regardless of there being no video track) —
+    // confirmed against the studio's actual exercises folder, which is
+    // entirely .mp4. video/mp4 is explicitly admitted alongside audio/*
+    // rather than switching the filter to filename extension, since a
+    // genuine audio/* upload should keep working too.
+    q: `'${folderId}' in parents and trashed = false and (mimeType contains 'audio/' or mimeType = 'video/mp4')`,
     corpora: "allDrives",
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
