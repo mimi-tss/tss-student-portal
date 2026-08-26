@@ -3,6 +3,45 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Kajabi nav links — same-tab navigation (2026-08-26)
+
+You asked whether "My Library"/"Backstage" could "open in app" for a
+one-app feel. Checked both directions:
+- **Embedding Kajabi's pages inside our portal (a second nested
+  iframe): confirmed impossible.** `curl -sI` against
+  `app.tarasimonstudios.com/library` and
+  `.../products/communities/v2/backstagehub` both return
+  `content-security-policy: frame-ancestors 'self' https://app.kajabi.com
+  https://app.vibely.io ... https://app.tarasimonstudios.com` —
+  `portal.tarasimonstudios.com` isn't in that list, and it's a
+  platform-level Kajabi header, not a setting either side can change.
+- **What we could control: the `target` attribute.** Changed both links
+  from `target="_blank"` (new tab) to `target="_self"` on
+  [student-nav.tsx](<app/(student)/student-nav.tsx>) and
+  [coach-nav.tsx](<app/(coach)/coach-nav.tsx>) (4 anchors each — inline
+  nav + mobile dropdown). Since the portal itself lives inside Kajabi's
+  Library Card iframe, `_self` navigates *that same iframe* in place to
+  the Kajabi page — no new tab, and it's a single-level ancestor chain
+  Kajabi's own CSP already allows (unlike the nested-iframe idea above).
+  Dropped the paired `rel="noopener noreferrer"` too — that exists to
+  guard a *new tab*, not an in-place same-org navigation.
+- **Disclosed tradeoff, not fixed:** cross-origin iframe in-place
+  navigation isn't always added cleanly to the browser's joint session
+  history, so the Back button returning from Kajabi's Library page to
+  the portal isn't fully reliable. Practical mitigation — a "Back to
+  Studio" link on the Kajabi Library/Backstage pages pointing at
+  `/products/student-access` — is a Kajabi-side content edit, not code.
+- **Still open, needs you to check:** does the Kajabi product page
+  (where the Library Card iframe lives) already show a persistent
+  Kajabi nav around the embed? And does the Custom Code block's
+  `<iframe>` tag have a `sandbox` attribute — if so, confirm it
+  includes navigation-related `allow-*` tokens, or `_self` navigation
+  could get blocked at the iframe level regardless of Kajabi's CSP.
+
+`npx tsc --noEmit -p .` and `next build` clean. Not click-tested live
+(needs the real Kajabi embed) — same constraint as every other
+Kajabi-side change this session.
+
 ## Live Kajabi test session (2026-08-26)
 
 First real end-to-end test of the Kajabi iframe embed, with you as a
