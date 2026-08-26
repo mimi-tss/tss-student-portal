@@ -60,6 +60,32 @@ availability changes on the Coaches tab.)
 
 Migrations 0031–0035 confirmed applied.
 
+## Branding
+
+**Real logo added, replacing the "LOGO" placeholder box everywhere it
+appeared.** You supplied the source PNG (purple/blue music-note mark);
+recolored to the app's exact `--gold` purple (`#a78bfa`, same token
+every dashboard's accent already uses) by hue-shifting while compressing
+the original's lightness range toward that token's own lightness —
+keeps the mark's shading/depth instead of flattening to one solid color.
+Cropped to its bounding box and saved as
+[public/logo.png](public/logo.png) (transparent PNG, 125×180).
+Swapped in at every spot that previously had the dashed-border "LOGO"
+placeholder or a plain "CS" initials box:
+- [app/(student)/layout.tsx](<app/(student)/layout.tsx>) header
+- [app/(coach)/layout.tsx](<app/(coach)/layout.tsx>) header
+- [app/(admin)/admin-nav.tsx](<app/(admin)/admin-nav.tsx>) sidebar brand
+  (was a solid-gold "CS" square — swapped to the real mark instead)
+- [app/login/page.tsx](app/login/page.tsx) — new, wasn't a placeholder
+  spot before, added above the title for brand presence on the one
+  public page
+`npx tsc --noEmit -p .` and `next build` both clean. Visually verified
+on `/login` via the dev server (the only one of the four reachable
+without a real session) — logo renders crisp and correctly purple at
+34–40px. Student/coach/admin headers use the exact same container
+class, just swapped, so not separately click-tested — real login
+required for those.
+
 ## Status by dashboard
 
 ### Coach Dashboard — done

@@ -40,7 +40,7 @@ export default async function CoachLayout({
       <div className={`${anton.variable} ${inter.variable} ${caveat.variable} ${styles.root}`}>
         <header className={styles.header}>
           <div className={styles.logoMark}>
-            <div className={styles.logoPlaceholder}>LOGO</div>
+            <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
           </div>
           <CoachNav />
           <div className={styles.headerRight}>

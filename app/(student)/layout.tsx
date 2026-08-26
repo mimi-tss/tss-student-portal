@@ -44,7 +44,7 @@ export default async function StudentLayout({
       <div className={`${anton.variable} ${inter.variable} ${caveat.variable} ${styles.root}`}>
         <header className={styles.header}>
           <div className={styles.logoMark}>
-            <div className={styles.logoPlaceholder}>LOGO</div>
+            <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
           </div>
           <nav className={styles.nav}>
             <Link href="/student/dashboard" className={styles.navLinkActive}>

@@ -43,7 +43,7 @@ export default function AdminNav({ needsReviewCount, role }: { needsReviewCount:
   return (
     <div className={styles.appSidebar}>
       <div className={styles.appSidebarBrand}>
-        <div className={styles.appSidebarLogo}>CS</div>
+        <img src="/logo.png" alt="Coaching Studio" className={styles.appSidebarLogo} />
         <div>
           <div className={styles.appSidebarBrandName}>Coaching Studio</div>
           <div className={styles.appSidebarBrandRole}>{hasFinance ? "Admin + Finance" : "Admin"}</div>

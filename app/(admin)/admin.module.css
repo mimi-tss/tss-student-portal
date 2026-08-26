@@ -574,15 +574,8 @@
 .appSidebarLogo {
   width: 34px;
   height: 34px;
-  border-radius: 9px;
-  background: var(--gold);
-  color: var(--gold-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-anton), sans-serif;
-  font-size: 13px;
   flex-shrink: 0;
+  object-fit: contain;
 }
 .appSidebarBrandName {
   font-size: 14px;

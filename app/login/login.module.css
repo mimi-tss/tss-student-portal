@@ -25,6 +25,13 @@
   text-align: center;
 }
 
+.logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  margin: 0 auto 14px;
+}
+
 .title {
   font-family: var(--font-anton), sans-serif;
   font-size: 24px;

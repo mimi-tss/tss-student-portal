@@ -41,6 +41,7 @@ export default async function LoginPage({
   return (
     <div className={`${anton.variable} ${inter.variable} ${styles.root}`}>
       <div className={styles.card}>
+        <img src="/logo.png" alt="Coaching Studio" className={styles.logo} />
         <h1 className={styles.title}>Private Coaching Studio</h1>
         {message && <p className={styles.errorText}>{message}</p>}
         <p className={styles.helpText}>You&apos;re entering the studio portal — let&apos;s verify it&apos;s really you.</p>
