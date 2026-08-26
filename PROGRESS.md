@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Live Kajabi test session (2026-08-26)
+
+First real end-to-end test of the Kajabi iframe embed, with you as a
+test student. Found and fixed three real bugs in sequence:
+- `NEXT_PUBLIC_KAJABI_SITE_URL` wasn't set in Vercel Production, so the
+  CSP `frame-ancestors` header only allowed the portal's own origin —
+  Kajabi's iframe was blocked outright ("refused to connect"). Fixed
+  once you added the env var and redeployed.
+- The whole accumulated backlog (this progress log's entire feature
+  set, ~180 files) had never actually been committed/pushed — Vercel
+  was serving a stale build with the old login page, which is why the
+  new email+code flow didn't appear at first. Pushed.
+- Login code arrived but landed in spam — not a bug, but exposed a real
+  gap: no way to request a fresh one before the 10-minute TTL closed.
+  Added a "Resend code" option (60s cooldown) to
+  [login-form.tsx](app/login/login-form.tsx).
+- [components/chat-panel.tsx](components/chat-panel.tsx) was calling
+  `scrollIntoView` on every 4s poll regardless of whether new messages
+  arrived — inside the Kajabi iframe this scrolled the whole outer page
+  back to the chat section repeatedly ("keeps bouncing to this view").
+  Fixed to scroll only the chat's own message-list container, and only
+  when a message was actually added.
+
+Also added the real logo (you supplied the source PNG) in place of the
+"LOGO" placeholder box — student/coach headers, admin sidebar brand, and
+the login page — recolored to the app's `--gold` purple token. See
+[public/logo.png](public/logo.png).
+
 ## ⚠️ Action needed from you
 
 **New migration 0049 not yet confirmed applied** —
