@@ -1,17 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TimeZoneNavControl from "@/components/timezone-nav-control";
 import type { Role } from "@/types/database";
 import styles from "./admin.module.css";
 
+const COLLAPSE_KEY = "admin-sidebar-collapsed";
+
 const LINKS = [
   { href: "/admin/overview", label: "Overview", icon: "▦" },
   { href: "/admin/dashboard", label: "Students", icon: "◔" },
   { href: "/admin/coaches", label: "Coaches", icon: "◑" },
   { href: "/admin/needs-review", label: "Needs Review", icon: "◉", badgeKey: "needsReview" as const },
-  { href: "/admin/community", label: "Community", icon: "◈" },
+  { href: "/admin/community", label: "Backstage", icon: "◈" },
 ];
 
 // Below the mockup's 6-item nav — Exercises, Group Lessons, Finance, and
@@ -33,6 +36,24 @@ const MORE_LINKS = [
 export default function AdminNav({ needsReviewCount, role }: { needsReviewCount: number; role: Role }) {
   const pathname = usePathname();
   const hasFinance = role === "admin_finance";
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Read the saved preference after mount rather than in useState's
+  // initializer — localStorage doesn't exist during server rendering, so
+  // reading it synchronously there would mismatch the client's first
+  // render. A one-frame "starts expanded" flash on a returning collapsed
+  // session is the acceptable tradeoff.
+  useEffect(() => {
+    if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   function isActive(href: string) {
     return pathname === href || pathname?.startsWith(href + "/");
@@ -41,13 +62,15 @@ export default function AdminNav({ needsReviewCount, role }: { needsReviewCount:
   const moreLinks = hasFinance ? MORE_LINKS : MORE_LINKS.filter((l) => !l.financeOnly);
 
   return (
-    <div className={styles.appSidebar}>
+    <div className={collapsed ? `${styles.appSidebar} ${styles.appSidebarCollapsed}` : styles.appSidebar}>
       <div className={styles.appSidebarBrand}>
         <img src="/logo.png" alt="Coaching Studio" className={styles.appSidebarLogo} />
-        <div>
-          <div className={styles.appSidebarBrandName}>Coaching Studio</div>
-          <div className={styles.appSidebarBrandRole}>{hasFinance ? "Admin + Finance" : "Admin"}</div>
-        </div>
+        {!collapsed && (
+          <div className={styles.appSidebarBrandText}>
+            <div className={styles.appSidebarBrandName}>Coaching Studio</div>
+            <div className={styles.appSidebarBrandRole}>{hasFinance ? "Admin + Finance" : "Admin"}</div>
+          </div>
+        )}
       </div>
 
       <nav className={styles.appSidebarNav}>
@@ -55,14 +78,17 @@ export default function AdminNav({ needsReviewCount, role }: { needsReviewCount:
           <Link
             key={link.href}
             href={link.href}
+            title={collapsed ? link.label : undefined}
             className={isActive(link.href) ? styles.appSidebarLinkActive : styles.appSidebarLink}
           >
             <span className={styles.appSidebarLinkLabel}>
               <span aria-hidden>{link.icon}</span>
-              {link.label}
+              {!collapsed && link.label}
             </span>
             {link.badgeKey === "needsReview" && needsReviewCount > 0 && (
-              <span className={styles.appSidebarBadge}>{needsReviewCount}</span>
+              <span className={collapsed ? styles.appSidebarBadgeDot : styles.appSidebarBadge}>
+                {collapsed ? "" : needsReviewCount}
+              </span>
             )}
           </Link>
         ))}
@@ -71,21 +97,32 @@ export default function AdminNav({ needsReviewCount, role }: { needsReviewCount:
           <Link
             key={link.href}
             href={link.href}
+            title={collapsed ? link.label : undefined}
             className={isActive(link.href) ? styles.appSidebarLinkActive : styles.appSidebarLink}
           >
             <span className={styles.appSidebarLinkLabel}>
               <span aria-hidden>{link.icon}</span>
-              {link.label}
+              {!collapsed && link.label}
             </span>
           </Link>
         ))}
       </nav>
 
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        className={styles.appSidebarToggle}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {collapsed ? "»" : "« Collapse"}
+      </button>
+
       <div className={styles.appSidebarFooter}>
-        <div className={styles.avatar} style={{ width: 30, height: 30, fontSize: 12 }}>
+        <div className={styles.avatar} style={{ width: 30, height: 30, fontSize: 12, flexShrink: 0 }}>
           A
         </div>
-        <TimeZoneNavControl dark />
+        {!collapsed && <TimeZoneNavControl dark />}
       </div>
     </div>
   );

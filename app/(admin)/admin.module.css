@@ -567,6 +567,23 @@
   top: 0;
   height: 100vh;
   height: 100dvh;
+  transition: width 0.15s ease;
+}
+.appSidebarCollapsed {
+  width: 68px;
+  padding: 20px 10px;
+}
+.appSidebarCollapsed .appSidebarBrand {
+  justify-content: center;
+  padding: 6px 0 20px;
+}
+.appSidebarCollapsed .appSidebarLink,
+.appSidebarCollapsed .appSidebarLinkActive {
+  justify-content: center;
+  padding: 9px;
+}
+.appSidebarCollapsed .appSidebarFooter {
+  justify-content: center;
 }
 .appSidebarBrand {
   display: flex;
@@ -579,6 +596,10 @@
   height: 34px;
   flex-shrink: 0;
   object-fit: contain;
+}
+.appSidebarBrandText {
+  min-width: 0;
+  overflow: hidden;
 }
 .appSidebarBrandName {
   font-size: 14px;
@@ -635,6 +656,32 @@
   font-weight: 700;
   padding: 1px 7px;
   border-radius: 999px;
+}
+.appSidebarBadgeDot {
+  width: 7px;
+  height: 7px;
+  background: var(--coral);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.appSidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 6px 2px 0;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.appSidebarToggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 .appSidebarFooter {
   display: flex;

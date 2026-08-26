@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { syncExercisesFromDrive } from "@/lib/exercises";
+import { isAdminRole } from "@/lib/auth/roles";
 
 // Pulls the current file list from the studio's shared exercises Drive
 // folder and reconciles the `exercises` catalog against it (see
@@ -20,7 +21,7 @@ export async function POST() {
     .eq("id", user?.id ?? "")
     .maybeSingle();
 
-  if (!profile || profile.role !== "admin") {
+  if (!isAdminRole(profile?.role)) {
     return NextResponse.json({ error: "admin only" }, { status: 403 });
   }
 
