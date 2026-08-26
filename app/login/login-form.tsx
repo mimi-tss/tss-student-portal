@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "./login.module.css";
 
 type Step = "email" | "code";
+
+const RESEND_COOLDOWN_S = 60;
 
 export default function LoginForm() {
   const [step, setStep] = useState<Step>("email");
@@ -12,19 +14,43 @@ export default function LoginForm() {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [justResent, setJustResent] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  async function sendCode(targetEmail: string) {
+    await fetch("/api/auth/request-login-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail }),
+    }).catch(() => {});
+  }
 
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     setSending(true);
     setError(null);
-    await fetch("/api/auth/request-login-code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim() }),
-    }).catch(() => {});
+    await sendCode(email.trim());
     setSending(false);
+    setResendCooldown(RESEND_COOLDOWN_S);
     setStep("code");
+  }
+
+  async function handleResend() {
+    if (resendCooldown > 0 || sending) return;
+    setSending(true);
+    setError(null);
+    setJustResent(false);
+    await sendCode(email.trim());
+    setSending(false);
+    setResendCooldown(RESEND_COOLDOWN_S);
+    setJustResent(true);
   }
 
   async function handleVerify(e: React.FormEvent) {
@@ -81,8 +107,12 @@ export default function LoginForm() {
         className={`${styles.input} ${styles.codeInput}`}
       />
       {error && <p className={styles.errorText}>{error}</p>}
+      {justResent && !error && <p className={styles.successText}>Code resent — check your email.</p>}
       <button type="submit" disabled={verifying || code.length !== 6} className={styles.cta}>
         {verifying ? "Verifying…" : "Verify"}
+      </button>
+      <button type="button" className={styles.linkBtn} disabled={sending || resendCooldown > 0} onClick={handleResend}>
+        {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : sending ? "Resending…" : "Resend code"}
       </button>
       <button
         type="button"
@@ -92,6 +122,8 @@ export default function LoginForm() {
           setStep("email");
           setCode("");
           setError(null);
+          setJustResent(false);
+          setResendCooldown(0);
         }}
       >
         Use a different email
