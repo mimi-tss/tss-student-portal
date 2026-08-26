@@ -7,6 +7,25 @@ export interface ResolvedAccount {
   redirectPath: string;
 }
 
+// listUsers() is paginated (50 per page by default) and there's no
+// admin.getUserByEmail() in this SDK version — a single unpaginated call
+// only searches the first page, so an admin account created after ~50
+// other auth users (students, coaches, everyone) could silently never
+// be found. Walk every page until a match turns up or the list runs out.
+async function findAuthUserByEmail(admin: AdminClient, email: string) {
+  let page = 1;
+  const perPage = 200;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error || !data) return null;
+    const match = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (match) return match;
+    if (data.users.length < perPage) return null;
+    page++;
+  }
+}
+
 // Single source of truth for "does this email belong to a real account,
 // and where should they land" — shared by request-login-code (decide
 // whether to send a code at all) and verify-login-code (decide where to
@@ -26,8 +45,7 @@ export async function resolveAccountByEmail(admin: AdminClient, rawEmail: string
   const { data: coach } = await admin.from("coaches").select("email").ilike("email", email).maybeSingle();
   if (coach) return { email: coach.email, redirectPath: "/coach/dashboard" };
 
-  const { data: userList } = await admin.auth.admin.listUsers();
-  const matchedUser = userList?.users.find((u) => u.email?.toLowerCase() === email);
+  const matchedUser = await findAuthUserByEmail(admin, email);
   if (matchedUser) {
     const { data: profile } = await admin
       .from("profiles")
