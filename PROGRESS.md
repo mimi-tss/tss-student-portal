@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Collapsible admin sidebar, exercise sync 403, Backstage link fix (2026-08-26)
+
+Three quick requests once admin login was working:
+- **Admin sidebar is now collapsible** — toggle button at the bottom
+  ([admin-nav.tsx](<app/(admin)/admin-nav.tsx>)) shrinks it to a
+  68px icon-only rail, preference saved in `localStorage`
+  (`admin-sidebar-collapsed`) so it persists across page loads. Active
+  page highlight, hover, and the Needs Review badge (becomes a plain dot
+  when collapsed, full count when expanded) all still work. Verified via
+  a throwaway mock, not the real dashboard (needs a live session).
+- **Exercise sync was 403ing for `admin_finance`** — real bug, not a
+  Drive/credentials issue: [sync/route.ts](app/api/admin/exercises/sync/route.ts)
+  checked `role !== "admin"` literally, the exact mistake
+  [lib/auth/roles.ts](lib/auth/roles.ts)'s `isAdminRole()` helper exists
+  to prevent (that file's own comment calls this out), but this route
+  never used it. Fixed. **If sync still fails after this deploys**, the
+  next suspect is `GOOGLE_EXERCISES_FOLDER_ID` or the Drive service
+  account's access to that folder — different failure mode, not
+  something this fix touches; the sync button now surfaces whatever
+  error comes back, so the real message will show if so.
+- **Admin's Community page still pointed at the old `/community` URL**
+  and label — [community/page.tsx](<app/(admin)/admin/community/page.tsx>)
+  updated to the same Backstage URL/label/`target="_self"` treatment
+  student and coach nav already got; sidebar label
+  ([admin-nav.tsx](<app/(admin)/admin-nav.tsx>)) updated to match.
+
+`npx tsc --noEmit -p .` and `next build` clean.
+
 ## Admin Access set up, all three roles confirmed working live (2026-08-26)
 
 Admin login was still failing after the pagination fix above — turned
