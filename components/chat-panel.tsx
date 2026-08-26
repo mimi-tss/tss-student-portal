@@ -48,7 +48,8 @@ export default function ChatPanel({
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadMessages() {
@@ -67,8 +68,16 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
+  // Confined to the message list's own scroll container — a poll that
+  // finds no new messages (most of them, at 4s intervals) must not touch
+  // scroll at all, and even a real new message should only move this
+  // panel, never the page it's embedded in.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > prevMessageCountRef.current && messagesContainerRef.current) {
+      const el = messagesContainerRef.current;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+    prevMessageCountRef.current = messages.length;
   }, [messages]);
 
   // Signed URLs (bucket is private) — generate once per attachment path,
@@ -150,7 +159,7 @@ export default function ChatPanel({
           : "flex h-[70vh] flex-col rounded border"
       }
     >
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className={dark ? "text-sm text-[#9997ab]" : "text-sm text-gray-500"}>
             No messages yet — say hello.
@@ -205,7 +214,6 @@ export default function ChatPanel({
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       <div
