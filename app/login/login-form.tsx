@@ -23,12 +23,21 @@ export default function LoginForm() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  async function sendCode(targetEmail: string) {
-    await fetch("/api/auth/request-login-code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: targetEmail }),
-    }).catch(() => {});
+  async function sendCode(targetEmail: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch("/api/auth/request-login-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return { ok: false, error: data?.error ?? "Something went wrong — try again." };
+      }
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Something went wrong — try again." };
+    }
   }
 
   async function handleSendCode(e: React.FormEvent) {
@@ -36,8 +45,12 @@ export default function LoginForm() {
     if (!email.trim()) return;
     setSending(true);
     setError(null);
-    await sendCode(email.trim());
+    const result = await sendCode(email.trim());
     setSending(false);
+    if (!result.ok) {
+      setError(result.error ?? "Something went wrong — try again.");
+      return;
+    }
     setResendCooldown(RESEND_COOLDOWN_S);
     setStep("code");
   }
@@ -47,8 +60,12 @@ export default function LoginForm() {
     setSending(true);
     setError(null);
     setJustResent(false);
-    await sendCode(email.trim());
+    const result = await sendCode(email.trim());
     setSending(false);
+    if (!result.ok) {
+      setError(result.error ?? "Something went wrong — try again.");
+      return;
+    }
     setResendCooldown(RESEND_COOLDOWN_S);
     setJustResent(true);
   }
@@ -83,6 +100,7 @@ export default function LoginForm() {
           placeholder="you@example.com"
           className={styles.input}
         />
+        {error && <p className={styles.errorText}>{error}</p>}
         <button type="submit" disabled={sending} className={styles.cta}>
           {sending ? "Sending…" : "Send me a code"}
         </button>
