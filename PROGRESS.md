@@ -32,9 +32,22 @@ test student. Found and fixed three real bugs in sequence:
   below 640px into a hamburger dropdown. Also renamed per the mockup:
   "Courses" → "My Library" (`KAJABI_SITE_URL/library`), "Community" →
   "Backstage" (`KAJABI_SITE_URL/products/communities/v2/backstagehub`).
-  **Not yet applied to `coach-nav.tsx`**, which still has the old
-  Courses/Community labels/links and no mobile-collapse behavior at
-  all — ask was student-only so far; flag if coach should match too.
+  You confirmed the same treatment should apply to
+  [coach-nav.tsx](<app/(coach)/coach-nav.tsx>) — done: all coach nav
+  (Dashboard/My Schedule/My Students/Payroll + the two Kajabi links) now
+  collapses into the same hamburger dropdown below 640px, active-page
+  bolded in the dropdown same as inline. Caught a real overflow bug
+  while verifying the coach version in a mock: the dropdown was
+  anchored to `.nav`'s own right edge (`position: relative` on `.nav`),
+  but coach's header has a wider trailing group after nav (timezone +
+  avatar + role badge) than student's (avatar only), pushing `.nav`'s
+  right edge — and the dropdown anchored to it — far enough left to run
+  off the left side of a 375px screen. Fixed by anchoring to `.header`
+  instead (already positioned via `position: sticky`) with
+  `right: 32px` matching the header's own padding — applied to both
+  `coach.module.css` and `student.module.css` for consistency, even
+  though student's narrower trailing group had happened not to trigger
+  the bug visibly.
 
 Also added the real logo (you supplied the source PNG) in place of the
 "LOGO" placeholder box — student/coach headers, admin sidebar brand, and
