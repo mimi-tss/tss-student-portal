@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Anton, Inter, Caveat } from "next/font/google";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
-import TimeZoneNavControl from "@/components/timezone-nav-control";
+import StudentNav from "./student-nav";
 import styles from "./student.module.css";
 
 const anton = Anton({ weight: "400", subsets: ["latin"], variable: "--font-anton" });
@@ -46,36 +45,7 @@ export default async function StudentLayout({
           <div className={styles.logoMark}>
             <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
           </div>
-          <nav className={styles.nav}>
-            <Link href="/student/dashboard" className={styles.navLinkActive}>
-              Coaching Studio
-            </Link>
-            {/* Kajabi owns courses/community content (spec section 1) —
-                these link out to the studio's Kajabi site rather than
-                being built in this app. NEXT_PUBLIC_KAJABI_SITE_URL is a
-                placeholder root until the exact per-section URLs are
-                supplied — swap the env var, not this code. */}
-            <a
-              href={`${process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? ""}/courses`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.navLink}
-            >
-              Courses
-            </a>
-            <a
-              href={`${process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? ""}/community`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.navLink}
-            >
-              Community
-            </a>
-            <Link href="/student/book" className={styles.navLink}>
-              Scheduler
-            </Link>
-            <TimeZoneNavControl dark />
-          </nav>
+          <StudentNav />
           <div className={styles.avatar}>{initials(student.name)}</div>
         </header>
         {children}
