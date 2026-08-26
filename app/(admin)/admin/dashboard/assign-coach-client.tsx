@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import styles from "../../admin.module.css";
 
 interface Coach {
   id: string;
@@ -36,14 +37,14 @@ export default function AssignCoachClient({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <select
         value={value}
         onChange={(e) => {
           setValue(e.target.value);
           setSaved(false);
         }}
-        className="rounded border px-2 py-1 text-sm"
+        className={styles.selectSmall}
       >
         <option value="" disabled>
           Select a coach
@@ -54,11 +55,7 @@ export default function AssignCoachClient({
           </option>
         ))}
       </select>
-      <button
-        onClick={handleSave}
-        disabled={!value || saving}
-        className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50"
-      >
+      <button onClick={handleSave} disabled={!value || saving} className={styles.ctaSmall}>
         {saving ? "Saving…" : saved ? "Saved" : "Save"}
       </button>
     </div>

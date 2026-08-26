@@ -6,6 +6,7 @@ import { DAY_NAMES, nextWeeklySlotInstant } from "@/lib/scheduling/recurring";
 import { formatTimeInZone } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { useTimeZone } from "@/components/timezone-context";
+import styles from "../../../admin.module.css";
 
 interface Schedule {
   dayOfWeek: number;
@@ -35,6 +36,7 @@ export default function RecurringScheduleClient({
   coachTimeZone,
   coaches,
   schedule,
+  hideStartPrompt = false,
 }: {
   studentId: string;
   hasCoach: boolean;
@@ -46,6 +48,11 @@ export default function RecurringScheduleClient({
   coachTimeZone: string | null;
   coaches: Coach[];
   schedule: Schedule | null;
+  // The Start button in the subscription lifecycle bar above is now the
+  // entry point for a student's first weekly schedule — this suppresses
+  // this component's own "Set weekly schedule" link in that empty state
+  // so there's only one place to do it, not two.
+  hideStartPrompt?: boolean;
 }) {
   const router = useRouter();
   const { timeZone: viewTimeZone } = useTimeZone();
@@ -116,7 +123,7 @@ export default function RecurringScheduleClient({
   }
 
   if (!hasCoach) {
-    return <p className="text-sm text-gray-500">Assign a coach before setting a weekly time.</p>;
+    return <p className={styles.mutedText}>Assign a coach before setting a weekly time.</p>;
   }
 
   if (!editing) {
@@ -148,19 +155,21 @@ export default function RecurringScheduleClient({
 
     return (
       <div>
-        {error && <p className="mb-1 text-xs text-red-600">{error}</p>}
+        {error && <p className={styles.errorText} style={{ marginBottom: 4 }}>{error}</p>}
         {schedule ? (
-          <div className="flex items-center gap-3 text-sm">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span>{scheduleLabel}</span>
-            <button onClick={() => setEditing(true)} className="text-blue-600 underline">
+            <button onClick={() => setEditing(true)} className={styles.linkBtnSmall}>
               Change
             </button>
-            <button onClick={handleRemove} disabled={saving} className="text-red-600 underline">
+            <button onClick={handleRemove} disabled={saving} className={styles.dangerLink}>
               Remove
             </button>
           </div>
+        ) : hideStartPrompt ? (
+          <p className={styles.mutedText}>Use Start above to set their first weekly session.</p>
         ) : (
-          <button onClick={() => setEditing(true)} className="text-sm text-blue-600 underline">
+          <button onClick={() => setEditing(true)} className={styles.linkBtn}>
             Set weekly schedule
           </button>
         )}
@@ -169,11 +178,11 @@ export default function RecurringScheduleClient({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
       <select
         value={dayOfWeek}
         onChange={(e) => setDayOfWeek(Number(e.target.value))}
-        className="rounded border px-2 py-1"
+        className={styles.select}
       >
         {DAY_NAMES.map((name, i) => (
           <option key={i} value={i}>
@@ -185,13 +194,13 @@ export default function RecurringScheduleClient({
         type="time"
         value={startTime}
         onChange={(e) => setStartTime(e.target.value)}
-        className="rounded border px-2 py-1"
+        className={styles.input}
       />
-      <span className="text-xs text-gray-500">({effectiveCoachZone.replace(/_/g, " ")})</span>
+      <span className={styles.mutedText}>({effectiveCoachZone.replace(/_/g, " ")})</span>
       <select
         value={coachId}
         onChange={(e) => setCoachId(e.target.value)}
-        className="rounded border px-2 py-1"
+        className={styles.select}
       >
         {coaches.map((c) => (
           <option key={c.id} value={c.id}>
@@ -202,32 +211,32 @@ export default function RecurringScheduleClient({
       <select
         value={durationMinutes}
         onChange={(e) => setDurationMinutes(Number(e.target.value))}
-        className="rounded border px-2 py-1"
+        className={styles.select}
       >
         <option value={30}>30 min</option>
         <option value={60}>60 min</option>
       </select>
-      <label className="flex items-center gap-1 text-xs text-gray-500">
+      <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 4 }}>
         Starting
         <input
           type="date"
           value={startDate}
           min={today}
           onChange={(e) => setStartDate(e.target.value)}
-          className="rounded border px-2 py-1 text-sm text-black"
+          className={styles.inputSmall}
         />
       </label>
       <button
         onClick={handleSave}
         disabled={saving}
-        className="rounded bg-black px-3 py-1 text-white disabled:opacity-50"
+        className={styles.ctaSmall}
       >
         {saving ? "Saving…" : "Save"}
       </button>
-      <button onClick={() => setEditing(false)} disabled={saving} className="text-gray-500 underline">
+      <button onClick={() => setEditing(false)} disabled={saving} className={styles.linkBtnSmall}>
         Cancel
       </button>
-      {error && <p className="w-full text-xs text-red-600">{error}</p>}
+      {error && <p className={styles.errorText} style={{ width: "100%" }}>{error}</p>}
     </div>
   );
 }

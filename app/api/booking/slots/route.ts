@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
+import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
+import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
 
 // Computes open slots for the student's own assigned coach:
 // coach working_hours minus coach_blocks minus existing sessions.
@@ -89,31 +91,43 @@ export async function GET(req: NextRequest) {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("working_hours, timezone")
+    .select("working_hours, pending_working_hours, pending_effective_date, timezone")
     .eq("id", coachId)
     .single();
 
-  const workingHours = (coach?.working_hours ?? {}) as WorkingHours;
   const timeZone = coach?.timezone ?? "America/New_York";
 
-  const [{ data: blocks }, { data: existingSessions }] = await Promise.all([
+  const [{ data: blocks }, { data: existingSessions }, heldSlots] = await Promise.all([
     supabase
       .from("coach_blocks")
       .select("start_at, end_at")
       .eq("coach_id", coachId)
       .lte("start_at", rangeEnd.toISOString())
       .gte("end_at", rangeStart.toISOString()),
+    // Only a with-notice cancellation actually frees the slot back up —
+    // a no-notice (late) cancellation stays blocked, since it's too
+    // last-minute to realistically re-fill (spec's no-refund framing:
+    // the coach is still paid for it either way).
     supabase
       .from("sessions")
       .select("scheduled_at, duration_minutes")
       .eq("actual_coach_id", coachId)
       .gte("scheduled_at", rangeStart.toISOString())
       .lte("scheduled_at", rangeEnd.toISOString())
-      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)"),
+      .not("status", "eq", "cancelled-with-notice"),
+    // A paused student's slot stays reserved (spec section 3) — no
+    // session row exists for it during the pause, so it needs its own
+    // fetch to stay blocked from other students booking into it.
+    getHeldRecurringSlots(supabase, coachId, rangeStart, rangeEnd),
   ]);
 
   const busyRanges = [
     ...(blocks ?? []).map((b) => [new Date(b.start_at), new Date(b.end_at)] as const),
+    ...heldSlots.map((h) => {
+      const start = new Date(h.scheduledAt);
+      const end = new Date(start.getTime() + h.durationMinutes * 60 * 1000);
+      return [start, end] as const;
+    }),
     ...(existingSessions ?? []).map((s) => {
       const start = new Date(s.scheduled_at);
       const end = new Date(start.getTime() + s.duration_minutes * 60 * 1000);
@@ -139,7 +153,16 @@ export async function GET(req: NextRequest) {
     const year = cursorDate.getUTCFullYear();
     const month = cursorDate.getUTCMonth() + 1;
     const day = cursorDate.getUTCDate();
-    const windows = workingHours[DAY_KEYS[cursorDate.getUTCDay()]] ?? [];
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayWorkingHours = resolveWorkingHoursForDate(
+      {
+        workingHours: (coach?.working_hours ?? {}) as WorkingHours,
+        pendingWorkingHours: coach?.pending_working_hours as WorkingHours | null,
+        pendingEffectiveDate: coach?.pending_effective_date ?? null,
+      },
+      dateKey,
+    );
+    const windows = dayWorkingHours[DAY_KEYS[cursorDate.getUTCDay()]] ?? [];
 
     for (const [winStart, winEnd] of windows) {
       const [startH, startM] = winStart.split(":").map(Number);

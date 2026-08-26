@@ -1,0 +1,613 @@
+/* Dark theme for the coach dashboard, matching the student portal's
+   design system (TSS_App_Spec_1.md section 8 — full visual consistency
+   across all 4 dashboards). Composes shared tokens from
+   ../theme-tokens.module.css so palette/fonts can't drift from the
+   student or admin modules. Scoped entirely under .root, mirroring the
+   existing app/(student)/student.module.css convention. */
+
+.root {
+  composes: tokens from "../theme-tokens.module.css";
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), sans-serif;
+  min-height: 100vh;
+}
+
+/* header — identical shape to the student header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(16, 16, 24, 0.92);
+  backdrop-filter: blur(6px);
+  z-index: 10;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.logoMark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logoPlaceholder {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--surface-2);
+  border: 1.5px dashed var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+  text-align: center;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.navLink {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.navLink:hover {
+  color: var(--text);
+}
+.navLinkActive {
+  color: var(--text);
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 32px 60px;
+}
+
+.pageTitle {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  margin: 0 0 24px;
+}
+
+/* header avatar + role badge (upper right) */
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--coral-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.roleBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: var(--gold-dim);
+  color: var(--gold);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+/* dashboard hero + stat pills */
+.dashHero {
+  margin: 32px 0 28px;
+  padding: 28px 32px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1c1c2c 0%, #231a1f 100%);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.dashHeroLeft { max-width: 520px; }
+.statPills { display: flex; gap: 12px; flex-wrap: wrap; }
+.statPill {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 88px;
+}
+.statPillValue {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 20px;
+  color: var(--gold);
+  line-height: 1.1;
+}
+.statPillLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 4px;
+}
+
+/* dashboard two-panel layout — 3 DOM children (expandTab, scheduleCol,
+   detailCol) share only 2 grid columns on purpose: expandTab and
+   scheduleCol are pinned to the same cell (column 1) since exactly one
+   of them is display:none at any time, never both visible together.
+   Without this explicit placement, grid auto-placement pushes the third
+   child (detailCol) onto a phantom second row instead of column 2 —
+   real bug, caught by clicking "Collapse" in an interactive preview. */
+.dashLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.dashLayout.collapsed {
+  grid-template-columns: 0px minmax(0, 1fr);
+}
+.scheduleCol {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+.dashLayout.collapsed .scheduleCol {
+  opacity: 0;
+  pointer-events: none;
+}
+.expandTab {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  display: none;
+  writing-mode: vertical-rl;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 10px 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dashLayout.collapsed .expandTab {
+  display: block;
+}
+.detailCol {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.scheduleHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.scheduleHeadRow h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.collapseBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+}
+
+.scheduleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.scheduleRow:hover {
+  background: var(--surface-2);
+}
+.scheduleRowActive {
+  background: var(--surface-2);
+  border: 1px solid var(--gold);
+}
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dotUpcoming { background: var(--text-muted); }
+.dotAttended { background: #4ade80; }
+.dotNoShow { background: var(--coral); }
+.dotTrial { background: var(--slot-trial); }
+.dotGroup { background: var(--slot-group); }
+.dotHeld { background: var(--slot-held); }
+.scheduleRowTime {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 62px;
+  flex-shrink: 0;
+}
+.scheduleRowInfo { flex: 1; min-width: 0; }
+.scheduleRowName {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scheduleRowSub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.quickMark {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.quickMarkBtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.quickMarkYes { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+.quickMarkNo { background: rgba(232, 92, 134, 0.18); color: var(--coral); }
+/* Filled/active state — shows which one is currently marked, not just
+   which ones are clickable. Both buttons stay clickable either way, so
+   a coach can correct a wrong tap without leaving the row. */
+.quickMarkYesActive { background: #4ade80; color: #0f2417; }
+.quickMarkNoActive { background: var(--coral); color: var(--coral-text); }
+
+.reminderItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.reminderItem:first-child { border-top: none; }
+.reminderIcon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* student snapshot */
+.snapshotGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 14px 0 20px;
+}
+.snapshotStat {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.snapshotStatLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.snapshotStatValue {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.backLink {
+  display: inline-block;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.backLink:hover {
+  color: var(--text);
+}
+
+/* generic panel, shared with the student module's shape */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.panelText {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.statRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.statKey {
+  color: var(--text-muted);
+}
+.statValue {
+  font-weight: 600;
+}
+
+/* payroll table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table tr:last-child td {
+  border-bottom: none;
+}
+.totalRow td {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.badge {
+  display: inline-block;
+  background: rgba(167, 139, 250, 0.18);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+.badgeMuted {
+  display: inline-block;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+/* date range picker form */
+.rangeForm {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* buttons — same shapes as student module */
+.cta {
+  display: inline-block;
+  background: var(--gold);
+  color: var(--gold-text);
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btnGhost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+/* shared/uploads folder panel — read-only mirror of the student side's
+   folderPanel/folderList shapes (student.module.css), coach never
+   uploads here, only views. */
+.folderPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.folderList {
+  padding: 8px 10px;
+}
+.folderItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.folderItem:hover {
+  background: var(--surface-2);
+}
+.ficon {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.finfo {
+  flex: 1;
+  min-width: 0;
+}
+.fname {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.listItem {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.listItem:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.emptyState {
+  padding: 16px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* chat sidebar (student picker) — ChatPanel itself already has its own
+   `dark` prop matching this exact palette, so only the surrounding
+   picker UI needs styling here. */
+.chatLayout {
+  display: flex;
+  gap: 20px;
+}
+.chatSidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chatSidebarBtn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.chatSidebarBtnActive {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.errorText {
+  color: var(--coral);
+  font-size: 13px;
+  margin: 8px 0 0;
+}

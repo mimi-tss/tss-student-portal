@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
+import { isAdminRole } from "@/lib/auth/roles";
 
 // Manually provisions a student — for ambassadors given free access via
 // Kajabi's "Grant Offer" or a 100%-off coupon (neither fires a purchase
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     .eq("id", user?.id ?? "")
     .maybeSingle();
 
-  if (!profile || profile.role !== "admin") {
+  if (!isAdminRole(profile?.role)) {
     return NextResponse.json({ error: "admin only" }, { status: 403 });
   }
 

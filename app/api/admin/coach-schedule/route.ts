@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getCoachGroupLessons } from "@/lib/group-lessons";
+import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
 
 // Admin equivalent of app/api/coach/schedule — same shape, but for any
 // coach (relies on the "admins can view all ..." RLS policies, not just
@@ -17,13 +19,13 @@ export async function GET(req: NextRequest) {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, name, working_hours, timezone")
+    .select("id, name, working_hours, pending_working_hours, pending_effective_date, timezone")
     .eq("id", coachId)
     .single();
 
   if (!coach) return NextResponse.json({ error: "coach not found" }, { status: 404 });
 
-  const [{ data: blocks }, { data: sessions }] = await Promise.all([
+  const [{ data: blocks }, { data: sessions }, groupLessons, heldSlots] = await Promise.all([
     supabase
       .from("coach_blocks")
       .select("id, start_at, end_at, reason")
@@ -32,11 +34,13 @@ export async function GET(req: NextRequest) {
       .gte("end_at", start),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name)")
+      .select("id, scheduled_at, duration_minutes, status, is_trial, is_makeup, student_id, students(name)")
       .eq("actual_coach_id", coach.id)
       .gte("scheduled_at", start)
       .lte("scheduled_at", end)
-      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)"),
+      .not("status", "eq", "cancelled-with-notice"),
+    getCoachGroupLessons(supabase, coach.id, start, end),
+    getHeldRecurringSlots(supabase, coach.id, new Date(start), new Date(end)),
   ]);
 
   return NextResponse.json({
@@ -44,6 +48,8 @@ export async function GET(req: NextRequest) {
       id: coach.id,
       name: coach.name,
       workingHours: coach.working_hours,
+      pendingWorkingHours: coach.pending_working_hours,
+      pendingEffectiveDate: coach.pending_effective_date,
       timezone: coach.timezone,
     },
     blocks: blocks ?? [],
@@ -53,8 +59,11 @@ export async function GET(req: NextRequest) {
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      isMakeup: s.is_makeup,
       studentId: s.student_id,
       studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
     })),
+    groupLessons,
+    heldSlots,
   });
 }

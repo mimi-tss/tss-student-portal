@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/auth/roles";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -42,16 +43,28 @@ export async function POST(req: NextRequest) {
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminRole(profile?.role);
 
   const { data: student } = await supabase
     .from("students")
-    .select("assigned_coach_id, tier, session_duration_minutes")
+    .select("assigned_coach_id, tier, session_duration_minutes, subscription_status")
     .eq("id", studentId)
     .single();
 
   if (!student) {
     return NextResponse.json({ error: "student not found" }, { status: 404 });
+  }
+
+  // A paused student can't attend anything, credit-funded or not — they
+  // have to be active again to use a makeup credit (spec: "must use
+  // their makeups while active"). Admin can still override for a
+  // one-off exception, same "admin ⊇ student" exemption this route
+  // already grants for the credit-required rule below.
+  if (!isAdmin && student.subscription_status === "paused") {
+    return NextResponse.json(
+      { error: "Your account is paused — sessions and makeup credits can't be booked until you're active again." },
+      { status: 403 },
+    );
   }
 
   let coachId: string;

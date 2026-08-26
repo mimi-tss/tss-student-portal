@@ -206,6 +206,41 @@ export function occurrencesFor(
   return out;
 }
 
+// Admin can set an end date when pausing a student (the pause form's
+// "To" field) — this is what makes that date actually do something:
+// called at the start of every materialize-recurring cron run (before
+// new occurrences get generated), it flips anyone whose pause has run
+// past its end date back to active and clears the pause fields, same as
+// clicking "Unpause" by hand. paused_end is a plain date (inclusive —
+// the student is still paused ON that date, same convention the pause
+// window filter below uses via 23:59:59.999 end-of-day), so the
+// cutoff is "< today", not "<=".
+export async function autoResumeExpiredPauses(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data: expired } = await supabase
+    .from("students")
+    .select("id")
+    .eq("subscription_status", "paused")
+    .not("paused_end", "is", null)
+    .lt("paused_end", today);
+
+  if (!expired || expired.length === 0) return 0;
+
+  await supabase
+    .from("students")
+    .update({ subscription_status: "active", paused_start: null, paused_end: null })
+    .in(
+      "id",
+      expired.map((s: { id: string }) => s.id),
+    );
+
+  return expired.length;
+}
+
 interface MaterializeResult {
   created: number;
   skipped: number;
@@ -236,13 +271,27 @@ export async function materializeRecurringSessions(
   let skipped = 0;
 
   for (const schedule of schedules ?? []) {
-    const [{ data: coach }, { data: student }] = await Promise.all([
+    const [{ data: coach }, { data: student }, { data: cancelRequest }] = await Promise.all([
       supabase.from("coaches").select("timezone").eq("id", schedule.coach_id).single(),
       supabase
         .from("students")
-        .select("billing_anniversary_date")
+        .select("billing_anniversary_date, subscription_status, paused_start, paused_end")
         .eq("id", schedule.student_id)
         .single(),
+      // A pending/approved cancellation (student_requests, migration
+      // 0034/0038) means admin either hasn't gotten to it yet or has
+      // confirmed it in Kajabi — either way, nothing further should
+      // populate past the billing cycle it's effective at ("denied" =
+      // admin retained the student, so this intentionally excludes it).
+      supabase
+        .from("student_requests")
+        .select("effective_date")
+        .eq("student_id", schedule.student_id)
+        .eq("type", "cancel_subscription")
+        .in("status", ["pending", "approved"])
+        .order("requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     const timeZone = coach?.timezone ?? "America/New_York";
@@ -257,7 +306,7 @@ export async function materializeRecurringSessions(
       : null;
     const effectiveFrom = startDate && startDate > now ? startDate : now;
 
-    const instants = occurrencesFor(
+    let instants = occurrencesFor(
       schedule.day_of_week,
       schedule.start_time,
       timeZone,
@@ -265,6 +314,23 @@ export async function materializeRecurringSessions(
       WEEKS_AHEAD,
       student?.billing_anniversary_date,
     );
+
+    // A paused student's slot stays reserved, not billed (spec section
+    // 3: "no sessions/billing accrue during the pause") — skip
+    // generating real session rows for any occurrence inside the pause
+    // window. getHeldRecurringSlots (below) is what surfaces this same
+    // window on the coach calendar and blocks other students from
+    // booking into it, without a session row existing here.
+    if (student?.subscription_status === "paused" && student.paused_start) {
+      const pauseStart = new Date(`${student.paused_start}T00:00:00Z`);
+      const pauseEnd = student.paused_end ? new Date(`${student.paused_end}T23:59:59.999Z`) : null;
+      instants = instants.filter((i) => i < pauseStart || (pauseEnd !== null && i > pauseEnd));
+    }
+
+    if (cancelRequest?.effective_date) {
+      const cutoff = new Date(`${cancelRequest.effective_date}T00:00:00Z`);
+      instants = instants.filter((i) => i < cutoff);
+    }
 
     if (instants.length === 0) continue;
 
@@ -287,13 +353,16 @@ export async function materializeRecurringSessions(
 
     // The coach could also be busy with another student at that instant
     // (e.g. a makeup booked into this slot before the schedule existed).
+    // Only a with-notice cancellation actually frees the slot back up —
+    // a no-notice (late) cancellation stays blocked, same distinction
+    // app/api/booking/slots/route.ts makes.
     const { data: coachBusy } = await supabase
       .from("sessions")
       .select("scheduled_at")
       .eq("actual_coach_id", schedule.coach_id)
       .gte("scheduled_at", now.toISOString())
       .lte("scheduled_at", horizonEnd.toISOString())
-      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)");
+      .not("status", "eq", "cancelled-with-notice");
 
     const coachTaken = new Set(
       (coachBusy ?? []).map((s: { scheduled_at: string }) =>
@@ -324,4 +393,65 @@ export async function materializeRecurringSessions(
   }
 
   return { created, skipped };
+}
+
+export interface HeldRecurringSlot {
+  scheduledAt: string;
+  durationMinutes: number;
+  studentName: string;
+}
+
+// A paused student's regular slot stays reserved — no session row exists
+// for it (materializeRecurringSessions skips generating one during the
+// pause window, above), so without this it would silently look wide
+// open on the coach calendar and be bookable by any other student.
+// Recomputes which recurring-schedule occurrences fall inside a
+// currently-paused student's pause window, for a given date range.
+export async function getHeldRecurringSlots(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  coachId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+): Promise<HeldRecurringSlot[]> {
+  const { data: schedules } = await supabase
+    .from("recurring_schedules")
+    .select("day_of_week, start_time, duration_minutes, students(name, subscription_status, paused_start, paused_end)")
+    .eq("coach_id", coachId)
+    .eq("active", true);
+
+  const { data: coach } = await supabase.from("coaches").select("timezone").eq("id", coachId).single();
+  const timeZone = coach?.timezone ?? "America/New_York";
+
+  const weeksAhead = Math.max(1, Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1);
+  const held: HeldRecurringSlot[] = [];
+
+  for (const schedule of schedules ?? []) {
+    const student = Array.isArray(schedule.students) ? schedule.students[0] : schedule.students;
+    if (!student || student.subscription_status !== "paused" || !student.paused_start) continue;
+
+    const pauseStart = new Date(`${student.paused_start}T00:00:00Z`);
+    const pauseEnd = student.paused_end ? new Date(`${student.paused_end}T23:59:59.999Z`) : null;
+
+    const occurrences = occurrencesFor(
+      schedule.day_of_week,
+      schedule.start_time,
+      timeZone,
+      new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000),
+      weeksAhead,
+      null,
+    );
+
+    for (const occ of occurrences) {
+      if (occ < rangeStart || occ > rangeEnd) continue;
+      if (occ < pauseStart || (pauseEnd !== null && occ > pauseEnd)) continue;
+      held.push({
+        scheduledAt: occ.toISOString(),
+        durationMinutes: schedule.duration_minutes,
+        studentName: student.name,
+      });
+    }
+  }
+
+  return held;
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import ReassignSessionCoach from "./reassign-session-coach";
+import styles from "../../../admin.module.css";
 
 interface UpcomingSession {
   id: string;
@@ -61,7 +62,7 @@ export default function AdminUpcomingSessions({
           setOpen(true);
           load();
         }}
-        className="text-sm text-blue-600 underline"
+        className={styles.linkBtn}
       >
         Show all sessions this billing cycle
       </button>
@@ -69,31 +70,29 @@ export default function AdminUpcomingSessions({
   }
 
   return (
-    <div className="rounded border p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500">
-          All sessions this billing cycle
-        </h2>
-        <button onClick={() => setOpen(false)} className="text-xs text-gray-500 underline">
+    <div className={styles.panel}>
+      <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>All sessions this billing cycle</h2>
+        <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
           Hide
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
+      {error && <p className={styles.errorText}>{error}</p>}
+      {loading && <p className={styles.mutedText}>Loading…</p>}
 
       {!loading && sessions && sessions.length === 0 && (
-        <p className="text-sm text-gray-500">No other sessions scheduled this cycle.</p>
+        <p className={styles.emptyState}>No other sessions scheduled this cycle.</p>
       )}
 
       {!loading && sessions && sessions.length > 0 && (
-        <ul className="space-y-3">
+        <ul className={styles.list}>
           {sessions.map((s) => (
-            <li key={s.id} className="border-t pt-3 first:border-t-0 first:pt-0">
-              <p className="text-sm">
+            <li key={s.id} className={styles.listItem}>
+              <p>
                 <FormattedDateTime value={s.scheduled_at} />
               </p>
-              <div className="mt-1 flex items-center gap-3">
+              <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
                 <AdminCancelButtons
                   sessionId={s.id}
                   scheduledAt={s.scheduled_at}

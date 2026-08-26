@@ -1,22 +1,13 @@
-/* Dark theme for the student-facing app only (admin/coach stay on the
-   plain light Tailwind styling) — see TSS_App_Spec_1.md section 8 for
-   the decision. Scoped entirely under .root so nothing here can leak
-   into a page that doesn't import this module. Fonts are loaded via
-   next/font/google in layout.tsx, which exposes them as the
+/* Dark theme for the student-facing app — see TSS_App_Spec_1.md section 8.
+   Scoped entirely under .root so nothing here can leak into a page that
+   doesn't import this module. Token values now live in the shared
+   ../theme-tokens.module.css (composed below) so coach.module.css and
+   admin.module.css can't drift out of sync with this file. Fonts are
+   loaded via next/font/google in layout.tsx, which exposes them as the
    --font-anton/--font-inter/--font-caveat variables referenced below. */
 
 .root {
-  --bg: #101018;
-  --surface: #1a1a26;
-  --surface-2: #20202f;
-  --border: #2c2c3d;
-  --gold: #a78bfa;
-  --gold-dim: #332752;
-  --gold-text: #241a3d;
-  --coral: #e85c86;
-  --coral-text: #3d1425;
-  --text: #f4f0e6;
-  --text-muted: #9997ab;
+  composes: tokens from "../theme-tokens.module.css";
 
   background: var(--bg);
   color: var(--text);
@@ -258,6 +249,47 @@
   white-space: pre-wrap;
 }
 
+/* practice streak bar — visual dot-per-day tracker, alongside the plain-
+   text streak line in the hero (streak-ping.tsx renders both). Caps at
+   7 dots (a week) regardless of the real count; more than 7 just shows
+   all 7 lit rather than growing the row. */
+.streak {
+  margin: 28px 0;
+  padding: 22px 28px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.streakLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.streakLabel b {
+  color: var(--text);
+  font-weight: 600;
+}
+.bulbs {
+  display: flex;
+  gap: 9px;
+}
+.bulb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  border: 1px solid var(--border);
+}
+.bulbOn {
+  background: var(--gold);
+  box-shadow: 0 0 8px 1px rgba(167, 139, 250, 0.55);
+  border-color: var(--gold);
+}
+
 /* section titles */
 .sectionTitle {
   display: flex;
@@ -281,6 +313,24 @@
 .panel h3 {
   margin: 0 0 6px;
   font-size: 16px;
+}
+.panelLink {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.panelLink:hover {
+  border-color: var(--gold);
+}
+.panelLink h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: var(--text);
 }
 .panelText {
   color: var(--text-muted);
@@ -427,40 +477,35 @@
   cursor: not-allowed;
 }
 
-/* recordings, styled like the mockup's shared-folder panel but scoped
-   to what's actually real: read-only files from the coach's Drive
-   uploads, no in-app upload/shortcut/remove yet. */
-.folderPanel {
+.exercisePanel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
 }
-.folderHeader {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-  font-weight: 600;
-}
-.folderList {
+
+/* exercises — icon-row list, same visual language as the shared-folder
+   panel directly below it (components/shared-folder-panel.tsx) so the
+   two sections read as a matched pair. */
+.exerciseList {
+  list-style: none;
+  margin: 0;
   padding: 8px 10px;
-}
-.folderItem {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  text-decoration: none;
-  color: inherit;
+  flex-direction: column;
+  gap: 2px;
 }
-.folderItem:hover {
+.exerciseItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: 8px;
+}
+.exerciseItem:hover {
   background: var(--surface-2);
 }
-.ficon {
+.exerciseIcon {
   width: 32px;
   height: 32px;
   border-radius: 7px;
@@ -471,16 +516,18 @@
   font-size: 15px;
   flex-shrink: 0;
 }
-.finfo {
+.exerciseInfo {
   flex: 1;
   min-width: 0;
 }
-.fname {
+.exerciseTitle {
   font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.exerciseMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 .emptyState {
   padding: 16px 20px;
@@ -570,18 +617,4 @@
   border: 1px solid var(--border);
   font-size: 13px;
   color: var(--text);
-}
-
-/* legacy pages (booking) that haven't been redesigned yet — kept as a
-   plain white card floating on the dark page background, since their
-   internals still use light-on-white Tailwind classes. A light touch so
-   they don't look broken under the new dark header, without redesigning
-   their internals. */
-.legacyCard {
-  max-width: 720px;
-  margin: 32px auto;
-  background: #fff;
-  color: #111827;
-  border-radius: 16px;
-  overflow: hidden;
 }

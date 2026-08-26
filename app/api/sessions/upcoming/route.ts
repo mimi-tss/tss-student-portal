@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { isAdminRole } from "@/lib/auth/roles";
 
 // Every scheduled session within the caller's current (paid) billing
 // cycle — backs the "Show all sessions" list on both the student
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   const requestedStudentId = req.nextUrl.searchParams.get("studentId");
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminRole(profile?.role);
 
   // Only an admin may look up another student's sessions — everyone else
   // always gets their own, regardless of any studentId they pass, since

@@ -234,14 +234,14 @@ export default function BookingClient({
 
   if (mode === "trial" && booked) {
     return (
-      <main className="mx-auto max-w-lg p-8">
+      <main className="mx-auto max-w-lg p-8 text-[var(--text)]">
         <h1 className="mb-2 text-xl font-semibold">Trial lesson booked!</h1>
-        <p className="mb-4 text-gray-500">
+        <p className="mb-4 text-[var(--text-muted)]">
           We&apos;ll see you then. Check your dashboard for the details.
         </p>
         <Link
           href="/student/dashboard"
-          className="inline-block rounded bg-black px-4 py-2 text-white"
+          className="inline-block rounded-lg bg-[var(--gold)] px-4 py-2 font-bold text-[var(--gold-text)]"
         >
           Go to dashboard
         </Link>
@@ -251,9 +251,9 @@ export default function BookingClient({
 
   if (mode === "trial" && !selectedCoachId) {
     return (
-      <main className="mx-auto max-w-lg p-8">
+      <main className="mx-auto max-w-lg p-8 text-[var(--text)]">
         <h1 className="mb-4 text-xl font-semibold">Book Your FREE First Vocal Coaching Session</h1>
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-[var(--text-muted)]">
           Pick a coach to see their open times.
         </p>
         <ul className="space-y-2">
@@ -261,7 +261,7 @@ export default function BookingClient({
             <li key={coach.id}>
               <button
                 onClick={() => setSelectedCoachId(coach.id)}
-                className="w-full rounded border p-3 text-left hover:bg-gray-50"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left hover:bg-[var(--surface-2)]"
               >
                 {coach.name}
               </button>
@@ -269,14 +269,14 @@ export default function BookingClient({
           ))}
         </ul>
         {coaches.length === 0 && (
-          <p className="text-gray-500">Loading coaches…</p>
+          <p className="text-[var(--text-muted)]">Loading coaches…</p>
         )}
       </main>
     );
   }
 
   if (mode === "full" && !coachId) {
-    return <p className="p-8">No coach assigned yet — contact the studio.</p>;
+    return <p className="p-8 text-[var(--text)]">No coach assigned yet — contact the studio.</p>;
   }
 
   const leadingBlanks = new Date(Date.UTC(viewYear, viewMonth - 1, 1)).getUTCDay();
@@ -295,13 +295,13 @@ export default function BookingClient({
     mode === "full" && availableCredits.length === 0 && !canBookWithoutCredit;
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <main className="mx-auto max-w-2xl p-8 text-[var(--text)]">
       <h1 className="mb-4 text-xl font-semibold">
         {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
 
       {mode === "full" && availableCredits.length > 0 && (
-        <div className="mb-4 rounded border p-3 text-sm text-gray-700">
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text-muted)]">
           This booking will use a {availableCredits[0].duration_minutes ?? 30}-min session credit
           ({availableCredits.length} available
           {availableCredits[0].expires_at
@@ -312,9 +312,9 @@ export default function BookingClient({
       )}
 
       {blockedNoCredits && (
-        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-          <p className="font-medium">No session credits available</p>
-          <p className="mt-1 text-gray-700">
+        <div className="mb-4 rounded-xl border border-[var(--coral)]/40 bg-[var(--coral)]/10 p-3 text-sm">
+          <p className="font-medium text-[var(--text)]">No session credits available</p>
+          <p className="mt-1 text-[var(--text-muted)]">
             Your regular weekly lessons are already scheduled for you — contact the studio to
             change that time. To book an extra lesson, contact the studio to purchase one.
           </p>
@@ -322,27 +322,31 @@ export default function BookingClient({
       )}
 
       {mode === "full" && availableCredits.length === 0 && canBookWithoutCredit && (
-        <div className="mb-4 rounded border p-3 text-sm text-gray-500">
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text-muted)]">
           No session credits available — booking here will create a plain session (admin override).
         </div>
       )}
 
       {bookedWithCredit && (
-        <p className="mb-4 text-sm text-green-700">Booked using a session credit.</p>
+        <p className="mb-4 text-sm text-[#4ade80]">Booked using a session credit.</p>
       )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
         <label className="flex items-center gap-2">
-          <span className="text-gray-600">Timezone ({timezoneAbbreviation(timezone)})</span>
-          <TimeZoneSelect value={timezone} onChange={setTimezone} />
+          <span className="text-[var(--text-muted)]">Timezone ({timezoneAbbreviation(timezone)})</span>
+          <TimeZoneSelect
+            value={timezone}
+            onChange={setTimezone}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[var(--text)]"
+          />
         </label>
         {mode === "full" && allCoaches && allCoaches.length > 0 && (
           <label className="flex items-center gap-2">
-            <span className="text-gray-600">Coach</span>
+            <span className="text-[var(--text-muted)]">Coach</span>
             <select
               value={selectedCoachId ?? ""}
               onChange={(e) => setSelectedCoachId(e.target.value)}
-              className="rounded border p-1"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[var(--text)]"
             >
               {allCoaches.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -354,12 +358,12 @@ export default function BookingClient({
         )}
       </div>
 
-      {errorMsg && <p className="mb-4 text-sm text-red-600">{errorMsg}</p>}
+      {errorMsg && <p className="mb-4 text-sm text-[var(--coral)]">{errorMsg}</p>}
 
       {expiryWarningSlot && (
-        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-          <p className="mb-1 font-medium">This time is past your session credit&apos;s expiry</p>
-          <p className="mb-3 text-gray-700">
+        <div className="mb-4 rounded-xl border border-[var(--coral)]/40 bg-[var(--coral)]/10 p-3 text-sm">
+          <p className="mb-1 font-medium text-[var(--text)]">This time is past your session credit&apos;s expiry</p>
+          <p className="mb-3 text-[var(--text-muted)]">
             Your session credit expires{" "}
             {availableCredits[0]?.expires_at
               ? formatDateInZone(availableCredits[0].expires_at, timezone)
@@ -373,14 +377,14 @@ export default function BookingClient({
             {canBookWithoutCredit && (
               <button
                 onClick={() => proceedBooking(expiryWarningSlot, false)}
-                className="rounded bg-black px-3 py-1 text-xs text-white"
+                className="rounded-lg bg-[var(--gold)] px-3 py-1 text-xs font-bold text-[var(--gold-text)]"
               >
                 Book without credit
               </button>
             )}
             <button
               onClick={() => setExpiryWarningSlot(null)}
-              className="text-xs text-gray-600 underline"
+              className="text-xs text-[var(--text-muted)] underline"
             >
               Choose a different date
             </button>
@@ -399,7 +403,7 @@ export default function BookingClient({
                 setViewMonth(prev.month);
               }}
               disabled={isCurrentMonth}
-              className="rounded border px-2 py-1 disabled:opacity-30"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text)] disabled:opacity-30"
             >
               ←
             </button>
@@ -411,13 +415,13 @@ export default function BookingClient({
                 setViewYear(next.year);
                 setViewMonth(next.month);
               }}
-              className="rounded border px-2 py-1"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text)]"
             >
               →
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500">
+          <div className="grid grid-cols-7 gap-1 text-center text-xs text-[var(--text-muted)]">
             {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
               <div key={i}>{d}</div>
             ))}
@@ -435,12 +439,12 @@ export default function BookingClient({
                   key={key}
                   disabled={!hasSlots || isPastDay}
                   onClick={() => setSelectedDate(key)}
-                  className={`aspect-square rounded text-sm ${
+                  className={`aspect-square rounded-lg text-sm ${
                     isSelected
-                      ? "bg-black text-white"
+                      ? "bg-[var(--gold)] text-[var(--gold-text)]"
                       : hasSlots
-                        ? "bg-blue-50 font-medium text-blue-700 hover:bg-blue-100"
-                        : "text-gray-300"
+                        ? "bg-[var(--gold)]/15 font-medium text-[var(--gold)] hover:bg-[var(--gold)]/25"
+                        : "text-[var(--border)]"
                   }`}
                 >
                   {day}
@@ -448,15 +452,15 @@ export default function BookingClient({
               );
             })}
           </div>
-          {loading && <p className="mt-2 text-xs text-gray-500">Loading availability…</p>}
+          {loading && <p className="mt-2 text-xs text-[var(--text-muted)]">Loading availability…</p>}
         </div>
 
         <div className="flex-1">
           {!selectedDate && (
-            <p className="text-sm text-gray-500">Pick a highlighted date to see open times.</p>
+            <p className="text-sm text-[var(--text-muted)]">Pick a highlighted date to see open times.</p>
           )}
           {selectedDate && selectedSlots.length === 0 && (
-            <p className="text-sm text-gray-500">No open times that day.</p>
+            <p className="text-sm text-[var(--text-muted)]">No open times that day.</p>
           )}
           {selectedDate && selectedSlots.length > 0 && (
             <>
@@ -467,13 +471,16 @@ export default function BookingClient({
                   day: "numeric",
                   timeZone: timezone,
                 })}{" "}
-                <span className="font-normal text-gray-500">
+                <span className="font-normal text-[var(--text-muted)]">
                   ({timezoneAbbreviation(timezone)})
                 </span>
               </p>
               <ul className="space-y-2">
                 {selectedSlots.map((slot) => (
-                  <li key={slot.start} className="flex items-center justify-between rounded border p-2">
+                  <li
+                    key={slot.start}
+                    className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2"
+                  >
                     <span>{formatTimeInZone(slot.start, timezone)}</span>
                     <button
                       onClick={() => handleBook(slot)}
@@ -483,7 +490,7 @@ export default function BookingClient({
                           ? "You need a session credit to book — contact the studio."
                           : undefined
                       }
-                      className="rounded bg-black px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-lg bg-[var(--gold)] px-3 py-1 font-bold text-[var(--gold-text)] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {bookingStart === slot.start ? "Booking…" : "Book"}
                     </button>

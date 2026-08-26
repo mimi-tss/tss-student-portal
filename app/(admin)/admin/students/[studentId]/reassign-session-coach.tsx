@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import styles from "../../../admin.module.css";
 
 interface Coach {
   id: string;
@@ -60,18 +61,18 @@ export default function ReassignSessionCoach({
 
   if (!editing) {
     return (
-      <button onClick={() => setEditing(true)} className="text-xs text-blue-600 underline">
+      <button onClick={() => setEditing(true)} className={styles.linkBtnSmall}>
         Reassign coach
       </button>
     );
   }
 
   return (
-    <div className="mt-1 flex items-center gap-2 text-xs">
+    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
       <select
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="rounded border px-1 py-0.5"
+        className={styles.selectSmall}
       >
         {coaches.map((c) => (
           <option key={c.id} value={c.id}>
@@ -82,14 +83,14 @@ export default function ReassignSessionCoach({
       <button
         onClick={handleSave}
         disabled={saving}
-        className="rounded bg-black px-2 py-0.5 text-white disabled:opacity-50"
+        className={styles.ctaSmall}
       >
         {saving ? "Saving…" : "Save"}
       </button>
-      <button onClick={() => setEditing(false)} disabled={saving} className="text-gray-500 underline">
+      <button onClick={() => setEditing(false)} disabled={saving} className={styles.linkBtnSmall}>
         Cancel
       </button>
-      {error && <p className="text-red-600">{error}</p>}
+      {error && <p className={styles.errorText}>{error}</p>}
     </div>
   );
 }

@@ -2,13 +2,32 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
+import { listAssignedExercises } from "@/lib/exercises";
+import { formatTenure } from "@/lib/format-date";
+import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import NotesPanel from "@/components/notes-panel";
+import ChatPanel from "@/components/chat-panel";
+import SharedFolderPanel from "@/components/shared-folder-panel";
+import AssignExercisePanel from "@/components/assign-exercise-panel";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
 import ReassignSessionCoach from "./reassign-session-coach";
+import BirthDateClient from "./birth-date-client";
+import ReferralClient from "./referral-client";
+import CoachStartDateClient from "./coach-start-date-client";
+import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
+import StaffNotesClient from "./staff-notes-client";
+import styles from "../../../admin.module.css";
+
+const TIER_LABEL: Record<string, string> = {
+  lite: "Lite",
+  suite: "Suite",
+  pro: "Pro",
+  elite: "Elite",
+};
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -21,10 +40,14 @@ export default async function AdminStudentPage({
   const { studentId } = await params;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes",
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id",
     )
     .eq("id", studentId)
     .maybeSingle();
@@ -46,6 +69,8 @@ export default async function AdminStudentPage({
     { data: coaches },
     { count: monthlyCreditsUsed },
     { count: yearlyCreditsUsed },
+    { data: firstSessionWithCoach },
+    { data: cancelRequestRow },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -75,7 +100,7 @@ export default async function AdminStudentPage({
       .select("day_of_week, start_time, duration_minutes, start_date, coach_id")
       .eq("student_id", student.id)
       .maybeSingle(),
-    supabase.from("coaches").select("id, name").order("name"),
+    supabase.from("coaches").select("id, name").eq("active", true).order("name"),
     supabase
       .from("makeup_credits")
       .select("id", { count: "exact", head: true })
@@ -88,6 +113,32 @@ export default async function AdminStudentPage({
       .eq("student_id", student.id)
       .eq("type", "student-fault")
       .gte("created_at", yearStart),
+    // Fallback for CoachStartDateClient when no admin override is set —
+    // mirrors getStudentSnapshot's own "earliest session this coach
+    // actually taught" query (lib/coach/dashboard-data.ts).
+    student.assigned_coach_id
+      ? supabase
+          .from("sessions")
+          .select("scheduled_at")
+          .eq("student_id", student.id)
+          .eq("actual_coach_id", student.assigned_coach_id)
+          .order("scheduled_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    // Drives the Stop panel — a still-open cancellation (student-
+    // submitted or admin-flagged via /api/admin/flag-cancellation).
+    // "denied" is excluded on purpose: that's the retained outcome, so
+    // Stop should go back to showing its default (no active request).
+    supabase
+      .from("student_requests")
+      .select("id, status, reason, effective_date, last_session_override")
+      .eq("student_id", student.id)
+      .eq("type", "cancel_subscription")
+      .in("status", ["pending", "approved"])
+      .order("requested_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   // The recurring schedule's coach can now differ from the student's
@@ -102,30 +153,135 @@ export default async function AdminStudentPage({
         .maybeSingle()
     : { data: null };
 
-  const recordings = student.drive_folder_id
-    ? await listStudentRecordings(student.drive_folder_id)
-    : [];
+  const [recordings, exerciseCatalog, assignedExercises, cancelRequestExtras] = await Promise.all([
+    student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
+    supabase.from("exercises").select("id, title").eq("active", true).order("title"),
+    listAssignedExercises(supabase, student.id),
+    cancelRequestRow
+      ? Promise.all([
+          supabase
+            .from("attention_items")
+            .select("id")
+            .eq("request_id", cancelRequestRow.id)
+            .in("status", ["needs_action", "in_progress"])
+            .maybeSingle(),
+          supabase
+            .from("sessions")
+            .select("scheduled_at")
+            .eq("student_id", student.id)
+            .eq("status", "scheduled")
+            .lte("scheduled_at", `${cancelRequestRow.effective_date}T23:59:59.999Z`)
+            .order("scheduled_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ])
+      : Promise.resolve([{ data: null }, { data: null }] as const),
+  ]);
+
+  const [{ data: cancelAttentionItem }, { data: lastSessionRow }] = cancelRequestExtras;
+
+  const cancelRequest = cancelRequestRow
+    ? {
+        attentionItemId: cancelAttentionItem?.id ?? null,
+        status: cancelRequestRow.status,
+        reason: cancelRequestRow.reason,
+        effectiveDate: cancelRequestRow.effective_date as string,
+        lastSessionOverride: cancelRequestRow.last_session_override,
+      }
+    : null;
+
+  const { renewalDate } = renewalInfo(student.billing_anniversary_date);
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <Link href="/admin/dashboard" className="mb-4 inline-block text-sm text-blue-600 underline">
+    <main className={styles.wrap}>
+      <Link href="/admin/dashboard" className={styles.backLink}>
         ← Back to students
       </Link>
 
-      <h1 className="mb-1 text-xl font-semibold">{student.name}</h1>
-      <p className="mb-4 text-sm text-gray-500">
-        {student.email} · {student.tier} · {student.subscription_status}
-        {coach ? ` · coach: ${coach.name}` : " · no coach assigned"}
-      </p>
+      <h1 className={styles.pageTitle} style={{ marginBottom: 16 }}>
+        {student.name}
+      </h1>
 
-      <div className="mb-6 rounded border p-4">
-        <h2 className="mb-1 text-sm font-semibold text-gray-500">Weekly schedule</h2>
+      <div className={styles.overviewGrid} style={{ marginTop: 0, marginBottom: 20 }}>
+        <div className={styles.panel} style={{ marginBottom: 0 }}>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Email</div>
+            <div className={styles.statValue}>{student.email}</div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Membership</div>
+            <div className={styles.statValue}>
+              <span className={styles.badge}>{TIER_LABEL[student.tier] ?? student.tier}</span>
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Coach</div>
+            <div className={styles.statValue}>{coach?.name ?? "Not yet assigned"}</div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Referred by</div>
+            <div className={styles.statValue}>
+              <ReferralClient studentId={student.id} initialCoachId={student.referred_by_coach_id} coaches={coaches ?? []} />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Birthday</div>
+            <div className={styles.statValue}>
+              <BirthDateClient studentId={student.id} initialValue={student.birth_date} />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>With coach since</div>
+            <div className={styles.statValue}>
+              <CoachStartDateClient
+                studentId={student.id}
+                initialValue={student.coach_start_date_override}
+                derivedValue={firstSessionWithCoach?.scheduled_at?.slice(0, 10) ?? null}
+              />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>With us</div>
+            <div className={styles.statValue}>{formatTenure(student.created_at)}</div>
+          </div>
+
+          <SubscriptionLifecycleClient
+            studentId={student.id}
+            subscriptionStatus={student.subscription_status}
+            hasCoach={!!student.assigned_coach_id}
+            hasRecurringSchedule={!!recurringSchedule}
+            defaultCoachId={student.assigned_coach_id}
+            coachTimeZone={coach?.timezone ?? null}
+            coaches={coaches ?? []}
+            pausedStart={student.paused_start}
+            pausedEnd={student.paused_end}
+            billingRenewalDate={renewalDate.toISOString().slice(0, 10)}
+            cancelRequest={cancelRequest}
+            computedLastSession={lastSessionRow?.scheduled_at?.slice(0, 10) ?? null}
+          />
+        </div>
+
+        <div className={styles.panel} style={{ marginBottom: 0 }}>
+          <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+            <h2 style={{ margin: 0 }}>Staff notes</h2>
+            <span className={styles.badgeWarn}>Admin only</span>
+          </div>
+          <p className={styles.mutedText} style={{ marginBottom: 12, fontSize: 12 }}>
+            Never visible to the coach or student.
+          </p>
+          <StaffNotesClient studentId={student.id} />
+        </div>
+      </div>
+
+      <div className={styles.panel}>
+        <h2>Weekly schedule</h2>
         <RecurringScheduleClient
           studentId={student.id}
           hasCoach={!!student.assigned_coach_id}
           defaultCoachId={student.assigned_coach_id}
           coachTimeZone={scheduleCoach?.timezone ?? coach?.timezone ?? null}
           coaches={coaches ?? []}
+          hideStartPrompt={student.subscription_status === "active"}
           schedule={
             recurringSchedule
               ? {
@@ -140,13 +296,10 @@ export default async function AdminStudentPage({
         />
       </div>
 
-      <div className="mb-6 rounded border p-4">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-500">Next session</h2>
-          <Link
-            href={`/admin/students/${student.id}/book`}
-            className="text-sm text-blue-600 underline"
-          >
+      <div className={styles.panel}>
+        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>Next session</h2>
+          <Link href={`/admin/students/${student.id}/book`} className={styles.linkBtn}>
             Book a session
           </Link>
         </div>
@@ -155,7 +308,7 @@ export default async function AdminStudentPage({
             <p>
               <FormattedDateTime value={nextSession.scheduled_at} />
             </p>
-            <div className="mt-1 flex items-center gap-3">
+            <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
               <AdminCancelButtons
                 key={nextSession.id}
                 sessionId={nextSession.id}
@@ -172,11 +325,11 @@ export default async function AdminStudentPage({
             </div>
           </>
         ) : (
-          <p className="text-gray-500">Nothing scheduled.</p>
+          <p className={styles.mutedText}>Nothing scheduled.</p>
         )}
       </div>
 
-      <div className="mb-6">
+      <div style={{ marginBottom: 24 }}>
         <AdminUpcomingSessions
           studentId={student.id}
           coaches={coaches ?? []}
@@ -185,12 +338,12 @@ export default async function AdminStudentPage({
         />
       </div>
 
-      <div className="mb-6 rounded border p-4">
-        <h2 className="mb-1 text-sm font-semibold text-gray-500">Session credits</h2>
+      <div className={styles.panel}>
+        <h2>Session credits</h2>
         {credits && credits.length > 0 ? (
-          <ul className="space-y-2 text-sm">
+          <ul className={styles.list}>
             {credits.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className={styles.listItem}>
                 <p>
                   {creditDisplayName(c.duration_minutes ?? student.session_duration_minutes ?? 30)}
                   {" — "}
@@ -202,7 +355,7 @@ export default async function AdminStudentPage({
                     "no expiration"
                   )}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className={styles.mutedText}>
                   {creditTypeLabel(c.type)}
                   {c.reason ? ` - ${c.reason}` : ""}
                 </p>
@@ -210,32 +363,50 @@ export default async function AdminStudentPage({
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500">None available.</p>
+          <p className={styles.mutedText}>None available.</p>
         )}
       </div>
 
-      <div className="mb-6 rounded border p-4">
-        <h2 className="mb-2 text-sm font-semibold text-gray-500">Homework notes</h2>
-        <NotesPanel studentId={student.id} />
+      <div className={styles.panel}>
+        <h2>Homework notes</h2>
+        <NotesPanel studentId={student.id} canAdd dark />
       </div>
 
-      <div className="rounded border p-4">
-        <h2 className="mb-1 text-sm font-semibold text-gray-500">Recordings</h2>
-        {recordings.length === 0 && <p className="text-gray-500">None yet.</p>}
-        <ul className="space-y-1 text-sm">
-          {recordings.map((file) => (
-            <li key={file.id}>
-              <a
-                href={file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 underline"
-              >
-                {file.name}
-              </a>
-            </li>
-          ))}
-        </ul>
+      <div className={styles.panel}>
+        <h2>Chat</h2>
+        {user ? (
+          <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
+        ) : (
+          <p className={styles.mutedText}>Chat unavailable.</p>
+        )}
+      </div>
+
+      <div className={styles.panel}>
+        <h2>Exercises</h2>
+        <AssignExercisePanel studentId={student.id} exercises={exerciseCatalog.data ?? []} />
+        {assignedExercises.length > 0 ? (
+          <ul className={styles.list} style={{ marginTop: 14 }}>
+            {assignedExercises.map((ex) => (
+              <li key={ex.id} className={styles.listItem}>
+                <p>{ex.title}</p>
+                {ex.audioUrl && <audio controls src={ex.audioUrl} style={{ width: "100%", marginTop: 6 }} />}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.mutedText} style={{ marginTop: 10 }}>
+            Nothing assigned yet.
+          </p>
+        )}
+      </div>
+
+      <div className={styles.panel}>
+        <h2>Shared folder</h2>
+        {student.drive_folder_id ? (
+          <SharedFolderPanel studentId={student.id} initialFiles={recordings} />
+        ) : (
+          <p className={styles.mutedText}>No shared folder yet for this student.</p>
+        )}
       </div>
     </main>
   );

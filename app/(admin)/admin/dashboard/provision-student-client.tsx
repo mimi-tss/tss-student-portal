@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import styles from "../../admin.module.css";
 
 interface Coach {
   id: string;
@@ -51,72 +52,58 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-8 flex flex-wrap items-end gap-2">
-      <div>
-        <label className="block text-xs text-gray-500">Name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="rounded border px-2 py-1 text-sm"
-        />
+    <form onSubmit={handleSubmit} className={styles.panel}>
+      <h2>Add ambassador / manual student</h2>
+      <div className={styles.rowForm}>
+        <div className={styles.field}>
+          <label>Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} required className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className={styles.input}
+          />
+        </div>
+        <div className={styles.field}>
+          <label>Tier</label>
+          <select value={tier} onChange={(e) => setTier(e.target.value)} className={styles.select}>
+            <option value="suite">Suite</option>
+            <option value="pro">Pro</option>
+            <option value="elite">Elite</option>
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label>Session length</label>
+          <select
+            value={sessionDurationMinutes}
+            onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
+            className={styles.select}
+          >
+            <option value={30}>30 min</option>
+            <option value={60}>60 min</option>
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label>Coach (optional)</label>
+          <select value={coachId} onChange={(e) => setCoachId(e.target.value)} className={styles.select}>
+            <option value="">None yet</option>
+            {coaches.map((coach) => (
+              <option key={coach.id} value={coach.id}>
+                {coach.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" disabled={saving} className={styles.cta}>
+          {saving ? "Adding…" : "Add"}
+        </button>
       </div>
-      <div>
-        <label className="block text-xs text-gray-500">Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="rounded border px-2 py-1 text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500">Tier</label>
-        <select
-          value={tier}
-          onChange={(e) => setTier(e.target.value)}
-          className="rounded border px-2 py-1 text-sm"
-        >
-          <option value="suite">Suite</option>
-          <option value="pro">Pro</option>
-          <option value="elite">Elite</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500">Session length</label>
-        <select
-          value={sessionDurationMinutes}
-          onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
-          className="rounded border px-2 py-1 text-sm"
-        >
-          <option value={30}>30 min</option>
-          <option value={60}>60 min</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500">Coach (optional)</label>
-        <select
-          value={coachId}
-          onChange={(e) => setCoachId(e.target.value)}
-          className="rounded border px-2 py-1 text-sm"
-        >
-          <option value="">None yet</option>
-          {coaches.map((coach) => (
-            <option key={coach.id} value={coach.id}>
-              {coach.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50"
-      >
-        {saving ? "Adding…" : "Add ambassador / manual student"}
-      </button>
-      {errorMsg && <p className="w-full text-sm text-red-600">{errorMsg}</p>}
+      {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
     </form>
   );
 }

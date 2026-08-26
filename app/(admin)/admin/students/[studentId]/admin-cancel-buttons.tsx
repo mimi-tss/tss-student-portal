@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormattedDateTime } from "@/components/formatted-time";
 import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
+import styles from "../../../admin.module.css";
 
 export default function AdminCancelButtons({
   sessionId,
@@ -87,21 +88,21 @@ export default function AdminCancelButtons({
   }
 
   if (message) {
-    return <p className="mt-2 text-sm text-green-700">{message}</p>;
+    return <p className={styles.successText} style={{ marginTop: 8 }}>{message}</p>;
   }
 
   if (mode === "staff-reason") {
     return (
-      <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-        <p className="mb-1 font-medium">
+      <div className={styles.warnPanel}>
+        <p style={{ marginBottom: 4, fontWeight: 600 }}>
           Staff cancel <FormattedDateTime value={scheduledAt} /> — reason required
         </p>
-        <p className="mb-2 text-gray-600">
+        <p className={styles.mutedText} style={{ marginBottom: 8 }}>
           {issueCredit
             ? "Issues a session credit (no cap, no expiry) and logs this note for audit — use for studio-side reasons, not the student's own late cancellation."
             : "No credit will be issued — use this for a non-paying (DNC) student, not a studio-side mistake. Still logs the reason for audit."}
         </p>
-        <label className="mb-2 flex items-center gap-2 text-xs text-gray-700">
+        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <input
             type="checkbox"
             checked={issueCredit}
@@ -114,13 +115,14 @@ export default function AdminCancelButtons({
           onChange={(e) => setReason(e.target.value)}
           rows={2}
           placeholder="Why is the studio cancelling this session?"
-          className="mb-2 w-full rounded border p-2 text-sm"
+          className={styles.input}
+          style={{ display: "block", width: "100%", marginBottom: 8 }}
         />
-        <div className="flex items-center gap-3">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={doStaffCancel}
             disabled={loading || !reason.trim()}
-            className="rounded bg-black px-3 py-1 text-xs text-white disabled:opacity-50"
+            className={styles.dangerBtn}
           >
             {loading ? "Cancelling…" : "Confirm staff cancel"}
           </button>
@@ -131,7 +133,7 @@ export default function AdminCancelButtons({
               setIssueCredit(true);
             }}
             disabled={loading}
-            className="text-xs text-gray-600 underline"
+            className={styles.linkBtnSmall}
           >
             Never mind
           </button>
@@ -145,17 +147,17 @@ export default function AdminCancelButtons({
     const yearlyRemaining = Math.max(0, YEARLY_CAP - yearlyCreditsUsed);
 
     return (
-      <div className="mt-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
-        <p className="mb-1 font-medium">
+      <div className={styles.panel} style={{ background: "var(--surface-2)", marginTop: 8, marginBottom: 0, padding: 12 }}>
+        <p style={{ marginBottom: 4, fontWeight: 600 }}>
           Cancel the <FormattedDateTime value={scheduledAt} /> session?
         </p>
-        <p className="mb-2 text-gray-700">
+        <p className={styles.panelText} style={{ marginBottom: 8 }}>
           Cancels exactly like the student&apos;s own self-service cancellation — a session
           credit is issued only with 24+ hours notice, and it counts against their
           monthly/yearly cap.
         </p>
         {!isMakeup && (
-          <p className="mb-2 text-xs font-medium text-gray-500">
+          <p className={styles.mutedText} style={{ marginBottom: 8, fontWeight: 600 }}>
             Makeup credit cap remaining: {monthlyRemaining}/{MONTHLY_CAP} this month ·{" "}
             {yearlyRemaining}/{YEARLY_CAP} this year
           </p>
@@ -165,13 +167,14 @@ export default function AdminCancelButtons({
           onChange={(e) => setReason(e.target.value)}
           rows={2}
           placeholder="Reason"
-          className="mb-2 w-full rounded border p-2 text-sm"
+          className={styles.input}
+          style={{ display: "block", width: "100%", marginBottom: 8 }}
         />
-        <div className="flex items-center gap-3">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={doRegularCancel}
             disabled={loading || !reason.trim()}
-            className="rounded bg-red-600 px-3 py-1 text-xs text-white disabled:opacity-50"
+            className={styles.dangerBtn}
           >
             {loading ? "Cancelling…" : "Confirm cancel"}
           </button>
@@ -181,7 +184,7 @@ export default function AdminCancelButtons({
               setReason("");
             }}
             disabled={loading}
-            className="text-xs text-gray-600 underline"
+            className={styles.linkBtnSmall}
           >
             Never mind
           </button>
@@ -192,12 +195,12 @@ export default function AdminCancelButtons({
 
   return (
     <div>
-      {error && <p className="mb-1 text-xs text-red-600">{error}</p>}
-      <div className="flex items-center gap-4 text-sm">
-        <button onClick={() => setMode("confirm-regular")} className="text-blue-600 underline">
+      {error && <p className={styles.errorText} style={{ marginBottom: 4 }}>{error}</p>}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <button onClick={() => setMode("confirm-regular")} className={styles.linkBtnSmall}>
           Cancel
         </button>
-        <button onClick={() => setMode("staff-reason")} className="text-amber-700 underline">
+        <button onClick={() => setMode("staff-reason")} className={styles.dangerLink}>
           Staff cancel
         </button>
       </div>

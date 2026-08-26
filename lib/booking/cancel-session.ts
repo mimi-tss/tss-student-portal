@@ -111,5 +111,5 @@ export function cancellationMessage(outcome: CancelOutcome): string {
   if (outcome.creditGranted) {
     return "Session cancelled — a session credit was issued, good for 30 days.";
   }
-  return "Session cancelled. No credit was issued (inside the 24-hour notice window, or already at the credit limit for this period), but a new time can still be booked.";
+  return "Session cancelled. No credit was issued (inside the 24-hour notice window, or already at the credit limit for this period).";
 }

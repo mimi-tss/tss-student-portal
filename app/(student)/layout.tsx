@@ -26,7 +26,7 @@ export default async function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await requireRole("student");
+  const { user } = await requireRole("student");
 
   const supabase = await createClient();
   const { data: student } = await supabase
@@ -50,11 +50,27 @@ export default async function StudentLayout({
             <Link href="/student/dashboard" className={styles.navLinkActive}>
               Coaching Studio
             </Link>
-            {/* Courses/Community aren't real features yet (no Kajabi
-                tie-in built) — shown to match the mockup's nav layout,
-                but as inert labels rather than links to nowhere. */}
-            <span className={styles.navLink}>Courses</span>
-            <span className={styles.navLink}>Community</span>
+            {/* Kajabi owns courses/community content (spec section 1) —
+                these link out to the studio's Kajabi site rather than
+                being built in this app. NEXT_PUBLIC_KAJABI_SITE_URL is a
+                placeholder root until the exact per-section URLs are
+                supplied — swap the env var, not this code. */}
+            <a
+              href={`${process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? ""}/courses`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.navLink}
+            >
+              Courses
+            </a>
+            <a
+              href={`${process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? ""}/community`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.navLink}
+            >
+              Community
+            </a>
             <Link href="/student/book" className={styles.navLink}>
               Scheduler
             </Link>

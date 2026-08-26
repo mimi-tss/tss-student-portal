@@ -4,6 +4,7 @@ import { OFFER_IDS, TIER_BY_OFFER_ID } from "@/lib/kajabi/offers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
+import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 
 // Direct Kajabi API/webhook integration — no Zapier — per
 // TSS_App_Spec_1.md section 1 & 3.
@@ -112,6 +113,12 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      const { data: priorStudent } = await admin
+        .from("students")
+        .select("tier")
+        .eq("kajabi_customer_id", String(purchase.member_id))
+        .maybeSingle();
+
       const { data: student } = await admin
         .from("students")
         .upsert(
@@ -125,8 +132,18 @@ export async function POST(req: NextRequest) {
           },
           { onConflict: "kajabi_customer_id" },
         )
-        .select("id, profile_id")
+        .select("id, profile_id, name")
         .single();
+
+      // Flags a genuine tier change for admin awareness — Needs Attention
+      // queue, not something this route acts on itself.
+      if (student && (tier === "suite" || tier === "pro" || tier === "elite") && priorStudent?.tier !== tier) {
+        await createAttentionItem(admin, {
+          kind: `upgraded_${tier}` as AttentionKind,
+          studentId: student.id,
+          summary: `${student.name} is now on ${tier[0].toUpperCase()}${tier.slice(1)}`,
+        });
+      }
 
       // Anchors the 4-per-billing-cycle recurring-session cap (spec
       // section 4). Set only once, guarded by `.is(...null)` — this

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import AssignCoachClient from "./assign-coach-client";
 import AddCreditClient from "./add-credit-client";
+import DncToggleClient from "./dnc-toggle-client";
+import styles from "../../admin.module.css";
 
 interface Student {
   id: string;
@@ -11,6 +13,7 @@ interface Student {
   email: string;
   tier: string;
   assigned_coach_id: string | null;
+  payment_status: string;
 }
 
 interface Coach {
@@ -35,58 +38,58 @@ export default function StudentTable({
   );
 
   return (
-    <div>
+    <div className={styles.panel}>
       <input
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search students by name…"
-        className="mb-4 w-full max-w-xs rounded border px-2 py-1 text-sm"
+        className={styles.searchInput}
       />
 
-      <table className="w-full text-left text-sm">
+      <table className={styles.table}>
         <thead>
-          <tr className="border-b text-gray-500">
-            <th className="py-2">Name</th>
-            <th className="py-2">Tier</th>
-            <th className="py-2">Assigned coach</th>
-            <th className="py-2">Trial lesson</th>
-            <th className="py-2">Session credit</th>
+          <tr>
+            <th>Name</th>
+            <th>Tier</th>
+            <th>DNC</th>
+            <th>Assigned coach</th>
+            <th>Trial lesson</th>
+            <th>Session credit</th>
           </tr>
         </thead>
         <tbody>
           {filtered.map((student) => (
-            <tr key={student.id} className="border-b">
-              <td className="py-2">
-                <Link
-                  href={`/admin/students/${student.id}`}
-                  className="font-medium text-blue-600 underline"
-                >
+            <tr key={student.id}>
+              <td>
+                <Link href={`/admin/students/${student.id}`} className={styles.rowName}>
                   {student.name}
                 </Link>
-                <div className="text-xs text-gray-500">{student.email}</div>
+                <div className={styles.rowSub}>{student.email}</div>
               </td>
-              <td className="py-2 capitalize">{student.tier}</td>
-              <td className="py-2">
+              <td className={styles.mutedText} style={{ textTransform: "capitalize" }}>
+                {student.tier}
+              </td>
+              <td>
+                <DncToggleClient studentId={student.id} initialStatus={student.payment_status} />
+              </td>
+              <td>
                 <AssignCoachClient
                   studentId={student.id}
                   currentCoachId={student.assigned_coach_id}
                   coaches={coaches}
                 />
               </td>
-              <td className="py-2">
+              <td>
                 {trialSet.has(student.id) ? (
-                  <Link
-                    href={`/admin/book-trial/${student.id}`}
-                    className="text-blue-600 underline"
-                  >
+                  <Link href={`/admin/book-trial/${student.id}`} className={styles.linkBtnSmall}>
                     Book trial
                   </Link>
                 ) : (
-                  <span className="text-gray-400">—</span>
+                  <span className={styles.mutedText}>—</span>
                 )}
               </td>
-              <td className="py-2">
+              <td>
                 <AddCreditClient studentId={student.id} />
               </td>
             </tr>
@@ -95,7 +98,7 @@ export default function StudentTable({
       </table>
 
       {filtered.length === 0 && (
-        <p className="text-gray-500">
+        <p className={styles.emptyState}>
           {students.length === 0 ? "No students yet." : "No students match that search."}
         </p>
       )}

@@ -12,17 +12,20 @@ interface Note {
   coaches: { name: string } | { name: string }[] | null;
 }
 
+// A null coach_id (migration 0036) means an admin wrote this note, not
+// a coach with a since-deleted row — there's no other reason coach_id
+// would be empty.
 function coachName(note: Note): string {
   const c = note.coaches;
-  if (!c) return "Coach";
-  return Array.isArray(c) ? (c[0]?.name ?? "Coach") : c.name;
+  if (!c) return "Admin";
+  return Array.isArray(c) ? (c[0]?.name ?? "Admin") : c.name;
 }
 
 // Homework notes (TSS_App_Spec_1.md section 8) — a dated running log per
 // student, shared across whichever coach currently or previously worked
 // with them (migration 0022), not siloed per coach. `canAdd` shows the
-// composer (coaches only — students and admin get read-only, admin
-// still sees everything since it queries the same endpoint). `initialLimit`
+// composer (coaches and admin — migration 0036; students get read-only).
+// `initialLimit`
 // collapses to the most recent N with an expand toggle, per spec's
 // "shows recent ~5-8 entries by default" for the student view; omit it
 // to always show everything (coach/admin views). `dark` switches to the

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/auth/roles";
 
 // Homework notes (TSS_App_Spec_1.md section 8) — a dated running log per
 // student, visible to the student, written by whichever coach currently
@@ -48,9 +49,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ notes: notes ?? [] });
 }
 
-// Coach-only — RLS also enforces this (insert policy requires
-// coach_id = auth_coach_id()), checked again here so a non-coach gets a
-// clear error instead of a silent RLS-denied insert failure.
+// Coach or admin — RLS also enforces this (insert policy requires
+// coach_id = auth_coach_id(), or is_admin() per migration 0036), checked
+// again here so anyone else gets a clear error instead of a silent
+// RLS-denied insert failure. An admin-authored note has no coach_id
+// (nullable since migration 0036) — attributed to "Admin" in the UI
+// instead of a specific coach's name.
 export async function POST(req: NextRequest) {
   const { studentId, note, pinned } = await req.json();
 
@@ -73,15 +77,21 @@ export async function POST(req: NextRequest) {
     .eq("profile_id", user.id)
     .maybeSingle();
 
-  if (!coach) {
-    return NextResponse.json({ error: "only coaches can add homework notes" }, { status: 403 });
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!coach && !isAdminRole(profile?.role)) {
+    return NextResponse.json({ error: "only coaches or admin can add homework notes" }, { status: 403 });
   }
 
   const { data: created, error } = await supabase
     .from("homework_notes")
     .insert({
       student_id: studentId,
-      coach_id: coach.id,
+      coach_id: coach?.id ?? null,
       note: note.trim(),
       pinned: !!pinned,
     })

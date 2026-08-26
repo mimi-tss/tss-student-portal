@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
 
 // Coaches' one scheduling-adjacent write action (TSS_App_Spec_1.md
 // section 8). Relies on the "coaches can update their own sessions" RLS
@@ -24,7 +26,7 @@ export async function POST(req: NextRequest) {
     .from("sessions")
     .update({ status })
     .eq("id", sessionId)
-    .select("id")
+    .select("id, student_id, students(name)")
     .maybeSingle();
 
   if (error) {
@@ -35,6 +37,11 @@ export async function POST(req: NextRequest) {
     // erroring — a null result means either the session doesn't exist or
     // it isn't this coach's to mark.
     return NextResponse.json({ error: "session not found" }, { status: 404 });
+  }
+
+  if (status === "no-show" || status === "late-forfeit") {
+    const studentName = (data.students as unknown as { name: string } | null)?.name ?? "Student";
+    await flagConsecutiveMisses(createAdminClient(), data.student_id, studentName);
   }
 
   return NextResponse.json({ success: true });

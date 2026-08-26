@@ -11,9 +11,10 @@ export type SessionStatus =
   | "no-show"
   | "late-forfeit"
   | "cancelled-with-notice"
-  | "cancelled-no-notice";
+  | "cancelled-no-notice"
+  | "paused";
 export type MakeupCreditType = "student-fault" | "studio-planned" | "studio-emergency";
-export type Role = "student" | "coach" | "admin";
+export type Role = "student" | "coach" | "admin" | "admin_finance";
 
 export interface Student {
   id: string;

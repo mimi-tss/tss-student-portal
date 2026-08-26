@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import styles from "../../admin.module.css";
 
 export default function AddCreditClient({ studentId }: { studentId: string }) {
   const [open, setOpen] = useState(false);
@@ -41,20 +42,20 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
   if (!open) {
     return (
       <div>
-        <button onClick={() => setOpen(true)} className="text-xs text-blue-600 underline">
+        <button onClick={() => setOpen(true)} className={styles.linkBtnSmall}>
           {saved ? "Add another credit" : "Add credit"}
         </button>
-        {saved && <p className="text-xs text-green-700">Credit added</p>}
+        {saved && <p className={styles.successText}>Credit added</p>}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       <select
         value={durationMinutes}
         onChange={(e) => setDurationMinutes(Number(e.target.value))}
-        className="rounded border px-1 py-0.5 text-xs"
+        className={styles.selectSmall}
       >
         <option value={30}>30 min</option>
         <option value={60}>60 min</option>
@@ -63,19 +64,15 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
         type="date"
         value={expiresAt}
         onChange={(e) => setExpiresAt(e.target.value)}
-        className="rounded border px-1 py-0.5 text-xs"
+        className={styles.inputSmall}
       />
-      <button
-        onClick={handleAdd}
-        disabled={!expiresAt || saving}
-        className="rounded bg-black px-2 py-0.5 text-xs text-white disabled:opacity-50"
-      >
+      <button onClick={handleAdd} disabled={!expiresAt || saving} className={styles.ctaSmall}>
         {saving ? "…" : "Add"}
       </button>
-      <button onClick={() => setOpen(false)} className="text-xs text-gray-500 underline">
+      <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
         Cancel
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className={styles.errorText}>{error}</p>}
     </div>
   );
 }

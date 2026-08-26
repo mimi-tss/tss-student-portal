@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BookingClient from "@/app/(student)/student/book/booking-client";
+import styles from "../../../../admin.module.css";
 
 // Admin books a session on a student's behalf — the same month-calendar
 // UI students use themselves (BookingClient), just reachable from the
@@ -34,15 +35,16 @@ export default async function AdminBookStudentPage({
       .eq("used", false)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order("expires_at", { ascending: true, nullsFirst: false }),
-    supabase.from("coaches").select("id, name").order("name"),
+    supabase.from("coaches").select("id, name").eq("active", true).order("name"),
   ]);
 
   return (
     <div>
-      <div className="mx-auto max-w-2xl px-8 pt-8">
+      <div className={styles.wrap} style={{ paddingBottom: 0 }}>
         <Link
           href={`/admin/students/${student.id}`}
-          className="text-sm text-blue-600 underline"
+          className={styles.backLink}
+          style={{ marginBottom: 0 }}
         >
           ← Back to {student.name}
         </Link>

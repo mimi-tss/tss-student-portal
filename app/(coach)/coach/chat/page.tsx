@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import CoachChatClient from "./chat-client";
+import styles from "../../coach.module.css";
 
 // Coach side of chat (spec section 9/8) — pick an assigned student, then
 // the same ChatPanel the student sees on their end.
@@ -12,8 +13,8 @@ export default async function CoachChatPage() {
   if (!user) redirect("/login");
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-4 text-xl font-semibold">Chat</h1>
+    <main className={styles.wrap}>
+      <h1 className={styles.pageTitle}>Chat</h1>
       <CoachChatClient currentProfileId={user.id} />
     </main>
   );

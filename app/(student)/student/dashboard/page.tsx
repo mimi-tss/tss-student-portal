@@ -2,14 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
+import { listAssignedExercises } from "@/lib/exercises";
+import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
+import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName } from "@/lib/booking/credit-display";
-import { FormattedDate, FormattedTime } from "@/components/formatted-time";
+import { FormattedDate, FormattedDateTime, FormattedTime } from "@/components/formatted-time";
 import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import { currentBillingCycleRange, CYCLE_SESSION_CAP } from "@/lib/scheduling/recurring";
 import JoinButton from "./join-button";
-import CancelButton from "./cancel-button";
-import UpcomingSessions from "./upcoming-sessions";
+import StreakPing from "./streak-ping";
+import PlanRequestsClient from "./plan-requests-client";
+import SharedFolderPanel from "@/components/shared-folder-panel";
 import styles from "../../student.module.css";
 
 const TIER_LABEL: Record<string, string> = {
@@ -35,18 +39,14 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count",
     )
     .eq("profile_id", user.id)
     .single();
 
   if (!student) redirect("/login");
 
-  // Matches the cap windows enforced by the makeup_credits insert RLS
-  // policy (migration 0012) — calendar month/year, not billing-anniversary.
   const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
   const { start: cycleStart, end: cycleEnd } = currentBillingCycleRange(
     student.billing_anniversary_date,
   );
@@ -54,11 +54,11 @@ export default async function StudentDashboardPage() {
   const [
     { data: coach },
     { data: nextSession },
-    { count: monthlyCreditsUsed },
-    { count: yearlyCreditsUsed },
     { data: availableCredits },
     { count: sessionsThisCycle },
     { data: spotlightNotes },
+    { data: upcomingCycleSessions },
+    { data: pendingRequests },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -69,25 +69,13 @@ export default async function StudentDashboardPage() {
       : Promise.resolve({ data: null }),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes, is_makeup")
+      .select("id, scheduled_at, duration_minutes")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at")
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("makeup_credits")
-      .select("id", { count: "exact", head: true })
-      .eq("student_id", student.id)
-      .eq("type", "student-fault")
-      .gte("created_at", monthStart),
-    supabase
-      .from("makeup_credits")
-      .select("id", { count: "exact", head: true })
-      .eq("student_id", student.id)
-      .eq("type", "student-fault")
-      .gte("created_at", yearStart),
     // Unused, unexpired credits of any type — what's actually spendable
     // right now (see "See remaining session credits" in spec section 8).
     supabase
@@ -101,31 +89,49 @@ export default async function StudentDashboardPage() {
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("student_id", student.id)
-      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)")
+      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused)")
       .gte("scheduled_at", cycleStart.toISOString())
       .lt("scheduled_at", cycleEnd.toISOString()),
     // Most recent homework note, pinned ones first — spotlighted above
     // the full list, same source of truth (RLS-scoped to this student).
     supabase
       .from("homework_notes")
-      .select("id, note, created_at, coaches(name)")
+      .select("id, note, created_at")
       .eq("student_id", student.id)
       .order("pinned", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(1),
+    // Every scheduled session left in this billing cycle — backs the
+    // "Upcoming lessons this cycle" card next to "Your plan", which links
+    // to the scheduler rather than offering inline cancel (that's still
+    // available from the "Next session" card above).
+    supabase
+      .from("sessions")
+      .select("id, scheduled_at, duration_minutes")
+      .eq("student_id", student.id)
+      .eq("status", "scheduled")
+      .gte("scheduled_at", new Date().toISOString())
+      .lt("scheduled_at", cycleEnd.toISOString())
+      .order("scheduled_at"),
+    supabase
+      .from("student_requests")
+      .select("id")
+      .eq("student_id", student.id)
+      .eq("status", "pending")
+      .limit(1),
   ]);
 
+  const hasPendingCancelRequest = (pendingRequests?.length ?? 0) > 0;
+
   const spotlightNote = spotlightNotes?.[0] ?? null;
-  const spotlightCoachName = (() => {
-    const c = spotlightNote?.coaches as { name: string } | { name: string }[] | null | undefined;
-    if (!c) return "Coach";
-    return Array.isArray(c) ? (c[0]?.name ?? "Coach") : c.name;
-  })();
 
-  const recordings = student.drive_folder_id
-    ? await listStudentRecordings(student.drive_folder_id)
-    : [];
+  const [recordings, assignedExercises, upcomingGroupLessons] = await Promise.all([
+    student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
+    listAssignedExercises(supabase, student.id),
+    getStudentUpcomingGroupLessons(supabase, student.id),
+  ]);
 
+  const { renewalDate } = renewalInfo(student.billing_anniversary_date);
   const coachFirstName = coach?.name ? firstName(coach.name) : null;
 
   return (
@@ -161,16 +167,6 @@ export default async function StudentDashboardPage() {
                   meetLink={coach.meet_link}
                 />
               )}
-              <div style={{ marginTop: 10 }}>
-                <CancelButton
-                  key={nextSession.id}
-                  sessionId={nextSession.id}
-                  scheduledAt={nextSession.scheduled_at}
-                  isMakeup={nextSession.is_makeup}
-                  monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
-                  yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
-                />
-              </div>
             </>
           ) : (
             <>
@@ -183,19 +179,26 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
+      {upcomingGroupLessons.length > 0 && (
+        <div className={styles.note} style={{ marginTop: 16 }}>
+          <div className={styles.noteFrom}>Upcoming group lesson{upcomingGroupLessons.length > 1 ? "s" : ""}</div>
+          {upcomingGroupLessons.map((g) => (
+            <p key={g.id} className={styles.noteText} style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 14 }}>
+              {g.topic || "Group Lesson"} — <FormattedDate value={g.scheduledAt} />,{" "}
+              <FormattedTime value={g.scheduledAt} /> with Coach {g.coachName} ({g.durationMinutes} min)
+            </p>
+          ))}
+        </div>
+      )}
+
       {spotlightNote && (
         <div className={styles.note}>
-          <div className={styles.noteFrom}>Notes from Coach {spotlightCoachName}</div>
+          <div className={styles.noteFrom}>Homework Notes</div>
           <p className={styles.noteText}>{spotlightNote.note}</p>
         </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
-        <UpcomingSessions
-          monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
-          yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
-        />
-      </div>
+      <StreakPing initialCount={student.streak_count ?? 0} />
 
       <div className={styles.sectionTitle}>
         <h2>Homework notes</h2>
@@ -210,42 +213,51 @@ export default async function StudentDashboardPage() {
       </div>
       <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
 
-      <div className={styles.grid2}>
-        <div className={styles.folderPanel}>
-          <div className={styles.folderHeader}>
-            <span>🎵</span>
-            <span>Your recordings</span>
-          </div>
-          {!student.drive_folder_id && (
-            <p className={styles.emptyState}>
-              Recordings will appear here once your coach records a session.
-            </p>
-          )}
-          {student.drive_folder_id && recordings.length === 0 && (
-            <p className={styles.emptyState}>No recordings yet.</p>
-          )}
-          {recordings.length > 0 && (
-            <div className={styles.folderList}>
-              {recordings.map((file) => (
-                <a
-                  key={file.id}
-                  href={file.webViewLink ?? `https://drive.google.com/file/d/${file.id}/view`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.folderItem}
-                >
-                  <div className={styles.ficon}>🎵</div>
-                  <div className={styles.finfo}>
-                    <div className={styles.fname}>{file.name}</div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className={styles.sectionTitle}>
+        <h2>Your exercises</h2>
+      </div>
+      <div className={styles.exercisePanel}>
+        {assignedExercises.length === 0 ? (
+          <p className={styles.emptyState}>Nothing assigned yet.</p>
+        ) : (
+          <ul className={styles.exerciseList}>
+            {assignedExercises.map((ex) => (
+              <li key={ex.id} className={styles.exerciseItem}>
+                <div className={styles.exerciseIcon}>🎵</div>
+                <div className={styles.exerciseInfo}>
+                  <div className={styles.exerciseTitle}>{ex.title}</div>
+                  {ex.description && <div className={styles.exerciseMeta}>{ex.description}</div>}
+                  {ex.audioUrl && (
+                    <audio
+                      controls
+                      controlsList="nodownload noplaybackrate"
+                      src={ex.audioUrl}
+                      style={{ width: "100%", marginTop: 8 }}
+                    />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
+      <div className={styles.sectionTitle}>
+        <h2>Shared folder</h2>
+      </div>
+      {student.drive_folder_id ? (
+        <SharedFolderPanel studentId={student.id} initialFiles={recordings} />
+      ) : (
+        <p className={styles.panelText}>
+          Your shared folder will appear here once your coach records a session.
+        </p>
+      )}
+
+      <div className={styles.sectionTitle} style={{ marginTop: 44 }}>
+        <h2>Your plan</h2>
+      </div>
+      <div className={styles.grid2}>
         <div className={styles.panel}>
-          <h3>Your plan</h3>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Membership</div>
             <div className={styles.statValue}>
@@ -291,6 +303,9 @@ export default async function StudentDashboardPage() {
               ))}
             </p>
           )}
+          <p className={styles.panelText} style={{ marginTop: 10 }}>
+            Renews <FormattedDate value={renewalDate.toISOString()} />.
+          </p>
           <Link
             href="/student/book"
             className={styles.cta}
@@ -298,7 +313,26 @@ export default async function StudentDashboardPage() {
           >
             Book / reschedule a session
           </Link>
+          <PlanRequestsClient initialPending={hasPendingCancelRequest} />
         </div>
+
+        <Link href="/student/book" className={styles.panelLink}>
+          <h3>Upcoming lessons this cycle</h3>
+          {upcomingCycleSessions && upcomingCycleSessions.length > 0 ? (
+            <ul className={styles.sessionList}>
+              {upcomingCycleSessions.map((s) => (
+                <li key={s.id} className={styles.sessionListItem}>
+                  <p className={styles.statValue} style={{ margin: 0 }}>
+                    <FormattedDateTime value={s.scheduled_at} />
+                  </p>
+                  <p className={styles.panelText}>{s.duration_minutes} min</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.panelText}>Nothing else scheduled this cycle.</p>
+          )}
+        </Link>
       </div>
     </div>
   );

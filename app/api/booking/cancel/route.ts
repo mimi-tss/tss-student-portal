@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
 import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
 
 // Self-service cancellation (spec section 5/6) — see
 // lib/booking/cancel-session.ts for the actual notice/credit rules,
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, billing_anniversary_date")
+    .select("id, name, billing_anniversary_date")
     .eq("profile_id", user.id)
     .single();
 
@@ -73,6 +75,10 @@ export async function POST(req: NextRequest) {
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  if (!outcome.creditGranted) {
+    await flagConsecutiveMisses(createAdminClient(), student.id, student.name);
   }
 
   return NextResponse.json({ ...outcome, message: cancellationMessage(outcome) });

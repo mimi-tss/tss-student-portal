@@ -1,0 +1,42 @@
+/* Shared dark-theme design tokens for every dashboard (student, coach,
+   admin, admin payroll — TSS_App_Spec_1.md section 8 decision to make
+   the whole app visually consistent, not just the student side).
+   Each route group composes this into its own `.root` class rather than
+   importing it directly, so the token values can't drift between
+   student.module.css / coach.module.css / admin.module.css while each
+   still stays self-contained per the existing per-route-group CSS
+   module convention. */
+
+.tokens {
+  --bg: #101018;
+  --surface: #1a1a26;
+  --surface-2: #20202f;
+  --border: #2c2c3d;
+  --gold: #a78bfa;
+  --gold-dim: #332752;
+  --gold-text: #241a3d;
+  --coral: #e85c86;
+  --coral-text: #3d1425;
+  --text: #f4f0e6;
+  --text-muted: #9997ab;
+
+  /* Calendar slot states (components/coach-calendar.tsx) — booked
+     reuses --gold and blocked reuses --bg/--border (see below), but
+     "open" and "trial" have no existing semantic slot since the
+     student-only theme never needed a calendar grid. Trial is a solid
+     fill (not a border on the purple "booked" fill) so it reads as its
+     own state at a glance, not booked-plus-decoration. */
+  --slot-open: #3a3a4d;
+  --slot-blocked: #000000;
+  --slot-trial: #f5b942;
+  --slot-trial-text: #3d2b00;
+  --slot-group: #22c55e;
+  --slot-group-text: #052e14;
+
+  /* Reserved-but-not-bookable — a paused student's held recurring slot,
+     or a late (no-notice) cancellation. Deliberately a different grey
+     from --slot-open, which means genuinely available: these two must
+     never look the same, since one is bookable and the other isn't. */
+  --slot-held: #5b5b6b;
+  --slot-held-text: #d8d6e0;
+}

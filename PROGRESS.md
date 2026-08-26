@@ -1,0 +1,1608 @@
+# TSS Student Portal — Progress Log
+
+Working notes so nothing gets lost across sessions. Update this file at the
+end of each work session rather than relying on chat history.
+
+## ⚠️ Action needed from you
+
+**New migration 0049 not yet confirmed applied** —
+`supabase/migrations/0049_login_codes.sql` adds the `login_codes`
+table. Until this runs, the `/login` page's "send me a code" step will
+fail (the insert has nowhere to write to) — nobody can complete the
+new email-then-code flow.
+
+**New migration 0048 not yet confirmed applied** —
+`supabase/migrations/0048_payroll_coach_seen.sql` adds
+`payroll_entries.coach_seen_at`. Until this runs, a coach visiting
+`/coach/payroll` (or the dashboard querying for it) will error on the
+write/read to that column — the "new payroll" dashboard banner won't
+work. The admin confirmation popup itself (after Generate) doesn't
+depend on this column and will work regardless.
+
+**New migration 0047 not yet confirmed applied** —
+`supabase/migrations/0047_payroll_manual_adjustments.sql` adds
+`payroll_entries.is_manual`/`reason` and widens the session/group-lesson
+check constraint to allow a third "manual" case. Until this runs, the
+new "Add adjustment" panel on Finance will fail to insert (constraint
+violation).
+
+**New migration 0046 not yet confirmed applied** —
+`supabase/migrations/0046_admin_finance_role.sql` adds the `admin_finance`
+role (widens `profiles.role`'s check constraint and the `is_admin()` SQL
+function to admit it). Until this runs, you can't set any account's role
+to `admin_finance` — the insert/update will fail the old check
+constraint. No UI creates this account yet (see below) — you'll set the
+role directly in Supabase for now.
+
+**New migration 0045 not yet confirmed applied** —
+`supabase/migrations/0045_referral_bonus.sql` adds
+`students.referred_by_coach_id`. Referral tagging on the student page and
+the payroll referral-bonus calc will silently do nothing (or error) until
+this runs. Same `SLACK_WEBHOOK_URL` env var below now also gates the new
+Finance "Notify coaches" attendance nudge, not just coach-block alerts.
+
+**Migrations 0036–0044 confirmed applied.** ✅ (0044 confirmed 2026-08-25 —
+`coaches.pending_working_hours` / `pending_effective_date`, effective-dated
+availability changes on the Coaches tab.)
+
+**Env vars needed** (added to `.env.example`, not yet set for real):
+- `SLACK_WEBHOOK_URL` — for coach-block Slack notifications. Feature code
+  is done; nothing will actually post to Slack until you create the
+  webhook in Slack and set this in your real `.env`.
+- `NEXT_PUBLIC_APP_URL` — confirm this is `https://portal.tarasimonstudios.com`
+  in production. Every magic-link email's redirect URL is built from
+  this value.
+- `NEXT_PUBLIC_KAJABI_SITE_URL` — confirm this is `https://app.tarasimonstudios.com`
+  in production. Beyond the existing Courses/Community nav links, this
+  now also controls which site is allowed to iframe-embed the portal
+  (`next.config.mjs`'s CSP `frame-ancestors`) — the Kajabi Library Card
+  embeds won't render at all if this is unset or wrong.
+
+Migrations 0031–0035 confirmed applied.
+
+## Status by dashboard
+
+### Coach Dashboard — done
+Redesigned to dark theme, full mockup match. Built: re-markable attendance,
+Trial/Group/Held slot states, month view, date-range label on every view,
+exercise autocomplete, shared-folder upload, Group Lessons, pause/held-slot
+handling, "Add time off" with Slack notification. Verified via interactive
+mock: [coach dashboard preview](https://claude.ai/code/artifact/7ff528bc-bc31-48f8-bbab-dff497d71f53).
+
+### Student Dashboard + Scheduler — done
+Redesigned to match your mockup. Streak bulb bar, exercises above shared
+folder (non-downloadable player), Shared Folder header/buttons restyled,
+"Upcoming lessons this cycle" box beside "Your plan", renewal line
+simplified (no more cancel-by date — policy is cancel-anytime-before-cycle-end).
+**Cancellation now only happens on the Scheduler page** (dashboard's inline
+cancel was removed) — Scheduler also reskinned to dark theme (fixes the
+admin book-on-behalf-of page too, since `BookingClient` is shared).
+Verified via interactive mocks:
+[dashboard](https://claude.ai/code/artifact/d9a3a1e1-9473-45b9-a5ac-0911f4c82c02),
+[scheduler](https://claude.ai/code/artifact/c8e3c94f-c9be-44b8-86b5-e3b908c6307b).
+
+**Student self-service pause-request was built then reverted** — pause
+stays 100% admin-only (student contacts studio directly, admin uses the
+existing pause control on `/admin/students/[id]`). Only "Request to cancel"
+remains on the student's Your Plan panel.
+
+### Admin Dashboard — in progress, current focus
+Full redesign to a left-sidebar app (matches your mockup): Overview /
+Scheduler / Students / Coaches / Needs Review / Community, plus Exercises
+and Group Lessons (kept, not in your mockup's 6-item list). **Payroll
+removed from nav on purpose** — becomes its own separate dashboard later
+(not started).
+
+**Admin accent settled on purple (`--gold`) — same token every other
+dashboard uses.** Earlier this session a separate warm gold/amber
+`--admin-accent` token existed for admin only; a bug meant it was only
+half-applied (sidebar nav had it, but content-area `.cta`, `.ctaSmall`,
+`.linkBtn`, `.linkBtnSmall`, `.badge`, `.totalRow`, `.rowName:hover`,
+`.sidebarBtnActive`, `.statCardValue` were still on plain purple). Fixed
+the bug so gold applied everywhere, click-tested it, then you saw it
+live and preferred plain purple — so `--admin-accent` and its dim/text
+variants were removed entirely from
+[admin.module.css](app/(admin)/admin.module.css); admin now matches
+student/coach exactly. One leftover reference in
+[overview/page.tsx](app/(admin)/admin/overview/page.tsx)'s `TIER_COLORS`
+(`elite` tier dot) pointed at `--admin-accent` — changed to a plain
+hardcoded `#d4a24e` so that dot stays visually distinct from `suite`
+(which already uses `--gold`), since the token behind it is gone.
+
+Still there, not yet touched: `.naKindPause`/`.naKindTrial`/
+`.naKindCredit` in the Needs-Attention tag legend now all resolve to
+the same purple `--gold` (they used to be 3 distinct hues) — worth
+a look if those tags need to stay visually distinguishable.
+`admin.module.css` also still carries ~80 lines of dead CSS from the
+pre-sidebar top-header design (`.header`, `.logoMark`,
+`.logoPlaceholder`, `.nav`, `.navLink`, `.navLinkActive`,
+`.headerRight`, `.roleBadge`) — `admin-nav.tsx` doesn't reference any
+of it anymore.
+
+The older admin artifact previews linked below (overview / dashboard /
+payroll) were built while gold was still the plan — their accent color
+no longer matches the real app now that it's plain purple; only the
+[admin student detail preview](https://claude.ai/code/artifact/85962c80-a780-41df-a6f2-ebca2344361e)
+below has been republished with the correction.
+
+**Needs Attention / Needs Review — the big new piece:**
+- New `attention_items` table (migration 0035): every item has a real
+  lifecycle (`needs_action` → `in_progress` → `resolved`) with admin notes.
+  Nothing auto-resolves — matches your "everything here admin has to
+  manually handle" instruction.
+- 14 trigger kinds, all wired to real data/events (see
+  `lib/admin/attention-items.ts` for the authoritative list + logic):
+  DNC, cancel request, trial unbooked, credit expiring (<5 days), upgraded
+  to Suite/Pro/Elite, coach added a block, no-show/late-cancel streak
+  (1st/2nd/3rd in a row — covers both coach-marked no-shows and student
+  self-service late cancels), no weekly recurring schedule (Pro/Elite),
+  hold ending soon (<7 days), inactive 10+ days.
+- Event hooks live in: `app/api/coach/blocks`, `app/api/coach/mark-attendance`,
+  `app/api/booking/cancel`, `app/api/webhooks/kajabi`, `app/api/student/requests`.
+  Condition-driven kinds are reconciled in `syncComputedAttentionItems()`,
+  called on every Needs Review/Overview read.
+- Overview page shows top-5 preview + live stat cards (active students/tier
+  breakdown, unbooked trials, DNC count, needs-action count) — stat cards
+  are live truth, independent of whether admin has "resolved" a related
+  queue item.
+- Layout order (per your last request): Needs Attention (full width) →
+  Coach Schedule Today → Students preview table.
+
+Verified via interactive mock:
+[admin overview](https://claude.ai/code/artifact/22399261-3cad-4d5e-b804-f9e3893dfb32)
+(also covers Students/Coaches/Exercises/Group Lessons views — see
+[admin dashboard preview](https://claude.ai/code/artifact/8cb4b5d8-bc41-43f6-a3fb-929896bd3eb0)
+and [admin payroll preview](https://claude.ai/code/artifact/bfee92a1-9352-44ab-802c-50690f1c7110)
+for the rest, still accurate for Students/Coaches/Payroll UI even though
+Payroll is being split out).
+
+Admin Student Detail page click-tested this session (pause/resume,
+weekly-schedule change, next-session cancel/staff-cancel, reassign
+coach, show-all-sessions) — all correct on the final purple accent:
+[admin student detail preview](https://claude.ai/code/artifact/85962c80-a780-41df-a6f2-ebca2344361e).
+
+**Admin now has coach-parity on a student's detail page** — per your
+ask, admin can do everything a coach can from there: add homework
+notes, chat with the student, and assign exercises (shared folder
+upload was already there). Changes:
+- New migration `0036_admin_coach_parity.sql` — makes
+  `homework_notes.coach_id` and `exercise_assignments.assigned_by_coach_id`
+  nullable (admin has no coaches row to attribute to), adds an admin
+  insert policy for homework notes, and widens the chat-message /
+  chat-attachment insert policies to admit `is_admin()` (previously
+  admin could read chat but not send — read policies already had
+  `is_admin()`, write policies didn't).
+- [app/api/notes/route.ts](app/api/notes/route.ts) POST and the new
+  [app/api/exercises/assign/route.ts](app/api/exercises/assign/route.ts)
+  (replaces the old coach-only `app/api/coach/assign-exercise`) now
+  accept admin as well as coach.
+- An admin-authored homework note shows "Admin" instead of a coach name
+  ([components/notes-panel.tsx](components/notes-panel.tsx)); an
+  admin's chat message resolves to "Admin" too (anyone not matched to
+  a coach or student row, in
+  [app/api/chat/messages/route.ts](app/api/chat/messages/route.ts) —
+  cheaper and RLS-safe vs. a profiles lookup, which a non-admin viewer
+  couldn't read anyway).
+- The exercise-assign widget moved from a coach-only
+  `assign-exercise-client.tsx` to a shared
+  [components/assign-exercise-panel.tsx](components/assign-exercise-panel.tsx)
+  (Tailwind var()-based, same reasoning as `shared-folder-panel.tsx` —
+  needs to render under any route group's theme root) so both coach
+  dashboard and the admin student page use the same one; removed the
+  now-dead autocomplete CSS from `coach.module.css`.
+- [app/(admin)/admin/students/[studentId]/page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>)
+  now renders Homework Notes (editable), Chat, and Exercises panels
+  alongside the existing (already-admin-capable) Shared Folder panel.
+- Verified via the same
+  [admin student detail preview](https://claude.ai/code/artifact/85962c80-a780-41df-a6f2-ebca2344361e)
+  (mock now includes working add-note/chat-send/assign-exercise
+  interactions) — real end-to-end write still blocked until migration
+  0036 is applied.
+
+**Birthday / "with coach since" — no longer live inline inputs, and the
+blank fallback now shows an actual date.** You flagged these as too easy
+to change by accident (birthday used to save on blur — a stray click
+away from the field silently wrote it) and the coach-since field just
+showed a blank `yyyy-mm-dd` box with "blank = auto from session history"
+instead of the actual date. Now:
+- Both are click-to-edit — read-only text with an "Edit" link that
+  reveals the date input plus explicit Save/Cancel; nothing writes
+  without an explicit Save. ([birth-date-client.tsx](<app/(admin)/admin/students/[studentId]/birth-date-client.tsx>),
+  [coach-start-date-client.tsx](<app/(admin)/admin/students/[studentId]/coach-start-date-client.tsx>))
+- "With coach since" now computes the same fallback the coach dashboard
+  already used server-side (earliest session this coach actually
+  taught — `lib/coach/dashboard-data.ts`'s own logic, mirrored in
+  [page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>)) and
+  shows that date labeled "(auto — first session)" when no admin
+  override is set, instead of a blank field. A "Clear override" action
+  lets admin drop back to the auto value.
+- New [lib/format-date.ts](lib/format-date.ts): `formatPlainDate` for
+  these plain `date` columns (birth_date, coach_start_date_override) —
+  deliberately not routed through the existing `FormattedDate`/timezone
+  helpers, which parse as a UTC instant and would show the day *before*
+  what's stored once converted to Eastern.
+
+**New "with us for X years Y months" tenure line** — computed from
+`students.created_at` via `formatTenure()` (same new file). Assumes
+enrollment date ≈ the row's creation date; flag if any migrated
+students' real start predates their row (same edge case birth-date/
+coach-start-date already have an override for — this one doesn't yet,
+since nothing asked for an override on it).
+
+**New Staff Notes section — admin-only, never visible to coach or
+student.** New table (migration `0037_staff_notes.sql`), separate from
+`homework_notes` on purpose — kept as its own table with `is_admin()`-
+only RLS on both read and write, rather than a "visibility" flag on the
+shared table, so private staff content is never one policy bug away
+from leaking into a coach- or student-facing query. New
+[app/api/admin/staff-notes/route.ts](app/api/admin/staff-notes/route.ts)
+and [staff-notes-client.tsx](<app/(admin)/admin/students/[studentId]/staff-notes-client.tsx>),
+rendered as its own panel at the bottom of the student page with a
+coral "Admin only" badge.
+
+**Top info block redesigned as a card, matching the student dashboard's
+"Your Plan" panel** — you called the old inline text row "clunky."
+Email/membership/coach/birthday/coach-since/tenure are now
+label-left-value-right rows (`.statRow`/`.statKey`/`.statValue`, new in
+[admin.module.css](app/(admin)/admin.module.css), copied from
+`student.module.css`'s own "Your Plan" card) inside one panel, instead
+of a run-on paragraph of muted text.
+
+**Pause replaced by a Start / Pause / Stop lifecycle bar** — new
+[subscription-lifecycle-client.tsx](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>),
+old `pause-client.tsx` deleted (fully superseded). Each button reveals
+its own form below rather than anything being a live/always-editable
+field, same reasoning as the birthday/coach-since fix above:
+- **Start** — enabled only when the subscription is active, a coach is
+  assigned, and no weekly schedule exists yet. Reveals a form (day/
+  time/coach/duration/start date) that posts to the same
+  `/api/admin/recurring-schedule` the existing Weekly Schedule panel
+  uses. To avoid two ways to do the same thing, the Weekly Schedule
+  panel's own "Set weekly schedule" link is suppressed while the
+  subscription is active (new `hideStartPrompt` prop on
+  [recurring-schedule-client.tsx](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>))
+  — Start is the only entry point during that window; once a schedule
+  exists, Start naturally disables and Weekly Schedule's own
+  Change/Remove takes over.
+- **Pause** — reveals a from/to date form plus the current billing
+  cycle's renewal date (`renewalInfo()`, [lib/billing/renewal.ts](lib/billing/renewal.ts) —
+  already existed, just hadn't been surfaced here) and a warning that
+  pausing can't refund a cycle already billed, only stop the next one.
+  When already paused, the button shows the current pause dates and a
+  Resume action instead — same `/api/admin/set-pause-status` endpoint
+  as before.
+- **Stop** — this one needed a real design decision, see below.
+
+**Stop / cancellation — clarified with you mid-build:** initially built
+around subscription_status flipping to 'cancelled' automatically, but
+you corrected that — **Kajabi owns actual cancellation, this app never
+sees it happen**, and admin often tries to retain a student rather than
+just letting a cancellation proceed. So Stop now:
+- With no cancellation on file: reveals a reason field (required) and a
+  danger-styled "Flag cancellation" button. This does **not** cancel
+  anything — it creates a `student_requests` row (same shape as the
+  existing student self-service "Request to cancel" flow, just admin-
+  initiated — new [app/api/admin/flag-cancellation/route.ts](app/api/admin/flag-cancellation/route.ts))
+  and a Needs Review item, so it can't be missed, exactly like a
+  student-submitted request already does.
+- With a cancellation pending or approved: shows the reason, the
+  billing-cycle-end date, and the last scheduled session at/before that
+  date (auto-computed, admin can override and save — new
+  [app/api/admin/set-last-session-override/route.ts](app/api/admin/set-last-session-override/route.ts),
+  backed by the new `last_session_override` column). A "Mark retained"
+  button flips it to `student_requests.status = 'denied'` instead of
+  the usual 'approved' — extended
+  [resolveAttentionItem()](lib/admin/attention-items.ts) with an
+  optional `requestOutcome` param (defaults to `'approved'`, so every
+  existing call site is unaffected) so retention doesn't need a
+  parallel resolution path.
+- **New backend behavior, not just UI:** if a cancellation is still
+  pending or approved (not retained/denied) once the *next* billing
+  cycle starts, `materializeRecurringSessions()`
+  ([lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)) now
+  stops generating any further sessions for that student past the
+  cycle's effective-end date — same mechanism as the existing pause-
+  window filter, just gated on an unresolved cancellation instead. This
+  is what makes "if not resolved, no sessions populate next cycle"
+  happen automatically without admin having to remember to remove the
+  recurring schedule by hand.
+
+**Stop panel follow-ups from your feedback:** the "Mark retained" button
+had no counterpart — added a "Mark cancelled (confirmed)" button right
+next to it (calls the same `/api/admin/attention-items/resolve` with
+the default `requestOutcome: "approved"`), and removed the "Resolve in
+Needs Review" link entirely — you don't need it, the cancellation
+already surfaces in Needs Review/Overview automatically the moment it's
+flagged (same `attention_items` row every other queue item uses), no
+extra wiring needed for that part.
+
+**Answering "does it auto-flag when a student cancels in Kajabi": yes,
+now — it didn't before.** There's no Kajabi *webhook* for cancellation
+(confirmed in the code comments — Kajabi doesn't send one from either
+of its two webhook surfaces). What already existed is a 5-minute
+polling cron, [app/api/cron/kajabi-sync/route.ts](app/api/cron/kajabi-sync/route.ts),
+that checks whether each student still holds an active tier offer in
+Kajabi and flips `subscription_status` to `cancelled` if not — but it
+did this **silently**, no admin visibility at all, which is the gap you
+were actually asking about. Now, the moment that cron detects a
+cancellation, it also creates the same `student_requests` +
+`attention_items` row the manual Stop flow does (status `approved`
+outright, since Kajabi already confirmed it — nothing to review, just
+to act on), so it lands in Needs Review/Overview exactly like a
+manually-flagged one, and "Mark retained" still works there if you win
+the student back.
+
+**Coaches can now see when their own student is flagged cancelling
+too** — a coral warning banner on the coach dashboard's student detail
+panel (whichever of the three sources flagged it: student self-service,
+admin-flagged, or Kajabi-detected), showing the reason and billing-end
+date, so they have a shot at retaining the student themselves. New
+`cancellationFlag` field on `getStudentSnapshot()`
+([lib/coach/dashboard-data.ts](lib/coach/dashboard-data.ts)) and its
+banner in
+[dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>);
+migration `0039_coach_cancellation_visibility.sql` gives coaches read
+access to `student_requests` for their own students (previously only
+student-own-row and admin had any policy on that table at all). Not
+separately re-verified in the interactive mock this round — small,
+type-checked, isolated addition; only the admin student-page mock was
+updated.
+
+**Two more lifecycle-bar fixes from your feedback, both click-tested in
+the mock:**
+- **Start** now reads "Recurring booked" (not just greyed-out "Start")
+  whenever a weekly schedule already exists, so the disabled state is
+  legible on its own — you don't have to notice a subtle opacity change
+  to know why it's inactive.
+- **Unpause needs a confirmation step now** — clicking it while paused
+  no longer resumes instantly. It shows "Make sure student is aware of
+  unpause and has paid for the unpause" with a Yes/Never-mind choice
+  first, mirroring the confirm-step pattern the Cancel/Staff-cancel
+  buttons already use elsewhere on this page. Paused state also now
+  reads clearly as a from→to range and the button itself relabels to
+  "Paused" while active.
+
+**Pause mechanics filled in — this was previously just a status flag
+with no actual session-level effect.** You described the real business
+rules; here's what was missing and what's now built:
+- **The gap:** `set-pause-status` only ever flipped
+  `students.subscription_status`. It never touched any session rows —
+  so a student paused *after* their next several weeks of recurring
+  sessions were already materialized (which happens routinely, since
+  `materializeRecurringSessions` runs ahead of time) would still have
+  those sessions sitting there as normal `'scheduled'` rows: visible on
+  the student's own dashboard, needing attendance marking, and payable
+  to the coach. None of that matches "student can't attend, slot stays
+  held, coach isn't paid for it."
+- **New `'paused'` session status** (migration
+  `0040_paused_session_status.sql`) — deliberately not a reuse of
+  `'cancelled-no-notice'`, even though it gets the identical grey
+  "held, no booking, no attendance" treatment on the coach calendar
+  ([components/coach-calendar.tsx](components/coach-calendar.tsx),
+  [dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>)):
+  `cancelled-no-notice` is one of `lib/payroll/calculate.ts`'s
+  `PAID_STATUSES` (a genuine late cancellation still compensates the
+  coach), and a pause explicitly should not. `'paused'` is simply never
+  added to that list, so it's unpaid by construction — no special-case
+  branch in payroll needed.
+- [app/api/admin/set-pause-status/route.ts](app/api/admin/set-pause-status/route.ts) —
+  now, on pausing, finds every `'scheduled'` session in the pause
+  window and flips it to `'paused'`. Any makeup credit one of those
+  sessions had spent gets reinstated (`used: false`,
+  `used_session_id: null`) — same reinstatement
+  [lib/booking/cancel-session.ts](lib/booking/cancel-session.ts) already
+  does for a within-notice cancellation, so a credit is never silently
+  lost to a pause.
+- **Booking blocked while paused**
+  ([app/api/booking/book/route.ts](app/api/booking/book/route.ts)) —
+  there was no check at all before; a paused student's self-service
+  booking (including spending a makeup credit) now 403s with "Your
+  account is paused — sessions and makeup credits can't be booked until
+  you're active again." Admin can still override (same "admin ⊇
+  student" exemption this route already had for the credit-required
+  rule).
+- **Cycle-cap counts** (student dashboard, coach snapshot, admin
+  overview's "today's schedule") all now exclude `'paused'` sessions the
+  same way they already excluded both cancelled statuses — a held
+  session was never actually used, so it shouldn't count against the
+  4-per-cycle cap or show as a real session happening today.
+- **Unaffected on purpose:** `expires_at` on an untouched (not-yet-
+  booked) makeup credit is never touched by any of this — it still
+  expires on schedule whether the student is paused or not, matching
+  what you described. Un-pausing doesn't retroactively un-hold past
+  `'paused'` sessions either — same "a cancelled slot never silently
+  reappears" principle `materializeRecurringSessions` already applies
+  to every other cancellation; if admin resumes early and wants a
+  specific already-held slot back, that's a manual rebook via "Book a
+  session," not automatic.
+- Not separately re-verified in the interactive mock — this round is
+  entirely session-status/booking-eligibility backend behavior with no
+  new admin-student-page UI; type-checked clean, verified by reading
+  every place `cancelled-no-notice` is already handled and mirroring it
+  for the new status everywhere that logic needs to agree (payroll
+  being the one deliberate exception).
+
+**Unpause date now actually does something — click-tested in the
+mock.** The pause form's "To" field already existed, but nothing ever
+read it to auto-resume the student; admin had to remember to come back
+and click Unpause by hand. Now:
+- New `autoResumeExpiredPauses()`
+  ([lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)), called
+  at the start of every daily `materialize-recurring` cron run (before
+  it generates new sessions, so a student whose pause just expired
+  starts refilling on the same run) — flips anyone whose `paused_end`
+  has passed back to `active` and clears both pause fields, same as a
+  manual Unpause.
+- The already-paused view on the Pause panel now has its own editable
+  "Unpause on" date, separate from the immediate "Unpause now" action —
+  admin can set or change a scheduled resume date without fully
+  unpausing and re-pausing. Saving it re-POSTs to the same
+  [set-pause-status](app/api/admin/set-pause-status/route.ts) endpoint
+  with the existing `pausedStart` and the new `pausedEnd`.
+- The daily cron cadence (`0 10 * * *`, ~6am ET —
+  [.github/workflows/materialize-recurring.yml](.github/workflows/materialize-recurring.yml))
+  means auto-resume has up to ~24h latency, not minute-precision — fine
+  for a date-only field, but worth knowing if a same-day resume is ever
+  needed (use "Unpause now" for that).
+
+**Staff Notes moved beside the student info card, top of page** — was a
+full-width panel at the very bottom, now sits in a two-column row next
+to Email/Membership/Coach/etc, reusing the same `.overviewGrid`
+1.4fr/1fr responsive pattern already used on the admin Overview page
+(stacks to one column under 900px). Click-tested at desktop width in
+the mock.
+
+**Admin Overview mock refreshed — no real code changes, this was a
+stale-preview cleanup.** You asked to see it again; it still had the
+old gold `--admin-accent` styling from before the purple revert, and
+its Needs Attention examples predated the cancellation-flag work. Now
+purple throughout (elite tier kept its own distinct amber, same as the
+real `TIER_COLORS.elite` literal), and the Needs Attention list
+demonstrates all three cancellation sources side by side — student
+self-service ("Submitted via form"), admin-flagged via the Stop panel,
+and Kajabi-detected. Also made the Students preview table's names
+clickable (previously inert `<td>` text) — they open the student
+detail mock, same fix applied to the Needs Attention "Review" links and
+row names on the other mock earlier. Republished to the same
+[admin overview](https://claude.ai/code/artifact/22399261-3cad-4d5e-b804-f9e3893dfb32)
+link rather than creating a new one. Full click-test: resolved an item
+from the Overview preview, opened Needs Review, moved items between
+tabs — all still work exactly as before, this was a palette + content
+refresh only, not a rebuild.
+
+### Scheduler tab — retired
+Reviewed first (see the old preview note below, kept for history), parked,
+then you asked for suggestions once Coaches tab had grown into a full
+scheduling/management surface. The honest read: Coaches tab's per-coach
+Week mode already reuses `components/coach-calendar.tsx` verbatim, so
+picking one coach there gives Day/Week/Month "for free" — the exact
+browsing experience Scheduler offered, plus metrics, click-to-book,
+click-to-cancel, availability editing, and coach add/remove that Scheduler
+never had. Nothing Scheduler could do was missing from Coaches tab. Gave
+you three options (parity build-out / retire / keep deliberately
+lightweight) — you chose **retire**.
+
+Removed: `app/(admin)/admin/schedules/page.tsx` and `schedules-client.tsx`
+(confirmed nothing else imported them — `CoachCalendar` and
+`AddCoachBlockForm` are shared with Coaches tab, so nothing's orphaned),
+the "Scheduler" entry in [app/(admin)/admin-nav.tsx](<app/(admin)/admin-nav.tsx>).
+Repointed two "go look at the coach calendar" links that used to point at
+`/admin/schedules` — [dashboard/page.tsx](<app/(admin)/admin/dashboard/page.tsx>)'s
+"View coach schedules →" and [overview/page.tsx](<app/(admin)/admin/overview/page.tsx>)'s
+"Full week →" — to `/admin/coaches` instead. No redirect shim added for
+the old URL (small internal tool, one operator, not a public app with
+bookmarks to protect) — `/admin/schedules` now 404s, expected.
+`npx tsc --noEmit -p .` clean, no dev-server errors.
+
+The old review-pass artifact
+([admin scheduler preview](https://claude.ai/code/artifact/0a0c2ab3-b200-432e-9dfe-a3be06e0a916))
+is now stale/obsolete — it shows a page that no longer exists, kept only
+as a historical record of what was reviewed before the retire decision.
+
+### Coaches tab — rebuilt from a read-only roster into a working day-scheduler
+The old page (name/email/timezone/**rate**/students/visibility table,
+nothing clickable) is gone. New primary view: every coach as a column,
+one day at a time, same slot-color language as the Scheduler page
+(Available/Scheduled/Trial/Group/Blocked/Held). Mock, click-tested end
+to end: [admin coaches preview](https://claude.ai/code/artifact/63e21465-1173-41c1-81a2-a46cbd377eae).
+
+- **Pay rate removed from view, per your ask** — `page.tsx` no longer
+  even selects `hourly_rate`. Still exists on `coaches` and still drives
+  Payroll; just never rendered here anymore.
+- **New bulk endpoint**
+  [app/api/admin/all-coaches-day/route.ts](app/api/admin/all-coaches-day/route.ts) —
+  every coach's sessions/blocks/group-lessons/held-slots for one day at
+  once (loops the same per-coach shape
+  [coach-schedule](app/api/admin/coach-schedule/route.ts) already
+  returns, so the two stay trivially in sync).
+- **Click an open slot → book with a makeup credit, or block it** — you
+  confirmed "click any open slot" over "click an existing block." Books
+  through the *existing* `/api/booking/book` (already supported
+  admin-on-behalf-of + `makeupCreditId`, nothing new needed there) via a
+  new student-search-then-credit-pick panel, backed by a new
+  [app/api/admin/students-with-credits/route.ts](app/api/admin/students-with-credits/route.ts)
+  (only lists students who actually have an unused, unexpired credit —
+  nothing else to pick). "Block this time instead" is the same action
+  for a single 30-minute slot.
+- **Vacation / longer time off** — same
+  `/api/admin/coach-blocks` a single-slot block uses, just a longer
+  start/end range; the form itself
+  ([components/add-coach-block-form.tsx](components/add-coach-block-form.tsx))
+  is now a **shared** component instead of living only in
+  `schedules-client.tsx` — the Scheduler page was quietly switched to
+  use the same one, so there's one block-creation form, not two
+  drifting copies.
+- **New: editable weekly availability** — didn't exist in any form
+  before. Per-day, per-window editor (`+ Add window` / `Remove`,
+  multiple windows per day supported since `working_hours` already
+  allows it) posting to new
+  [app/api/admin/coach-working-hours/route.ts](app/api/admin/coach-working-hours/route.ts).
+- **Real gap caught before it shipped:** `coaches` has only ever had
+  SELECT policies (checked all the way back through migration 0022) —
+  **no UPDATE policy existed at all**. Without catching this, the
+  working-hours save would have silently written to zero rows (Supabase
+  doesn't surface an RLS-blocked update as an error) and looked like it
+  worked. New migration
+  [0041_admin_coach_updates.sql](supabase/migrations/0041_admin_coach_updates.sql)
+  adds `is_admin()` UPDATE access.
+- Trimmed roster (Name/Email/Timezone/Students/Visibility, no Rate)
+  still sits below the grid for reference — same click-test as before,
+  just missing the Rate column now.
+
+**Coach filter + Week view added, same day.** All-coaches columns is
+now one mode, not the only one:
+- New pill row — "All coaches" or a specific coach. Picking a coach
+  narrows the grid to that one column (the grid-rendering code didn't
+  need to change at all for this — it already just renders however many
+  schedules it's given, so filtering the array to one entry falls out
+  for free).
+- **Week only offered once one coach is picked** — matches what you
+  asked for exactly ("only select 1 coach"). Rather than build a second
+  week-grid renderer, single-coach Week mode reuses the *exact* same
+  [components/coach-calendar.tsx](components/coach-calendar.tsx) the
+  Scheduler page already runs — same component, same
+  `/api/admin/coach-schedule` endpoint, so it also comes with Month for
+  free (not asked for, but free from reuse rather than new scope) and
+  never drifts from Scheduler's own behavior. "Edit availability"/"Add
+  time off" move up next to the Day/Week toggle in that mode, since the
+  per-column header buttons the day-grid uses don't exist inside
+  `CoachCalendar`.
+- Picking "All coaches" always snaps the view back to Day — Week has no
+  meaning across multiple coaches (would need coaches × 7 columns).
+- Click-tested: narrow to one coach → grid drops to a single column →
+  switch to Week → shows that coach's real week grid → back to All
+  coaches → resets cleanly to the 3-column day view.
+
+**Week prev/next-arrow question — already worked, no code change needed.**
+You asked for ←/→ on Week view to move between weeks. Turns out
+`CoachCalendar` already has its own ←/Today/→ nav built in (it's had
+this since it was written for the coach dashboard/Scheduler) — its own
+`anchorKey` state moves ±7 days in week mode, completely independent of
+the outer page's day-view date. Since single-coach Week mode reuses that
+component wholesale, this already worked in the real app; the gap was
+only in the mock, which had a hand-rolled week grid with zero nav
+controls. Fixed the mock: added its own ←/Today/→ (separate state from
+the day view's, matching the real component's independence), navigating
+shows the correct date range in the header and an empty grid for weeks
+with no demo data (rather than fabricating events for a week that
+hasn't happened).
+
+**Add/remove coach — built.** You also asked how this interacts with
+Kajabi. Short answer: **it doesn't, at all.** Checked
+[app/api/webhooks/kajabi/route.ts](app/api/webhooks/kajabi/route.ts) —
+Kajabi only ever fires for *student* purchases; there's no coach concept
+on Kajabi's side whatsoever (no `kajabi_customer_id`-equivalent field on
+`coaches`, nothing in the webhook that touches the `coaches` table).
+Coaches have always been pure internal staff, admin-provisioned
+directly — this just builds the UI/API for that, mirroring
+[app/api/admin/provision-student/route.ts](app/api/admin/provision-student/route.ts)'s
+manual (non-Kajabi) path almost exactly:
+- New [app/api/admin/provision-coach/route.ts](app/api/admin/provision-coach/route.ts) —
+  admin-only, inserts a `coaches` row, creates the Supabase auth user +
+  `profiles` row (role `coach`), then emails a portal login link via the
+  same `generateLink`-and-send-it-yourself pattern
+  `app/api/auth/kajabi/login/route.ts` already uses for students
+  (reused for consistency, not because Kajabi is involved).
+- **Never a hard delete.** `sessions`, `coach_blocks`, `homework_notes`,
+  payroll rows all reference `coaches.id` with real history that must
+  survive. "Remove" sets a new `active` boolean to `false` instead —
+  drops the coach from every *new*-assignment picker (assign-coach,
+  provision-student, admin booking, reassign-session-coach, the Coaches
+  page's own day/week grid) while every past record stays exactly as it
+  was. New migration
+  [0042_coach_active_status.sql](supabase/migrations/0042_coach_active_status.sql)
+  adds the column; the existing `0041` admin-UPDATE policy already
+  covers writing to it.
+- New [app/api/admin/coach-active/route.ts](app/api/admin/coach-active/route.ts) —
+  toggles it, admin-only.
+- Coaches page: "+ Add coach" next to the filter pills opens a form
+  (name/email/timezone/hourly rate); roster table gets Status +
+  Remove/Reactivate columns. Removing a coach with assigned students
+  shows a confirm warning (reassign separately — removing only stops
+  new bookings) rather than silently orphaning them.
+- `npx tsc --noEmit -p .` clean. Click-tested in the mock: added a
+  coach → appears in pills + roster; removed a coach with 0 students →
+  drops from pills/grid, roster shows Inactive/Reactivate. (The
+  confirm-dialog warning path for removing a coach *with* students is
+  real-code-only — the mock's `window.confirm` auto-cancels under
+  browser automation, so that specific branch wasn't click-tested, only
+  read-verified.)
+
+**Multi-coach selection + view-scoped metrics, same day.** Two more asks:
+
+- *"Select multiple coaches, view side by side"* — the coach filter pills
+  went from single-select to toggle-each-on-its-own multi-select
+  (`selectedCoachIds: Set<string>` in
+  [all-coaches-day-client.tsx](app/(admin)/admin/coaches/all-coaches-day-client.tsx)
+  instead of a single id). Day view's grid already just renders however
+  many schedules it's handed, so picking e.g. Jordan + Sam needed no
+  grid changes — the columns fall out for free, same as narrowing to one
+  coach did originally. Week still requires narrowing to exactly one
+  coach (unchanged reasoning: coaches × 7 columns stops being readable
+  past one) — picking a second coach while in Week silently drops back
+  to Day rather than erroring.
+- *Metrics boxes below the calendar* — attended / no-shows / DNC
+  students seen / schedule utilization, scoped to whatever's actually on
+  screen: the day view's date + whichever coaches are selected (or all
+  active, if none), or — for Week — the exact range `CoachCalendar` is
+  currently showing. That range lives in `CoachCalendar`'s own private
+  `anchorKey` state, not the parent's; wiring it out only needed a
+  callback prop, `onRangeChange`, which **already existed** — it was
+  built earlier for My Schedule's payroll summary
+  ([app/(coach)/coach/schedule/schedule-client.tsx](app/(coach)/coach/schedule/schedule-client.tsx))
+  and nothing here needed to touch `CoachCalendar` itself.
+  - New [app/api/admin/coach-metrics/route.ts](app/api/admin/coach-metrics/route.ts) —
+    takes `coachIds` (empty = all active) + `start`/`end`, returns
+    attended/no-show counts (`sessions.status`), distinct DNC students
+    seen (`students.payment_status = 'dnc'`, joined off the sessions in
+    range — group-lesson attendees' DNC status isn't counted, kept out
+    of scope), and utilization. Utilization walks each coach's
+    working-hours windows day by day (same approach
+    `app/api/booking/slots/route.ts` uses to find open slots): bookable
+    minutes = working hours minus blocked time; occupied = time actually
+    held by a session, group lesson, or a paused student's held slot. A
+    with-notice cancellation doesn't count as occupied, matching
+    booking/slots' own rule that it frees the slot back up.
+  - Same posture as the sibling `all-coaches-day` route — RLS-gated, no
+    explicit admin-role check in the route itself.
+- `npx tsc --noEmit -p .` clean, no dev-server errors. Click-tested via
+  the mock (the ref-based click tool got flaky/queued on this page mid-session
+  — worked around by driving the exact same `onclick` handlers through
+  the console instead, which exercises identical code paths): selecting
+  Jordan + Sam → 2-column grid, metrics scope reads "Today — 2 coaches",
+  numbers change to match just those two (DNC count correctly drops to 0
+  since the DNC-flagged demo student isn't in that subset); narrowing to
+  solo Jordan → Week becomes available, "This week" metrics; navigating
+  to a future week zeroes out attended/no-show/utilization rather than
+  fabricating activity for a week that hasn't happened yet.
+
+**Bug report: availability/time-off "not working," booking-via-makeup
+still unreachable, plus a new click-to-cancel ask.** You reported four
+things — here's what each one turned out to be:
+
+- *"Can't add windows, remove time on coach availability"* — the
+  add/remove-window buttons themselves were never wired up in the
+  **mock** (`openAvailability()` rendered plain `<button>`s with no
+  `onclick` at all — a leftover from when that panel was a static
+  preview). Fixed: the mock now keeps real per-coach demo state and the
+  buttons actually add/remove/edit windows.
+  Separately, on the **real app**: `app/api/admin/coach-working-hours/route.ts`'s
+  `UPDATE` can be silently blocked by RLS and still report success — the
+  exact failure mode migration
+  [0041_admin_coach_updates.sql](supabase/migrations/0041_admin_coach_updates.sql)'s
+  own comment already predicted, if that migration hasn't actually been
+  run on your Supabase project yet. Hardened the route (and
+  `app/api/admin/coach-active/route.ts`, same risk) to check
+  `.select("id")` on the update and return a real 403 naming the
+  migration if zero rows came back, instead of lying about success.
+  **If you haven't confirmed migrations 0036–0042 are applied yet, that's
+  almost certainly why this — and probably #3 below — aren't working on
+  the real app.**
+- *"Time off functionality not working... make it easy... maybe a small
+  calendar popup"* — rebuilt
+  [components/add-coach-block-form.tsx](components/add-coach-block-form.tsx):
+  the two `datetime-local` fields (finicky, inconsistent calendar UI
+  across browsers) are now a `type="date"` field (real native calendar
+  popup) plus separate start/end time fields, with "All day" and
+  "Multiple days" checkboxes so the common one-afternoon-off case stays
+  two fields. Mock updated to match, including the same validation.
+- *"Still can't click on coach availability to add a student makeup"* —
+  the click-to-book handler itself was already correct
+  (`cellState()` → `type: "available"` → `onClick` opens
+  `BookWithCreditPanel`); if it's not working on the real app, the most
+  likely explanation is upstream of this: no coach has any
+  `working_hours` actually saved (same migration-0041 issue above), so
+  every cell resolves to `"blank"`, not `"available"` — there's simply
+  nothing to click yet. Also worth checking: `all-coaches-day` (and
+  three other admin queries) now filter `coaches.active = true`
+  (added when add/remove-coach shipped) — if migration
+  [0042_coach_active_status.sql](supabase/migrations/0042_coach_active_status.sql)
+  hasn't run yet, that column doesn't exist and those queries fail
+  outright, which would also empty out the whole Coaches page. **Please
+  confirm 0036–0042 are applied and let me know if this is still stuck
+  once they are** — that'll tell us whether there's a second, different
+  bug still to find.
+- *"Click on the student and cancel or staff-cancel that lesson"* — new.
+  Session cells in the day-grid are now clickable too (any coach, any
+  scheduled session) and open a panel reusing the exact same
+  [AdminCancelButtons](<app/(admin)/admin/students/[studentId]/admin-cancel-buttons.tsx>)
+  component the student detail page already uses — same Cancel vs. Staff
+  Cancel choice, same credit-cap preview, same audit logging. New
+  [app/api/admin/student-cancel-caps/route.ts](app/api/admin/student-cancel-caps/route.ts)
+  feeds it the monthly/yearly cap numbers on open (the student page
+  already had these server-rendered; the grid doesn't, so it fetches
+  them). `all-coaches-day` now also returns `is_makeup` per session so
+  the panel's cap-remaining line only shows when it's actually relevant.
+
+`npx tsc --noEmit -p .` clean, no dev-server errors. Click-tested the
+mock via its console (the ref-based click tool got queued/flaky on this
+page — same workaround as the multi-select session above, calling the
+exact `onclick` handlers directly): add/remove-window state confirmed
+correct; time-off's all-day/multi-day toggles show/hide the right
+fields and block submission without a date; clicking a session opens
+the cancel panel, Staff Cancel reveals the credit checkbox, and an empty
+reason is rejected before the (stubbed) submit fires.
+
+**Follow-up round — migrations confirmed through 0042, five more real
+issues.** With the migrations actually applied, these turned out to be
+genuine bugs (not the RLS gap from before):
+
+- *"Availability update doesn't update the calendar; calendar is cut off
+  at 5pm; coaches sometimes work midnight/1am."* One root cause: the
+  day-grid's rows were a hardcoded 7am–8pm window
+  (`ROW_START_MIN`/`ROW_END_MIN` module constants). Any working hours
+  outside that range weren't clipped from storage — they were saved
+  correctly — they just had no row to render into, so saving looked like
+  it did nothing. Replaced with a `useMemo` in
+  [all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+  that derives the row range from the actually-configured working hours
+  of whoever's visible (30-min padding either side), falling back to
+  7am–8pm only when nobody visible has any hours set yet. Same
+  zoned-instant conversion `CoachCalendar` already uses for this exact
+  problem, just computed once for the row bounds instead of per-cell.
+- *"Booking/cancelling doesn't show up right away."* The refetch-after-
+  action wiring was already correct, but it went through a `refreshTick`
+  bump the effect picked up asynchronously — the panel closed before the
+  new data had actually arrived, and worse, every refetch (including a
+  plain date-nav click) blanked the whole grid to a loading message
+  first. Fixed both: pulled the fetch into a `refetchSchedules()`
+  function every action panel now `await`s *before* closing itself, and
+  the grid no longer disappears on a background refresh — "Loading…"
+  only shows on the very first load.
+- *"I like the previous time-off version better... should be able to
+  add a time, not just a date."* The all-day/multi-day toggle redesign
+  from the last round defaulted to hiding the time fields, which is
+  probably what read as "doesn't work" — you'd have to notice and
+  uncheck a box first. Simplified
+  [components/add-coach-block-form.tsx](components/add-coach-block-form.tsx)
+  back to always-visible Start date/time + End date/time (4 fields, no
+  hidden state) — keeps the real calendar-popup win from `type="date"`
+  while matching the older, more direct shape.
+- *"Need to cancel group classes too."* Group lessons had no
+  cancellation concept at all — no status column, and no FK cascade on
+  registrations, so a hard delete would either fail once anyone
+  registered or destroy their attendance/payment history. New migration
+  [0043_group_lesson_cancel.sql](supabase/migrations/0043_group_lesson_cancel.sql)
+  adds `group_lessons.cancelled_at` (soft-cancel, same posture as
+  session cancellation), new
+  [app/api/admin/cancel-group-lesson/route.ts](app/api/admin/cancel-group-lesson/route.ts),
+  and `getCoachGroupLessons` (in
+  [lib/group-lessons.ts](lib/group-lessons.ts) — the one function
+  feeding every calendar view) now excludes cancelled lessons, so this
+  fix reaches the coach dashboard and Scheduler too, not just Coaches.
+  Also excluded from payroll's needs-attendance query
+  (`app/api/coach/payroll/route.ts`) so a cancelled lesson stops nagging
+  the coach for attendance. Refunding a paid attendee is intentionally
+  left manual (group-lesson payment was already manual/informal before
+  this — no live Stripe integration, just a note field) rather than
+  invented here. Click a group-lesson cell in the day-grid to cancel it.
+- *"Buttons open an action box all the way at the bottom — make it more
+  intuitive."* Every action panel (book, block, availability, time off,
+  add coach, cancel, cancel-group) rendered inline at the bottom of the
+  page flow, below the metrics and the full roster table — clicking
+  "Availability" in a column header, or even "+ Add coach" up in the
+  filter row, opened something invisible without scrolling. New
+  `ModalOverlay` wrapper centers each one as a real fixed-position
+  overlay with a dimmed backdrop instead (click the backdrop or the
+  panel's own Close to dismiss) — no restructuring of the panels
+  themselves, just where they render.
+
+New migration **0043** needs the same confirm-it's-applied step as
+0036–0042 before any of the group-lesson-cancel work will function.
+
+`npx tsc --noEmit -p .` clean, no dev-server errors. Click-tested the
+mock (console-driven, same reason as above): narrowing from all 3
+coaches to just Jordan Lee shrinks the row range from 8:30 AM–11:30 PM
+down to 8:30 AM–5:00 PM (Priya's the only one with the late window);
+booking a slot and cancelling both a session and a group lesson update
+`EVENTS` and re-render in the same call, no separate refresh; the
+time-off panel now shows all 4 fields with no hidden toggle; every
+modal confirmed `position: fixed` and visible without scrolling.
+
+**Availability lag fixed, plus effective-dated schedule changes.** Two
+more asks, after confirming migrations through 0043 were applied (so
+the earlier RLS theory was ruled out for this one):
+
+- *"Availability did not work or populate right away"* — the refetch-
+  after-save wiring itself was already correct (confirmed by rereading
+  it), but it still had to round-trip to the server before the panel
+  closed. `AvailabilityPanel`'s `onSaved` now hands the just-saved hours
+  straight back to the parent, which patches the grid's local state
+  synchronously — the calendar reflects a save on that exact click, no
+  network gap. The background refetch/`router.refresh()` still run, just
+  to reconcile rather than to gate the UI update.
+- *"Add when is the effective date of schedule changes"* — this one
+  turned out to have two very different sizes depending on what "future
+  hours" should mean before the date arrives, so I checked with you
+  first: **old hours stay live until the date, then switch** (the bigger
+  option — a flat "just a timestamp" version would've been faster but
+  wouldn't actually protect near-term bookings from a same-day change,
+  which seemed to be the point). Built:
+  - New migration
+    [0044_pending_working_hours.sql](supabase/migrations/0044_pending_working_hours.sql) —
+    `coaches.pending_working_hours` / `pending_effective_date`. Only one
+    queued change tracked at a time; saving (immediate or future) always
+    replaces whatever was previously pending.
+  - New shared resolver
+    [lib/scheduling/working-hours.ts](lib/scheduling/working-hours.ts) —
+    `resolveWorkingHoursForDate(coach, dateKey)`, a plain function (no
+    server-only deps, safe from a client component) that picks pending
+    vs. current hours for one specific date. Every place that walks a
+    date range now calls it **per day** rather than resolving once for
+    the whole request — the entire point of an effective date is that a
+    week or month straddling it shows old hours on one side and new on
+    the other, not one version bleeding across the transition.
+  - Touched every reader that previously read `coaches.working_hours`
+    directly: `app/api/admin/coach-working-hours/route.ts` (now accepts
+    `effectiveDate`, branches immediate-write vs. pending-write),
+    `app/api/admin/all-coaches-day/route.ts` (resolves once, server-side,
+    since it always fetches a single specific day),
+    `app/api/admin/coach-schedule/route.ts` and
+    `app/api/coach/schedule/route.ts` (pass `pendingWorkingHours`/
+    `pendingEffectiveDate` through raw, since these feed `CoachCalendar`
+    across a whole week/month), `app/api/booking/slots/route.ts` and
+    `app/api/admin/coach-metrics/route.ts` (both already walked day by
+    day — resolve inline in that loop).
+  - **`components/coach-calendar.tsx`** — the riskiest edit, since it's
+    shared by the coach's own dashboard and Coaches tab's Week mode. Its
+    row-range `useMemo` and its `cellState` working-hours check both now
+    resolve per actual calendar date instead of a flat day-of-week map.
+    No behavior change for a coach with no pending change (resolver just
+    returns `workingHours` untouched); a transition week now correctly
+    shows old hours before the effective date and new hours on/after it.
+  - **`AvailabilityPanel`** — new "Effective date" field (defaults to
+    today = immediate, min date = today). If a change is already queued,
+    opening the panel edits *that* queued version by default (not the
+    live hours) with a banner + a "discard it and edit today's live
+    hours instead" link — editing blind to an existing queued change
+    felt like the likelier bug than the extra state. Roster table shows
+    a small "Hours change scheduled: [date]" badge per coach.
+  - Deliberately **not** built: any admin-visible history of past
+    changes, more than one queued change at a time, or a cron job — none
+    of that was asked for, and the pending/current pair already does
+    the promotion implicitly (via the date comparison) rather than
+    needing one.
+  - `npx tsc --noEmit -p .` clean, no dev-server errors. Click-tested via
+    the mock (draft-based editing added there too — previously the demo
+    mutated the "live" hours as you typed, which doesn't work once
+    editing an immediate change and a future one are different
+    actions): future-dated save leaves the live hours (and the grid)
+    untouched; reopening shows the queued draft with the banner;
+    discarding reverts to live hours; an immediate save applies right
+    away and clears the roster badge.
+
+**Week view now always shows the full 24 hours.** Quick follow-up: Week
+mode's row range was still computed from actual working hours (padded
+±30 min) same as Day view — reasonable for Day, but in Week it meant a
+coach with unusual hours (or one whose hours vary a lot day to day)
+could have real slots quietly clipped off-screen. Week now always shows
+12:00 AM–11:59 PM regardless of what's configured; Day and Month are
+unchanged (still the tighter, padded-to-actual-hours range — that one
+wasn't the complaint). One-line change in
+[components/coach-calendar.tsx](components/coach-calendar.tsx)'s row-range
+`useMemo` — short-circuits to the full range when `view === "week"`
+before doing any per-day resolution. Since `CoachCalendar` is shared,
+this applies everywhere Week mode shows up (coach's own dashboard,
+Coaches tab's per-coach Week toggle) with no per-consumer changes needed.
+`npx tsc --noEmit -p .` clean, no dev-server errors. Mock's
+`renderWeekGrid` updated to match and click-tested: 48 rows, 12:00 AM
+through 11:30 PM regardless of the selected coach's configured hours.
+
+**Week view is clickable now too — book/cancel, not just browse.**
+Immediate follow-up: `CoachCalendar` (the component Week mode reuses) had
+never supported anything beyond `canMarkAttendance`'s past-session
+marking — no click-to-book, no click-to-cancel. That's exactly what the
+Coaches page's separate Day-grid already has, so this was a real gap
+between the two views of the same page, not a new idea. Extended
+`CoachCalendar` itself (the direction picked earlier when discussing
+Scheduler's retirement) rather than duplicating the Day-grid's click
+logic a second time:
+
+- Three new optional props —
+  `onAvailableSlotClick`/`onSessionCancelClick`/`onGroupLessonCancelClick` —
+  all default `undefined`, so the coach's own dashboard (which passes
+  none of them) renders identically to before. `Session`/`GroupLesson`
+  are now exported types so a consumer can type its callbacks against
+  them.
+- `cellState`'s "available" branch now also returns the resolved
+  `slotStart`, needed for the booking callback.
+- Wired in `all-coaches-day-client.tsx`'s Week-mode `<CoachCalendar>` to
+  the exact same `book`/`cancel`/`cancelGroup` panels the Day grid
+  already opens — same `BookWithCreditPanel`, `CancelSessionPanel`,
+  `CancelGroupLessonPanel`, no new UI built.
+- `Session` gained `isMakeup` (needed by `AdminCancelButtons`, which the
+  cancel panel already wraps) — `app/api/admin/coach-schedule/route.ts`
+  and `app/api/coach/schedule/route.ts` both now select and return
+  `is_makeup`, a gap flagged during the earlier Scheduler research but
+  not worth fixing until something actually needed it.
+- Real bug caught while wiring this up: booking/cancelling from Week
+  mode bumped the Day-grid's local state but never touched
+  `CoachCalendar`'s own independent fetch (it refetches off
+  `refreshSignal`, not the parent's `schedules` state) — so Week's grid
+  wouldn't have updated after its own actions. Every `onDone`/`onSaved`
+  callback now also bumps `refreshTick` (already wired to
+  `refreshSignal`) alongside the existing `refetchSchedules()`, so
+  whichever view is actually on screen gets fresh data either way.
+- `npx tsc --noEmit -p .` clean, no dev-server errors. Mock's
+  `renderWeekGrid` gained the same clickability, working-hours-aware
+  blank cells (a day/time outside the coach's hours no longer renders as
+  bookable), and day-tagged event mutation so cancelling in Week doesn't
+  reach into the Day view's separate demo data. Click-tested: booking an
+  open Tuesday slot and cancelling Monday's session both update
+  `WEEK_EVENTS` and re-render immediately; cancelling a group lesson
+  removes it; a blocked cell stays non-clickable; a late-night cell
+  outside working hours renders blank, not available.
+
+**Row-range walked back to consistent, not full-24h — plus a bounded,
+scrollable calendar.** You tried the full-24-hour Week grid from the
+previous change and it felt wrong: mostly empty, and — the real
+issue — inconsistent with Day view, which still used a padded-to-actual-
+hours range. Asked for one rule everywhere: earliest start to latest end
+across a coach's whole week, regardless of Day, Week, single-coach, or
+All-coaches.
+
+- Reverted `CoachCalendar`'s Week-specific full-24h branch — its
+  row-range `useMemo` already computed exactly this (whole-week union,
+  per-date resolved for effective-date correctness) for Day; it now
+  applies unconditionally, so Day and Week always agree.
+- The Coaches page's own grid (`all-coaches-day-client.tsx`) previously
+  computed its range from only *today's specific weekday* — different
+  scoping from `CoachCalendar`'s whole-week union, which was the actual
+  inconsistency between the two. Rewrote it to scan all 7 days the same
+  way (new local `startOfWeekKey` helper), so a coach's grid looks
+  identical whether it's this page's Day columns or `CoachCalendar`'s
+  Day/Week for that same coach.
+- Added a bounded, scrollable container (`max-height: 560px`,
+  internal scroll, rounded border) around both grids — "the box is so
+  long" doesn't fully go away just from a tighter range (a coach with a
+  wide legitimate span, e.g. 6am–11pm, is still a lot of rows), so this
+  caps it regardless of how wide any given coach's hours are, rather
+  than letting the calendar push the rest of the page down indefinitely.
+- `npx tsc --noEmit -p .` clean, no dev-server errors. Mock's
+  `computeDayRowRange` renamed to `computeRowRange` and rewritten to
+  scan a coach's whole `WORKING_HOURS_DEMO` map instead of just `"wed"`,
+  used by Day, Week, *and* week metrics' utilization calc for the same
+  reason. Click-tested: Jordan Lee's Day and Week now both show the
+  identical 8:30 AM–5:00 PM (18 rows); "All coaches" widens to
+  8:30 AM–11:30 PM since Priya's late window pulls the union wider; the
+  grid wrapper confirmed capped at 560px with `overflow-y: auto`.
+
+### Finance tab — restyled from the orphaned Payroll page, re-added to nav
+Confirmed with you first: no real dollar revenue data exists anywhere in
+this app (Kajabi tiers are synced as plan-name labels only, zero price
+mapping in the DB/types/webhook — verified by grepping for
+"revenue"/"mrr"/"price_cents" etc. across `app`/`lib`, zero hits). So this
+is a **restyle of the existing payroll cost dashboard**, not a new
+revenue-side build — the only real currency in the app is coach
+`hourly_rate`, which the old Payroll page already computed correctly.
+
+- Moved `app/(admin)/admin/payroll/` → `app/(admin)/admin/finance/`
+  (`page.tsx` now `AdminFinancePage`, `payroll-client.tsx` →
+  [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>) →
+  `FinanceClient`). Backend untouched — still hits
+  `/api/admin/payroll/{rollup,history,generate,mark-paid,export}`, an
+  internal detail not worth renaming alongside a page move.
+- Re-added to [admin-nav.tsx](<app/(admin)/admin-nav.tsx>)'s `MORE_LINKS`
+  section (alongside Exercises/Group Lessons — same reasoning, real
+  built feature with no slot in the 6-item mockup nav), `$` icon.
+- Added a `statCardsRow` of 4 summary cards (Live rollup this range /
+  Finalized this range / Paid / Unpaid) above the existing date-range
+  and table panels — same `overviewCard` pattern the Overview page
+  already established, reused rather than inventing a new stat-card
+  style. Unpaid card goes coral (`overviewCardValueWarn`) when > $0.
+- `npx tsc --noEmit -p .` clean (had to clear a stale `.next/types`
+  cache pointing at the old `payroll/page.tsx` path first). Verified
+  via a new interactive mock (expand/collapse a coach's session rows,
+  coach filter narrows both the rollup table and stat cards together,
+  generate-run confirm → "N entries added", mark-paid toggle updates
+  the Paid/Unpaid cards live):
+  [admin finance preview](https://claude.ai/code/artifact/914b91be-0183-4057-99ed-043e696cf672).
+
+**Monthly attendance-check workflow, editable coach rates, and referral
+bonus — same session, real workflow you described:** payroll runs on the
+1st for the previous full calendar month; before generating, you check
+for sessions nobody marked attendance on, notify coaches, then run once
+clean. Built:
+
+- **Default date range flipped from month-to-date to the previous full
+  calendar month** (`previousMonthRange()` in
+  [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>)) —
+  opening Finance on Sep 1 now defaults to Aug 1–31, not Sep-so-far.
+- **New "Attendance check" panel**, between Date range and Live rollup —
+  lists, per coach, how many sessions in range are still sitting at
+  `'scheduled'` status despite their time having passed (new
+  `findUnrecordedAttendance()` in
+  [lib/payroll/calculate.ts](lib/payroll/calculate.ts), new
+  [unrecorded-attendance/route.ts](app/api/admin/payroll/unrecorded-attendance/route.ts)).
+  This matters because `computeCoachPayroll`'s `PAID_STATUSES` filter
+  already silently excludes any session still stuck at `'scheduled'` —
+  no error, it just quietly doesn't get paid — so this surfaces the gap
+  instead of leaving you to notice it never happened. Deliberately scoped
+  to 1:1 `sessions` only, not group lessons: group-lesson pay is gated on
+  elapsed time, not a per-attendee attendance mark (unchanged from
+  before), so there's nothing to catch there.
+- **"Notify coaches" button** posts one Slack message (existing
+  `notifySlack()`, [lib/slack/notify.ts](lib/slack/notify.ts) — same
+  webhook as coach-block alerts) listing every coach with unmarked
+  sessions and a count, via new
+  [notify-attendance/route.ts](app/api/admin/payroll/notify-attendance/route.ts).
+  Recomputes server-side rather than trusting the client's last fetch.
+- **Not a hard gate** — Generate payroll run still works with unrecorded
+  sessions present (an admin might legitimately want to run partial
+  payroll and pick up the rest later; regenerating the same range after
+  attendance gets marked correctly adds the newly-payable sessions,
+  since `payroll_entries` dedupes by `session_id`). Instead, the confirm
+  dialog shows a coral warning line naming the count when it's nonzero,
+  so it can't be missed at the moment that matters.
+- **Coach rates now editable from Finance** — new "Coach rates" panel,
+  click-to-edit per coach (same pattern as birth-date/coach-since: read-
+  only text + Edit link + explicit Save/Cancel, nothing writes on blur).
+  New [coach-rate/route.ts](app/api/admin/coach-rate/route.ts), same
+  hardened zero-rows-means-403 pattern as `coach-active/route.ts` (relies
+  on the existing "admins can update coaches" policy from migration
+  0041 — no new migration needed for this part). Previously
+  `hourly_rate` could only be set once, at coach provisioning.
+- **Referral bonus** — a student can now be tagged "Referred by
+  [coach]" on the admin student detail page (new
+  [referral-client.tsx](<app/(admin)/admin/students/[studentId]/referral-client.tsx>),
+  same click-to-edit pattern, new statRow next to "Coach"). New
+  `students.referred_by_coach_id` column
+  ([0045_referral_bonus.sql](supabase/migrations/0045_referral_bonus.sql) —
+  **not yet confirmed applied**, see Action needed above), a nullable FK
+  rather than a boolean flag, since the bonus needs to know *which*
+  coach gets credit. New
+  [set-referral/route.ts](app/api/admin/set-referral/route.ts) (RLS-only,
+  no new policy needed — "admins can update all students" from 0007
+  already covers every column on `students`).
+  - The bonus itself: `REFERRAL_BONUS_PER_HOUR = 10` in
+    [lib/payroll/calculate.ts](lib/payroll/calculate.ts) — applied as
+    +$10/hr (= +$5/30min, same linear formula `payForSession` already
+    used) on top of the coach's base rate, and **only** when the
+    session's `actual_coach_id` matches the referred student's
+    `referred_by_coach_id` — i.e. the bonus follows "this coach is
+    currently teaching the student they referred," indefinitely, not a
+    one-time payout on first booking. If a referred student gets
+    reassigned to a different coach, the bonus stops (correctly — the
+    new coach didn't refer them). Deliberately **not** applied to group
+    lessons — there's no single "the student" on a class roster to
+    check the referral against.
+  - `PayableSession` gained an `isReferralBonus` flag; the Finance
+    page's rollup line items show a small "referral +$10/hr" badge next
+    to the student's name when it's set, so the bonus is visible, not
+    just baked silently into the total. `payroll_entries.amount` already
+    freezes the bonus-inclusive amount at generate time — no changes
+    needed to generate/mark-paid/export/history routes, they all just
+    pass the computed amount through.
+- `npx tsc --noEmit -p .` clean. Click-tested in the refreshed
+  [admin finance preview](https://claude.ai/code/artifact/914b91be-0183-4057-99ed-043e696cf672)
+  (demo data reshaped to match the new previous-month default range):
+  attendance check lists 2 coaches/3 unrecorded sessions, Notify coaches
+  → "Slack message sent — 2 coaches, 3 sessions"; expanding Jordan Lee's
+  row shows both of Ava Chen's sessions tagged "referral +$10/hr" at the
+  bonus-adjusted amount ($21 vs. $16 base for a 30-min session);
+  Generate's confirm dialog shows the coral unrecorded-attendance
+  warning; editing Jordan's rate from $32 to $36/hr and saving updates
+  the Coach rates table immediately.
+
+### Admin-Finance role + Reports tab — new, same session
+You asked for a Reports tab with revenue/margin/retention metrics,
+"only accessible by this Admin-Finance user." First pass had the
+boundary backwards — flagged and corrected once you clarified with a
+screenshot: **`admin_finance` is a superset of `admin`**, not a
+restricted subset. A plain "admin" (a different Kajabi library card, in
+your words) sees everything *except* Finance (payroll) and Reports;
+`admin_finance` sees literally everything, including those two. Also
+dropped the invite-by-email UI entirely per "no need to add email" —
+there's no in-app way to create an `admin_finance` account yet, you'll
+set the role directly in Supabase (see Action needed above).
+
+Two more decisions confirmed with you before building:
+- **Tier pricing isn't synced from Kajabi** (still on the old platform)
+  — you gave the actual monthly figures (lite free, suite $29.99, pro
+  $399, elite $599, with unmodeled discounts for 3/6/12-month prepay),
+  hardcoded as `TIER_PRICE_MONTHLY` in
+  [lib/billing/tier-pricing.ts](lib/billing/tier-pricing.ts). Every
+  dollar figure the Reports page shows is a **monthly-list-price
+  estimate** derived from this, not a reconciled/collected-cash number
+  — flagged inline on the page itself, not just here.
+- **Built the full mockup as-is** — the two metrics needing real
+  historical tracking that doesn't exist yet (Cohort Retention, Trial →
+  Paid Funnel) are rendered with their real intended structure but a
+  "Needs setup" badge and a plain-English note on exactly what schema/
+  event-logging work would turn each on, per your ask to "know what to
+  build in the future" rather than fabricating numbers.
+
+**New role: `admin_finance`** — sees everything `admin` does, plus
+Finance and Reports. Design:
+- [0046_admin_finance_role.sql](supabase/migrations/0046_admin_finance_role.sql)
+  widens `profiles.role`'s check constraint and, more importantly,
+  **widens the `is_admin()` SQL function itself** to admit
+  `admin_finance` — rather than hand-editing each of its ~18 individual
+  policy call sites, this gives admin_finance the exact same DB-level
+  access as admin on every table the two roles *share* (Overview,
+  Students, Coaches, Needs Review, Community, Exercises, Group Lessons),
+  with zero risk of missing one. Finance/Reports' own boundary can't be
+  expressed that way — RLS has no clean way to say "sees a student's
+  homework notes but not a coach's pay rate" without a much bigger
+  policy rewrite — so it's enforced separately, at the application
+  layer, both on the 2 pages and on Finance's own API routes (below).
+- [lib/auth/require-role.ts](lib/auth/require-role.ts) — `requireRole`
+  now accepts an array of roles and returns the resolved role (the
+  (admin) layout calls `requireRole(["admin", "admin_finance"])` and
+  passes the actual role to `AdminNav`). New `requireFinanceAccess()` —
+  used at the top of [finance/page.tsx](<app/(admin)/admin/finance/page.tsx>)
+  and [reports/page.tsx](<app/(admin)/admin/reports/page.tsx>) — redirects
+  a non-`admin_finance` user back to Overview rather than to /login
+  (which would incorrectly boot a legitimately logged-in admin).
+- [admin-nav.tsx](<app/(admin)/admin-nav.tsx>) — Finance and Reports
+  carry `financeOnly: true`; every other link is shared by both roles,
+  unchanged from before this feature. Sidebar role label reads "Admin"
+  vs. "Admin + Finance".
+- **New [lib/auth/roles.ts](lib/auth/roles.ts)** — two helpers, for two
+  different boundaries:
+  - `ADMIN_ROLES`/`isAdminRole()` — the *shared* boundary. 7 routes had
+    a hardcoded `role !== "admin"` check that would've 403'd
+    admin_finance out of pages it has full parity on (widening
+    `is_admin()` alone doesn't touch TypeScript-level checks):
+    `coach-active`, `provision-coach`, `provision-student`,
+    `exercises/assign`, `notes`, `booking/book`, `sessions/upcoming`.
+    Found via `grep -rniE "role\s*(!==|===)\s*['"]admin['"]"` across
+    `app/` — swept the whole tree, not just the routes expected to need
+    it. `exercises/sync` deliberately kept exact-admin-only (both roles
+    get Exercises, so no widening needed there either way).
+  - `hasFinanceRole()` — the *money* boundary, `admin_finance` only.
+    RLS alone won't stop a plain admin from hitting Finance's API
+    routes directly and still getting real payroll numbers (is_admin()
+    admits both roles) — so this is now an explicit check on all 7
+    payroll routes (`rollup`, `history`, `generate`, `mark-paid`,
+    `export`, `notify-attendance`, `unrecorded-attendance`) plus
+    `coach-rate` (pay-rate edits specifically, not the rest of the
+    Coaches page).
+
+**New Reports page** ([page.tsx](<app/(admin)/admin/reports/page.tsx>)),
+real numbers where derivable today:
+- Active students, MRR, DNC count, coach utilization (reused
+  `computeCoachMetrics` — see extraction below), gross margin, and a
+  new "Outstanding unpaid payroll" stat (sum of every `payroll_entries`
+  row not yet marked Paid, any period — ties directly into the Finance
+  tab's own Paid/Unpaid cards).
+- Revenue-by-tier bar (same `tierBar`/`tierLegend` visual language as
+  the Overview page's tier-breakdown card, just dollar-weighted instead
+  of headcount-weighted).
+- Revenue-per-coach-vs-cost-per-coach table — revenue is each active
+  coach's assigned roster at monthly list price, cost is real
+  month-to-date payroll (`computeCoachPayroll`, reused as-is from
+  [lib/payroll/calculate.ts](lib/payroll/calculate.ts)) — margin/margin%
+  computed from those two, with an "Unassigned students" row for active
+  students with no coach so the revenue total still reconciles.
+- **Extracted `lib/admin/coach-metrics.ts`** from
+  `app/api/admin/coach-metrics/route.ts` — the utilization-walking logic
+  was inline in that route; Reports needed the same calc as a server
+  component (no HTTP round-trip), so it's now a shared function both the
+  route and the page call. Route itself is now a thin wrapper, verified
+  no behavior change (same request/response shape).
+- Cohort Retention and Trial → Paid Funnel — structural placeholders per
+  above, each with a "Needs setup" badge and a specific note on what to
+  build (a monthly active-student snapshot table for retention; a
+  timestamped trial-stage event log for the funnel — currently only
+  `unbookedTrials`' current-moment entitlement count exists, surfaced
+  as a small real sub-stat next to the funnel's placeholder).
+- `npx tsc --noEmit -p .` and `next build` both clean (build also
+  confirms `/admin/reports` and every route compile — a stronger check
+  than tsc alone given the size of this change). Click-tested via a
+  mock with a "view as" demo toggle (not part of the real app — role is
+  set at login, this just simulates both without needing two real
+  accounts):
+  [admin reports preview](https://claude.ai/code/artifact/63db8e61-071f-4cfe-99e5-f3d1a51dcc16).
+  Switching to "Admin (no Finance/Reports)" drops Finance and Reports
+  from the sidebar and swaps the whole page for a note explaining the
+  real redirect behavior (not just a hidden link — a direct URL hit
+  actually bounces to Overview); switching back to "Admin + Finance"
+  restores the full nav and the Reports content.
+
+**Reports gained the same date-range + multi-coach filtering the
+Coaches/Finance pages already have** — immediate follow-up, same
+session. Whole page re-scopes together, not just the coach table:
+- Converted Reports from a static server component to a client-driven
+  one, matching Finance's own architecture. New
+  [reports-client.tsx](<app/(admin)/admin/reports/reports-client.tsx>)
+  owns `startDate`/`endDate` plus a `selectedCoachIds: Set<string>`
+  (empty = all coaches) — same toggle-each-pill multi-select pattern as
+  the Coaches page's coach filter, reusing the `lifecycleBtn`/
+  `lifecycleBtnActive` classes rather than inventing new pill CSS.
+  [page.tsx](<app/(admin)/admin/reports/page.tsx>) is now just the
+  `requireFinanceAccess()` guard + the coach list for the pills.
+- **Extracted `lib/admin/reports.ts`**'s `computeReportsSummary()` —
+  all the computation that used to live directly in page.tsx, now
+  parameterized on `(rangeStart, rangeEnd, coachIds)` and called from a
+  new [reports/summary/route.ts](app/api/admin/reports/summary/route.ts)
+  (finance-gated via `hasFinanceRole()`, same posture as every other
+  Finance API route) that `reports-client.tsx` fetches from on every
+  filter change.
+- **Deliberate split on what actually moves with the date range**:
+  active students / tier mix / MRR / DNC / revenue-by-tier are "right
+  now" roster snapshots — there's no historical tracking yet to answer
+  "MRR as of last March" (that's exactly what Cohort Retention's "Needs
+  setup" note is about), so the date range only moves the numbers that
+  really are period-based: coach utilization, payroll cost, margin, and
+  outstanding unpaid payroll (which now also filters to entries whose
+  period overlaps the selected range, not "any period" like the very
+  first version — a deliberate consistency choice once the page as a
+  whole became range-filterable).
+- **Coach scoping**, once specific coaches are selected: active
+  students/MRR/DNC/revenue-by-tier recompute from just those coaches'
+  assigned active rosters; the "Unassigned students" row on the
+  coach table disappears (a student with no coach was never going to be
+  in a specific-coach selection, so keeping that row would just be
+  confusing); utilization scopes to the selected coach(es) via
+  `computeCoachMetrics`' existing `coachIds` parameter (already
+  supported it, just wasn't wired up from Reports before now).
+  Org-wide-only numbers (pending-trial count) stay unscoped and are
+  labeled "org-wide" so that's not mistaken for a bug.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested in
+  the same
+  [admin reports preview](https://claude.ai/code/artifact/63db8e61-071f-4cfe-99e5-f3d1a51dcc16)
+  (republished with working filters, not just the role-switch demo):
+  selecting Nikki alone scopes every stat card and the coach table down
+  to her roster, the Unassigned row disappears, and utilization becomes
+  her own 88% rather than the org average; adding Celine sums both
+  coaches' numbers correctly (revenue/cost/margin/unpaid all reconcile
+  against the Total row); narrowing the date range recomputes payroll
+  cost and margin while leaving the roster-snapshot numbers (students,
+  MRR, DNC) untouched, as designed.
+
+**Finance: manual payroll adjustments (bonus/deduction)** — immediate
+follow-up, same session. You asked to "clean up" Finance and add manual
+adjustments; the date-range picker you also asked for already existed
+(added earlier this session, previous-full-month default) — the
+adjustment form just reuses it rather than adding a second one, so a
+bonus/deduction is always filed under whatever range is currently
+selected.
+- New migration
+  [0047_payroll_manual_adjustments.sql](supabase/migrations/0047_payroll_manual_adjustments.sql) —
+  `payroll_entries.is_manual`/`reason`, and the existing
+  session-xor-group-lesson check constraint widened to a third case
+  (both null, `is_manual = true`). Reused `payroll_entries` rather than
+  a parallel table, so Finalized entries/export/mark-paid all keep
+  working for this new row shape with small additions, not a rewrite.
+- **A manual adjustment skips the live-rollup/generate-run step
+  entirely** — unlike a session or group lesson, there's no "unfrozen"
+  computed state to preview; the moment admin adds one it's already a
+  real, finalized `payroll_entries` row (`paid: false`, same mark-paid
+  flow as everything else). New
+  [add-adjustment/route.ts](app/api/admin/payroll/add-adjustment/route.ts)
+  (finance-only, `hasFinanceRole()`) and
+  [remove-adjustment/route.ts](app/api/admin/payroll/remove-adjustment/route.ts) —
+  the latter scoped to `is_manual = true` only, so it can never delete a
+  real session/group-lesson entry (removing a bad one of those is a
+  session-status fix, not a payroll action).
+- **Sign convention**: `amount` can now be negative (a deduction) —
+  the Finance UI takes a Bonus/Deduction dropdown + an always-positive
+  number so admin never has to type a minus sign, and applies the sign
+  before sending. New `money()` helper in
+  [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>)
+  renders negative amounts as `-$X.XX` in coral rather than a
+  double-negative `$-15.00`.
+- [history](app/api/admin/payroll/history/route.ts)/
+  [export](app/api/admin/payroll/export/route.ts) routes gained a third
+  branch (`is_manual` → type `"adjustment"`, label = the reason text) —
+  the "Student / Topic" column is now "Details" since it covers all
+  three entry types. Finalized entries rows show a small "adjustment"
+  badge and, only for manual rows, a coral "Remove" link.
+- `npx tsc --noEmit -p .` and `next build` both clean (build confirms
+  the 2 new routes compile). Click-tested in the refreshed
+  [admin finance preview](https://claude.ai/code/artifact/914b91be-0183-4057-99ed-043e696cf672)
+  (2 seeded demo adjustments — a $40 bonus and a -$15 deduction —
+  plus live add/remove): submitting the form empty shows the inline
+  validation error; adding a $50 "Holiday bonus" for Priya immediately
+  appears in Finalized entries with the adjustment badge and updates
+  the Finalized/Unpaid stat cards ($115.50 → $165.50); Remove drops it
+  back to $115.50 and 6 entries.
+
+**Generate payroll: confirmation popup + coach-visible summary — new,
+same session.** You asked for clicking Generate to open a popup summary
+and for each coach to see their share on their own dashboard.
+
+- **Admin popup**: [lib/payroll/calculate.ts](lib/payroll/calculate.ts)'s
+  `generatePayrollRun()` now returns a `perCoach` breakdown
+  (`coachId, coachName, entries, total`) alongside the existing
+  `inserted`/`skippedAlreadyPaid` counts — computed for free from data
+  it already had in hand (the pre-insert `summaries`), cross-referenced
+  against which rows the upsert *actually* inserted (its
+  `ON CONFLICT DO NOTHING` already only returns fresh rows, so this
+  needed no second query, just selecting `session_id`/`group_lesson_id`
+  back alongside `id`). [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>)
+  shows this in a real modal (`ModalOverlay`, same fixed-overlay pattern
+  the Coaches page already uses for its own action panels) instead of
+  the old one-line success text.
+- **Coach-visible summary — this is a genuinely new mechanism, not just
+  a UI addition.** Investigated first: every coach-facing surface in
+  this app was previously pull-only (RLS-scoped data a coach's own page
+  happens to query) — there was no precedent for "an admin action
+  places something on a coach's dashboard unprompted," and `/coach/payroll`
+  wasn't even in the coach nav (a real, separate gap, now fixed —
+  `Payroll` added to [coach-nav.tsx](<app/(coach)/coach-nav.tsx>)).
+  - New migration
+    [0048_payroll_coach_seen.sql](supabase/migrations/0048_payroll_coach_seen.sql) —
+    `payroll_entries.coach_seen_at`, null until a coach has actually
+    had one returned to them. No new RLS policy: coaches have no
+    UPDATE policy on `payroll_entries` at all (by design — "generating
+    a run and marking paid are admin-only," 0023's own comment), so the
+    write happens via the service-role client from inside
+    `app/api/coach/payroll/route.ts` and the payroll page's server
+    component — both already resolve the requesting coach's own id
+    server-side first, so this can't be used to write on someone
+    else's behalf.
+  - **Dashboard banner**: [app/(coach)/coach/dashboard/page.tsx](<app/(coach)/coach/dashboard/page.tsx>)
+    queries for any `coach_seen_at is null` rows, aggregates them into
+    one total/count/period, and
+    [dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>)
+    shows a "New payroll ready" banner with a "View payroll →" link —
+    the first thing on the dashboard a coach would see, not something
+    they'd have to know to go look for.
+  - **Deep link, not just a plain link**: admin's Finance defaults to
+    the *previous* month, but the coach payroll page's own default was
+    *current* month — a coach clicking a plain `/coach/payroll` link
+    right after a run would land on a view that doesn't even show what
+    they were notified about. The banner link carries
+    `?start=&end=` for the exact generated period, and
+    [payroll/page.tsx](<app/(coach)/coach/payroll/page.tsx>) now reads
+    those as its initial range instead of always defaulting to current
+    month.
+  - **"Seen" = "actually appeared in a response to this coach"**, not a
+    dismiss button — whichever `payroll_entries` rows come back from
+    either the page's initial load or `/api/coach/payroll`'s own GET
+    get marked seen right there, so the banner clears itself the moment
+    the coach genuinely looks (via the deep link or by manually
+    browsing to the right range), and stays up otherwise.
+  - **Real pre-existing gap fixed along the way**: the coach's own
+    Finalized-pay-runs table showed a bare date with no explanation of
+    what a row was *for* — no student name, no group-lesson topic, and
+    (now that manual adjustments exist) no reason text either, so a
+    coach would see an unexplained "$40.00 Pending" or "-$15.00 Pending"
+    row. Both `app/api/coach/payroll/route.ts` and
+    `app/(coach)/coach/payroll/page.tsx` now join the same
+    session/group-lesson/reason data admin's own history route already
+    has, and [payroll-range-picker.tsx](<app/(coach)/coach/payroll/payroll-range-picker.tsx>)
+    renders it as a "Details" column with the same adjustment badge and
+    coral-negative-amount treatment as Finance.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested via
+  two mocks:
+  [admin finance preview](https://claude.ai/code/artifact/914b91be-0183-4057-99ed-043e696cf672)
+  (Generate → Confirm now opens a real popup listing Jordan/Sam/Priya's
+  entries and totals summing correctly to the grand total, Done closes
+  it) and a new
+  [coach payroll notification preview](https://claude.ai/code/artifact/2c73e8c0-9409-497b-8d09-52f09e0eaee1)
+  (dashboard shows the "New payroll ready" banner; "View payroll →"
+  navigates to the Payroll page showing the fixed Details column —
+  student name with a referral badge, and an adjustment with its reason
+  and coral negative amount; returning to the Dashboard afterward shows
+  the banner has cleared, matching the "seen on view" design).
+
+### Kajabi Library Cards + login fallback page — new, same session
+You asked how to wire Kajabi "Library Cards" (Coach Access / Student
+Access / Admin Access / Admin-Finance Access) to get people into the
+right dashboard. Two real platform constraints got confirmed along the
+way, not assumed — both change what's actually buildable:
+- **Kajabi has no SSO at all** — confirmed directly against Kajabi's own
+  help docs ("Kajabi does not currently support single sign-on (SSO)"),
+  neither as an identity provider other apps can use, nor for handing
+  a session to an external app from inside Kajabi.
+- **Kajabi Pages can't carry a per-member value into a link either** —
+  this was already confirmed elsewhere in this codebase (only emails
+  support Liquid merge, only inside Kajabi's own campaign builder), so
+  even a static "Open Portal" button on a Kajabi page can't be
+  personalized per viewer.
+- Net effect: **manually granting "Admin Access"/"Admin-Finance
+  Access"/"Coach Access" to someone in Kajabi (Grant Offer) doesn't
+  reach this app at all** — Grant Offer never fires a webhook (already
+  documented in `TSS_App_Spec_1.md`, same reason ambassador students are
+  provisioned manually today). A blind background poll to auto-discover
+  new grants also isn't safely buildable right now — the only confirmed-
+  working Kajabi API call is "look up offers held by a *known* email"
+  (`getKajabiContactOfferIds`), not "list every member holding offer
+  X" — the analogous endpoint this codebase once assumed existed
+  (`/v1/subscriptions`) turned out to 404 in real testing, so guessing
+  at another unverified one wasn't worth repeating.
+
+**What's actually built, given those two walls:**
+- **The real fix turned out to need no Kajabi mechanism at all** — this
+  app already keeps people logged in via a normal persistent session
+  cookie once they've signed in once ([lib/supabase/server.ts](lib/supabase/server.ts),
+  standard `@supabase/ssr`, nothing shortens it). So a Library Card
+  pointing straight at e.g. `/student/dashboard` (not a login page)
+  works instantly, one click, for anyone whose browser still has a live
+  session — which is the common case. No code needed for this part —
+  it's just how you set each card's target URL in Kajabi.
+- **New self-service fallback** for the one case that genuinely can't
+  be skipped — a session that's actually gone (new device, cleared
+  cookies, long absence). Rebuilt [app/login/page.tsx](app/login/page.tsx)
+  (previously an unstyled dead-end message, now matches the app's real
+  dark theme — own [login.module.css](app/login/login.module.css) since
+  this page sits outside every route group and had no theme applied at
+  all) with a real "enter your email, get a fresh login link" form
+  ([request-link-form.tsx](app/login/request-link-form.tsx)).
+- New [request-login-link/route.ts](app/api/auth/request-login-link/route.ts) —
+  public/unauthenticated by necessity (nobody's logged in yet when they
+  need this), checks students → coaches → admin/admin_finance (the last
+  one via `listUsers()` + a `profiles.role` check, since admin accounts
+  have no business-table email column to query directly — fine at this
+  app's staff-account scale). **Always returns the same generic success
+  message regardless of match** — same reasoning as any "forgot
+  password" flow, so the endpoint can't be used to check which emails
+  have an account.
+- New `issueAndSendStaffLoginLink()` in
+  [lib/auth/magic-link.ts](lib/auth/magic-link.ts) — factors out the
+  Supabase-generateLink-plus-email pattern `provision-coach` already had
+  inline, so the new route didn't need a third copy of it.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested via
+  a new mock:
+  [login page preview](https://claude.ai/code/artifact/61cbc72f-3a47-4913-be24-a1ec5c5845e1) —
+  the `expired_link` error state renders correctly above the form;
+  submitting an email shows the generic "check your inbox" success
+  state (same wording regardless of what was typed, matching the real
+  route's no-enumeration behavior).
+
+**Not yet built — Kajabi-side product/offer setup itself.** No offer
+IDs exist yet in code for Coach Access / Admin Access / Admin-Finance
+Access (unlike the 4 student tier offers, which are real, confirmed IDs
+already in [lib/kajabi/offers.ts](lib/kajabi/offers.ts)) — nothing to
+wire up on the code side until/unless a future feature actually needs
+to check offer-holding server-side. For now those 3 products only need
+to exist in Kajabi for your own bookkeeping of who has access.
+
+**Follow-up: iframe embed instead of a button, so the card opens the
+portal *inside* Kajabi.** You didn't want the extra click through a
+Kajabi page with a button — confirmed Kajabi's Custom Code block
+(available on pages inside a Course/Product, not just standalone
+Website pages) accepts a raw `<iframe>`, so the portal can render
+directly inside the Kajabi page a Library Card opens. That needed one
+real change on this app's side:
+- [next.config.mjs](next.config.mjs) — added a `Content-Security-Policy:
+  frame-ancestors` header. Nothing was set before, which meant this app
+  was accidentally iframe-able by *any* site (no `X-Frame-Options` was
+  ever configured) — this makes it a deliberate, narrow allowance
+  instead: only this app's own origin and `NEXT_PUBLIC_KAJABI_SITE_URL`
+  (the same env var already driving the Courses/Community nav links)
+  may frame it. Verified for real — ran `next start` locally and
+  confirmed the header actually appears on a response
+  (`curl -I` showed `Content-Security-Policy: frame-ancestors 'self'`;
+  it'll also include the Kajabi origin once that env var is set in
+  production, which it needs to be for this to work — it's currently
+  blank in `.env.example`).
+- **Domains confirmed same-site**: the portal
+  (`portal.tarasimonstudios.com`) and the Kajabi site
+  (`app.tarasimonstudios.com`) share the same registrable domain
+  (`tarasimonstudios.com`), which is why the session cookie should
+  survive being read inside the iframe with Supabase's default
+  `SameSite=Lax` — genuinely cross-site embedding would need
+  `SameSite=None` (and its own Safari/Chrome tracking-prevention
+  headaches), same-site subdomains shouldn't. Flagged as something to
+  confirm with a real click-through once live, not just asserted —
+  cross-browser cookie-in-iframe behavior is exactly the kind of thing
+  this project's own convention says to verify against the real thing,
+  not assume.
+- **Kajabi-side steps** (nothing left to build in the app for this):
+  in each product's Custom Code block, paste an iframe pointing at the
+  matching dashboard route — `/student/dashboard`, `/coach/dashboard`,
+  `/admin/overview` (same URL for both Admin and Admin-Finance — role
+  is decided by their portal account, not the link), sized to fill the
+  page (e.g. `width:100%; height:100vh; border:none;`).
+
+**Follow-up: replaced the emailed-link fallback with an email-then-code
+flow, same session.** The "open the emailed link in a normal top-level
+tab" step above was a real gap for the iframe case specifically — a
+clicked link opens a new browser tab, which means finishing login
+always breaks out of the Kajabi embed. You asked for a typed code
+instead, which fixes exactly that: a code can be typed right back into
+the same embedded `/login` page, no tab-switch required.
+- New migration
+  [0049_login_codes.sql](supabase/migrations/0049_login_codes.sql) — a
+  `login_codes` table, deliberately separate from `magic_link_tokens`
+  rather than repurposing it: the *original* one-time "welcome" emails
+  (sent right after a Kajabi purchase, or when a coach is provisioned)
+  still use the existing link-based mechanism unchanged, since those
+  are one-shot onboarding emails, not a repeated "let me back in" flow
+  — no reason to touch code that already worked. Same deny-all RLS
+  posture as `magic_link_tokens`/`kajabi_events` (0002) — service-role
+  only, no anon/authenticated policy.
+- New [lib/auth/login-code.ts](lib/auth/login-code.ts) — mints a
+  6-digit code, stores only its (email-salted) hash, 10-minute TTL
+  (short on purpose — a code is meant to be used in the same sitting,
+  unlike a link that's designed to sit in an inbox).
+- New [lib/auth/resolve-account.ts](lib/auth/resolve-account.ts) —
+  factored out the students → coaches → admin/admin_finance lookup
+  that used to live inline in the (now-deleted)
+  `request-login-link/route.ts`, since both new routes below need it.
+- **Two-step API**: new
+  [request-login-code/route.ts](app/api/auth/request-login-code/route.ts)
+  (step 1 — email in, generic "sent" response out always, same
+  no-enumeration posture as before) and
+  [verify-login-code/route.ts](app/api/auth/verify-login-code/route.ts)
+  (step 2 — checks the code, then generates a Supabase magic link
+  server-side and hands its `action_link` back to the client as JSON
+  instead of emailing it, since the client already proved who they are
+  and just needs somewhere to navigate). Removed the now-unused
+  `issueAndSendStaffLoginLink()` helper from
+  [lib/auth/magic-link.ts](lib/auth/magic-link.ts) — it only existed
+  for the route this replaced.
+- [app/login/page.tsx](app/login/page.tsx) and the renamed
+  [login-form.tsx](app/login/login-form.tsx) (was
+  `request-link-form.tsx`) now walk email → code as two steps in one
+  form, with a "That code is wrong or has expired" inline error and a
+  "Use a different email" way back to step 1. New copy per your ask —
+  "Private Coaching Studio" as the heading, "let's verify it's really
+  you" as the subhead. Keeping "it's really you" generic rather than
+  "verify that you are a student" was deliberate: this one page serves
+  all four account types (`resolve-account.ts`), so it can't commit to
+  a role before it knows who's typing — flagging this in case you
+  specifically wanted per-role wording, which would need the page to
+  learn the role before showing step 2.
+- `npx tsc --noEmit -p .` and `next build` both clean; re-verified the
+  CSP header from the iframe work above still applies after this
+  change (`next start` + `curl -I` again showed the header). Click-
+  tested in the refreshed
+  [login page preview](https://claude.ai/code/artifact/61cbc72f-3a47-4913-be24-a1ec5c5845e1)
+  (now includes a demo "inbox" showing the exact email copy and code):
+  wrong code shows the inline error and lets you retry; the real code
+  shows a "Verified — redirecting…" success state; "Use a different
+  email" returns cleanly to step 1.
+
+**Not yet done on Admin:**
+- Clean up dead pre-sidebar header CSS in `admin.module.css` (see above).
+- Decide whether the Needs-Attention tag legend needs distinct colors
+  again now that Pause/Trial/Credit all collapsed to the same purple.
+- Older admin artifact previews (overview/dashboard/payroll) still show
+  the old gold accent — stale visually, not re-verified this session.
+- The Needs Review page's own generic resolve flow (approve/deny a
+  cancel_request item) still just has needs_action/in_progress/resolved
+  — "resolved" still defaults to approved there. The new "Mark
+  retained" shortcut only lives on the student page's Stop panel; worth
+  deciding if Needs Review itself should also expose a retain/deny
+  choice rather than only the student-page shortcut.
+- Start's weekly-schedule form and the existing Weekly Schedule panel's
+  edit form are two separate components hitting the same API (not
+  shared state) — duplicates a handful of form fields rather than
+  lifting `editing` state between them; low-risk since Start only shows
+  when the other panel has nothing to duplicate against (empty state).
+
+## Key architectural decisions worth remembering
+
+- **Shared dark theme tokens** live in `app/theme-tokens.module.css`,
+  composed into each route group's own `.module.css`. Admin no longer
+  has a local accent override — it uses `--gold` (purple) exactly like
+  student/coach, same as every other token.
+- **`BookingClient`** (`app/(student)/student/book/booking-client.tsx`) is
+  shared between student's own booking flow and both admin booking routes
+  (`book-trial`, `students/[id]/book`) — styled once with `var()`-based
+  Tailwind classes so it renders correctly under any theme root.
+- **Verification pattern**: real login is Kajabi-magic-link only, so every
+  feature gets verified via a local interactive HTML/JS mock (same visual
+  tokens) served via `python3 -m http.server`, driven with the browser
+  tools, then published as a Claude Artifact — never tested against the
+  real Supabase project directly.
+- **Cancellation self-service**: only `cancel_subscription` requests exist
+  (`student_requests` table, migration 0034 — originally also had `pause`,
+  removed). Approving one just marks it resolved — this app has no Kajabi
+  cancel API to call, so it's still an off-platform action by admin, just
+  tracked via a form + queue instead of a phone call.

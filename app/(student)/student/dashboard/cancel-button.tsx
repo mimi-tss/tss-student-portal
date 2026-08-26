@@ -22,8 +22,8 @@ function warningFor(
 
   if (hoursNotice < NOTICE_HOURS) {
     return isMakeup
-      ? "This is inside the 24-hour notice window, so this cancellation won't give you your session credit back — it'll be forfeited, though you're still welcome to book a new time."
-      : "This is inside the 24-hour notice window, so this cancellation won't earn a session credit — the lesson will be forfeited, though you're still welcome to book a new time.";
+      ? "This is inside the 24-hour notice window, so this cancellation won't give you your session credit back — it'll be forfeited. Do you still want to cancel?"
+      : "This is inside the 24-hour notice window, so this cancellation won't earn a session credit — the lesson will be forfeited. Do you still want to cancel?";
   }
   // Rescheduling a makeup session gives back the same credit you already
   // spent on it — not a new student-fault event, so the cap doesn't apply.
@@ -59,6 +59,11 @@ export default function CancelButton({
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Whether this cancellation itself granted or reinstated a credit — a
+  // student who cancelled inside the 24-hour window (or already at their
+  // cap) has nothing to rebook with, so "Pick a new time now" would just
+  // dead-end them on a page that says so.
+  const [creditAvailable, setCreditAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleCancel() {
@@ -82,6 +87,7 @@ export default function CancelButton({
     }
 
     setMessage(body.message);
+    setCreditAvailable(!!(body.creditGranted || body.creditReinstated));
     router.refresh();
     onSuccess?.();
   }
@@ -90,9 +96,19 @@ export default function CancelButton({
     return (
       <div className={styles.successCard}>
         <p style={{ margin: "0 0 10px" }}>{message}</p>
-        <Link href="/student/book" className={styles.linkBtn}>
-          Pick a new time now
-        </Link>
+        {creditAvailable ? (
+          <Link href="/student/book" className={styles.linkBtn}>
+            Pick a new time now
+          </Link>
+        ) : (
+          <span
+            className={styles.linkBtn}
+            style={{ opacity: 0.5, cursor: "not-allowed", textDecoration: "underline" }}
+            title="No session credit to book with — contact the studio."
+          >
+            Pick a new time now
+          </span>
+        )}
       </div>
     );
   }

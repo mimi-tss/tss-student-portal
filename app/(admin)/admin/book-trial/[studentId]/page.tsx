@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import BookingClient from "@/app/(student)/student/book/booking-client";
+import styles from "../../../admin.module.css";
 
 // Admin books a Suite student's one-time trial lesson on their behalf
 // (TSS_App_Spec_1.md section 8) — reuses the exact same booking UI and
@@ -34,7 +35,7 @@ export default async function AdminBookTrialPage({
 
   return (
     <div>
-      <p className="px-8 pt-8 text-sm text-gray-500">
+      <p className={styles.mutedText} style={{ padding: "32px 32px 0" }}>
         Booking trial lesson for <strong>{student.name}</strong>
       </p>
       <BookingClient studentId={studentId} mode="trial" coachId={null} />
