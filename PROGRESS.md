@@ -25,6 +25,16 @@ test student. Found and fixed three real bugs in sequence:
   back to the chat section repeatedly ("keeps bouncing to this view").
   Fixed to scroll only the chat's own message-list container, and only
   when a message was actually added.
+- Student header nav (Courses/Community/Scheduler/timezone) wrapped
+  awkwardly on mobile. Per your mockup, extracted it into a new
+  [student-nav.tsx](<app/(student)/student-nav.tsx>) client component
+  (same pattern as `coach-nav.tsx`/`admin-nav.tsx`) that collapses
+  below 640px into a hamburger dropdown. Also renamed per the mockup:
+  "Courses" → "My Library" (`KAJABI_SITE_URL/library`), "Community" →
+  "Backstage" (`KAJABI_SITE_URL/products/communities/v2/backstagehub`).
+  **Not yet applied to `coach-nav.tsx`**, which still has the old
+  Courses/Community labels/links and no mobile-collapse behavior at
+  all — ask was student-only so far; flag if coach should match too.
 
 Also added the real logo (you supplied the source PNG) in place of the
 "LOGO" placeholder box — student/coach headers, admin sidebar brand, and
