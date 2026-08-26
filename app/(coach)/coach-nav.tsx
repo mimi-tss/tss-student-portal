@@ -7,6 +7,14 @@ import styles from "./coach.module.css";
 
 const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
 
+// target="_self" (not _blank) so these navigate the current tab/iframe in
+// place rather than popping a new tab — when embedded in Kajabi's Library
+// Card iframe this keeps the coach inside the same full-viewport frame.
+// Safe because Kajabi's own frame-ancestors CSP on /library and
+// /products/communities/v2/backstagehub allows 'self' at this single
+// nesting depth (confirmed via curl -sI against both). Don't revert to
+// _blank without re-reading this.
+
 const LINKS = [
   { href: "/coach/dashboard", label: "Dashboard" },
   { href: "/coach/schedule", label: "My Schedule" },
@@ -38,13 +46,12 @@ export default function CoachNav() {
         {/* Kajabi owns courses/community content (spec section 1) — links
             out rather than being built in this app, same as the student
             side. */}
-        <a href={`${KAJABI_SITE_URL}/library`} target="_blank" rel="noopener noreferrer" className={styles.navLink}>
+        <a href={`${KAJABI_SITE_URL}/library`} target="_self" className={styles.navLink}>
           My Library
         </a>
         <a
           href={`${KAJABI_SITE_URL}/products/communities/v2/backstagehub`}
-          target="_blank"
-          rel="noopener noreferrer"
+          target="_self"
           className={styles.navLink}
         >
           Backstage
@@ -78,8 +85,7 @@ export default function CoachNav() {
           <div className={styles.navDropdownDivider} />
           <a
             href={`${KAJABI_SITE_URL}/library`}
-            target="_blank"
-            rel="noopener noreferrer"
+            target="_self"
             className={styles.navDropdownLink}
             onClick={() => setOpen(false)}
           >
@@ -87,8 +93,7 @@ export default function CoachNav() {
           </a>
           <a
             href={`${KAJABI_SITE_URL}/products/communities/v2/backstagehub`}
-            target="_blank"
-            rel="noopener noreferrer"
+            target="_self"
             className={styles.navDropdownLink}
             onClick={() => setOpen(false)}
           >
