@@ -3,6 +3,57 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Kajabi-side: mobile Safari fixed via a dedicated theme; branded-app path noted for later (2026-08-26)
+
+**Mobile Safari is confirmed fully working now** — you found the real
+issue yourself: the page-level Custom Code block doesn't actually
+override a Kajabi Product page's content (it just adds a small embed
+somewhere within Kajabi's own default template — the "0 modules" native
+UI kept showing underneath). The fix had to happen one level up: a
+dedicated theme ("Momentum") with a custom `app.liquid` layout that
+replaces the *entire* page output with the iframe, rather than trying to
+inject via the page's own Custom Code widget. I gave you a complete
+`app.liquid` (proper `<!DOCTYPE html>`/`<head>`/viewport meta on the
+*outer* Kajabi page, `overflow:hidden` so only the iframe scrolls,
+`100dvh`-first sizing) — the missing viewport meta tag on that outer
+page was likely the real remaining cause of the "too small/zoomed"
+look, separate from anything in this repo. You confirmed "everything is
+good now on mobile" after switching to it.
+
+**New, separate finding: this whole setup doesn't carry over to the
+Kajabi native/branded app.** Logging in through the actual Kajabi app
+(App Store), "Student Access" renders as Kajabi's own generic
+Product/Library template ("0 modules", broken image placeholder) —
+completely ignoring the custom theme/`app.liquid` above. Confirmed
+against Kajabi's own docs: *"The Branded App does not currently support
+the integration of customizations made on the website, as there is no
+mechanism to automatically transfer these changes"*
+([Kajabi Branded App FAQs](https://help.kajabi.com/en/articles/12696396-kajabi-branded-app-faqs)).
+Product/Library content in the app renders via Kajabi's own native
+templates, not the website's Liquid theme — a completely different
+rendering path, not something fixable from this repo or the website's
+theme editor.
+
+**The real path for the branded-app launch, when that's prioritized:**
+Branded Apps support **Custom Screens** with an **Embed Code widget**
+that accepts raw HTML — a native-app mechanism, separate from (and not
+subject to) the website-customization limitation above
+([How to Create Custom Screens](https://help.kajabi.com/en/articles/12696372-how-to-create-custom-screens-for-your-branded-mobile-app),
+[Widget docs confirming Embed Code accepts arbitrary HTML](https://help.kajabi.com/en/articles/12696339-how-to-customize-widgets-on-your-branded-app-screens)).
+Plan: Branded App → Design → Customize → Screens → new screen per role
+(Student/Coach/Admin) → Embed Code widget → same iframe snippet as
+`app.liquid`, pointing at the matching dashboard route → add each
+screen to the app's bottom nav in place of the generic Product tiles.
+**Not yet tested — flagging real uncertainty, not assuming it'll just
+work:** the Embed Code widget likely renders in the branded app's own
+native WebView, which may have its own cookie/session behavior distinct
+from Safari's (the cross-iframe cookie bug fixed earlier this session
+was Safari-specific — a native WebView could behave differently, better
+or worse). The login flow needs a real test inside that Custom Screen
+once it exists, same as Safari needed one. Nothing to build in this repo
+for this yet — entirely Kajabi-side configuration, revisit when the
+branded app becomes a priority.
+
 ## Real-mobile follow-up: login loop confirmed fixed, new zoom bug found (2026-08-26)
 
 You confirmed the login loop fix worked — got past login on the real
