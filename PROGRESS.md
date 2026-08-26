@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Exercise sync follow-up: found the real Drive issues (2026-08-26)
+
+Fixing the admin_finance 403 surfaced two more real, separate problems,
+not one:
+- `GOOGLE_EXERCISES_FOLDER_ID` was genuinely unset in production — you
+  added it (folder ID `13yP7mzDiZcbR6tZ0e3WVyNJoZI8WMHE_`, the studio's
+  "Vocal Exercises (Tara Simon)" folder).
+- That got past the "not configured" check but then hit `File not
+  found: .` from Google's API. Checked the folder's sharing directly —
+  `info@tarasimonstudios.com` already has Content manager access, so
+  it's **not** a permissions problem. Two real code issues instead: (1)
+  the folder's files are all `.mp4` (voice-memo/screen-recording
+  exports), which Drive tags `video/mp4` even for audio-only content —
+  [drive.ts](lib/google/drive.ts)'s sync query only matched `mimeType
+  contains 'audio/'`, so it would've found zero files regardless of the
+  folder ID being right; now admits `video/mp4` too. (2) defensively
+  `.trim()`'d the env var in
+  [sync/route.ts](app/api/admin/exercises/sync/route.ts) — a stray
+  trailing space/newline from the Vercel paste is a real possibility and
+  would produce exactly this "blank id" error shape.
+
+Not yet confirmed fixed — waiting on you to redeploy and retry Sync.
+
 ## Collapsible admin sidebar, exercise sync 403, Backstage link fix (2026-08-26)
 
 Three quick requests once admin login was working:
