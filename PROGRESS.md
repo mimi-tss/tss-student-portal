@@ -3,6 +3,27 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin login lookup bug: only checked the first page of auth users (2026-08-26)
+
+Setting up Admin Access surfaced this immediately: you created a
+`profiles` row for `mimi@tarasimonstudios.com` with role `admin_finance`
+(correct), but login still said "you don't have permission." Root
+cause, not a provisioning mistake — [resolve-account.ts](lib/auth/resolve-account.ts)'s
+admin/admin_finance lookup called `admin.auth.admin.listUsers()`
+unpaginated, which only returns the first page (50 users by default),
+and this Supabase SDK version has no `getUserByEmail()` to look up a
+single user directly. With this app's real student/coach count likely
+well past 50 total auth users, any admin account created more recently
+than the ~50th user overall could never be found — the exact bug
+pattern here. Fixed by paginating through every page until a match
+turns up or the list is exhausted (new `findAuthUserByEmail` helper in
+the same file). This wasn't specific to Mimi's account — any admin
+created "late" relative to the full auth-user count would have hit the
+same wall; worth knowing if any other admin/admin_finance logins were
+quietly failing before now.
+
+`npx tsc --noEmit -p .` and `next build` clean.
+
 ## Unregistered-email error, and the Coach Access Kajabi setup (2026-08-26)
 
 **Coach Access iframe embed working.** Same issue as Student Access at
