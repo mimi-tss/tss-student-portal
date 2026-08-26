@@ -8,7 +8,14 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-inter), sans-serif;
+  /* dvh (not just vh) so this doesn't out-grow the visible area on mobile
+     Safari, where 100vh is measured against the tallest possible viewport
+     (toolbar collapsed) rather than what's actually on screen — inside a
+     Kajabi iframe sized by the studio's own Custom Code block this showed
+     up as the card floating in a lot of extra empty space below the fold.
+     vh stays first as a fallback for browsers that don't parse dvh. */
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

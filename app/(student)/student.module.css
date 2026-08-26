@@ -13,6 +13,7 @@
   color: var(--text);
   font-family: var(--font-inter), sans-serif;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* header */

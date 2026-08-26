@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { resolveAccountByEmail } from "@/lib/auth/resolve-account";
 import { verifyLoginCode } from "@/lib/auth/login-code";
 
@@ -27,21 +28,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "We couldn't find your account." }, { status: 404 });
   }
 
-  // The code already proved it's really them — this generates the same
-  // kind of Supabase-native magic link the coach/admin provisioning
-  // flows already use, just returned to the client instead of emailed,
-  // since the client already has what it needs to navigate there itself.
-  const { data: linkData, error } = await admin.auth.admin.generateLink({
+  // The code already proved it's really them — mint a verifiable token the
+  // same way the coach/admin provisioning flows do (generateLink), but
+  // redeem it right here on the server via verifyOtp(token_hash) instead
+  // of sending the client to Supabase's action_link and back through
+  // /auth/callback. That link-then-callback path relies on a client-side
+  // setSession() call (document.cookie, not a Set-Cookie header) after a
+  // real cross-origin hop through Supabase's own domain — inside the
+  // Kajabi iframe (portal.tarasimonstudios.com framed by
+  // app.tarasimonstudios.com) Safari's ITP was blocking that JS-written
+  // cookie, so the session never stuck and the user bounced straight back
+  // to /login?error=not_logged_in. Redeeming the token here instead sets
+  // the session via a real Set-Cookie response header on this same-origin
+  // request — no client-side cookie write, no bounce through a third
+  // domain, nothing for Safari's cross-iframe cookie blocking to catch.
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "magiclink",
     email: account.email,
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?redirect_to=${account.redirectPath}`,
-    },
   });
 
-  if (error || !linkData) {
+  if (linkError || !linkData) {
     return NextResponse.json({ error: "Something went wrong creating your session — try again." }, { status: 500 });
   }
 
-  return NextResponse.json({ redirectUrl: linkData.properties.action_link });
+  const supabase = await createClient();
+  const { error: verifyError } = await supabase.auth.verifyOtp({
+    token_hash: linkData.properties.hashed_token,
+    type: "magiclink",
+  });
+
+  if (verifyError) {
+    return NextResponse.json({ error: "Something went wrong creating your session — try again." }, { status: 500 });
+  }
+
+  return NextResponse.json({ redirectUrl: account.redirectPath });
 }
