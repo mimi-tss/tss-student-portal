@@ -16,12 +16,12 @@
 
 /* header — identical shape to the student header */
 .header {
+  position: sticky;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 18px 32px;
   border-bottom: 1px solid var(--border);
-  position: sticky;
   top: 0;
   background: rgba(16, 16, 24, 0.92);
   backdrop-filter: blur(6px);
@@ -43,11 +43,11 @@
 .nav {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 12px 20px;
   font-size: 14px;
   color: var(--text-muted);
   min-width: 0;
+  flex: 1;
 }
 .navLink {
   color: var(--text-muted);
@@ -58,6 +58,82 @@
 }
 .navLinkActive {
   color: var(--text);
+}
+.navLinks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.navToggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  padding: 0;
+}
+.navToggleBar {
+  width: 14px;
+  height: 1.5px;
+  background: var(--text-muted);
+  margin: 0 auto;
+}
+.navDropdown {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .navLinks {
+    display: none;
+  }
+  .navToggle {
+    display: flex;
+  }
+  .navDropdown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 32px;
+    min-width: 200px;
+    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+  }
+  .navDropdownLink {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 14px;
+    padding: 10px 10px;
+    border-radius: 8px;
+  }
+  .navDropdownLink:hover {
+    background: var(--surface-2);
+  }
+  .navDropdownLinkActive {
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 10px;
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .navDropdownDivider {
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
 }
 
 .wrap {
