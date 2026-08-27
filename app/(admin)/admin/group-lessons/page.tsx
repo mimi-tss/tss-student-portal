@@ -9,7 +9,7 @@ import styles from "../../admin.module.css";
 export default async function AdminGroupLessonsPage() {
   const supabase = await createClient();
   const [{ data: coaches }, { data: students }] = await Promise.all([
-    supabase.from("coaches").select("id, name").order("name"),
+    supabase.from("coaches").select("id, name, timezone").order("name"),
     supabase.from("students").select("id, name").order("name"),
   ]);
 

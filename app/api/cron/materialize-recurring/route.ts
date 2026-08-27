@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { autoResumeExpiredPauses, materializeRecurringSessions } from "@/lib/scheduling/recurring";
+import { materializeRecurringGroupLessons } from "@/lib/group-lessons";
 
 // Daily top-up: ensures every active recurring schedule has real
-// `sessions` rows out to the horizon (lib/scheduling/recurring.ts). Runs
+// `sessions` rows out to the horizon (lib/scheduling/recurring.ts), and
+// every active recurring group lesson series has real `group_lessons`
+// rows out to the same horizon (lib/group-lessons.ts). Folded into one
+// cron run rather than standing up a second scheduled workflow — runs
 // via GitHub Actions, same pattern as kajabi-sync (see that route's
 // comment for why: Vercel Hobby only allows a daily cron per job, and
 // the existing Vercel cron slot is already used).
@@ -21,6 +25,7 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const resumed = await autoResumeExpiredPauses(admin);
   const result = await materializeRecurringSessions(admin);
+  const groupLessonResult = await materializeRecurringGroupLessons(admin);
 
-  return NextResponse.json({ resumed, ...result });
+  return NextResponse.json({ resumed, ...result, groupLessonsCreated: groupLessonResult.created });
 }

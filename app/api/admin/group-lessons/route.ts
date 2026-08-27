@@ -14,7 +14,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("group_lessons")
     .select(
-      "id, topic, scheduled_at, duration_minutes, coach_id, coaches(name), group_lesson_registrations(id, student_id, status, students(name))",
+      "id, topic, scheduled_at, duration_minutes, max_students, coach_id, coaches(name), group_lesson_registrations(id, student_id, status, students(name))",
     )
     .is("cancelled_at", null)
     .gte("scheduled_at", new Date().toISOString())
@@ -30,6 +30,7 @@ export async function GET() {
       topic: g.topic,
       scheduledAt: g.scheduled_at,
       durationMinutes: g.duration_minutes,
+      maxStudents: g.max_students,
       coachId: g.coach_id,
       coachName: unwrapJoin(g.coaches as unknown as { name: string } | { name: string }[] | null)?.name ?? "Coach",
       attendees: (
@@ -50,7 +51,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { coachId, scheduledAt, durationMinutes, topic } = await req.json();
+  const { coachId, scheduledAt, durationMinutes, topic, maxStudents } = await req.json();
 
   if (!coachId || !scheduledAt) {
     return NextResponse.json({ error: "coachId and scheduledAt required" }, { status: 400 });
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       scheduledAt,
       durationMinutes: Number(durationMinutes) || 60,
       topic: topic || null,
+      maxStudents: maxStudents ? Number(maxStudents) : null,
     });
     return NextResponse.json({ success: true, id });
   } catch (err) {
