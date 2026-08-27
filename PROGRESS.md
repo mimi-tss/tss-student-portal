@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Exercise sync fully working: RLS gap, stale list, duplicate assigns, playback speed (2026-08-27)
+
+Confirmed live: exercise sync itself (the URL-vs-bare-id fix from
+earlier today) works — 3 exercises synced from Drive. Four more bugs
+turned up in the assign/playback flow right after, all confirmed fixed:
+
+- **Students saw generic "Exercise" titles with no audio.** RLS never
+  had a SELECT policy for students on the `exercises` table itself —
+  only on `exercise_assignments` (0024). The nested
+  `exercise_assignments -> exercises` embed in
+  [lib/exercises.ts](lib/exercises.ts)'s `listAssignedExercises` was
+  silently returning `null` per row for students (RLS blocks embedded
+  resources per-row rather than erroring the query), which is also why
+  the audio route's own `exercises` lookup failed for a student
+  session. Migration 0051 adds the missing policy, mirroring the
+  existing coach one.
+- **Admin's assigned-exercises list stayed empty after assigning 3.**
+  [assign-exercise-panel.tsx](components/assign-exercise-panel.tsx) set
+  a "Assigned." confirmation but never refreshed the page — the list
+  below it (which already had its own working `<audio>` player) was a
+  server-rendered snapshot from initial page load. Read at first as
+  "can't preview on admin side," same root cause. Fixed with
+  `router.refresh()` for the admin student-detail page (a plain server
+  component); the coach dashboard needed a different fix
+  (`refreshAssignedExercises`) since its assigned list is client state
+  that a router refresh alone doesn't reach.
+- **Same exercise assignable to the same student twice** — nothing
+  stopped it; "2 Note Toggle" ended up assigned twice during testing.
+  Migration 0052 dedupes existing duplicates and adds a unique
+  constraint on `(exercise_id, student_id)`; the assign route returns a
+  clear 409 on conflict; the picker now filters already-assigned
+  exercises out entirely so the dead end isn't offered.
+- **Student couldn't adjust playback speed** —
+  [student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>)'s
+  `<audio controlsList>` had `noplaybackrate` explicitly set. Removed.
+
+`npx tsc --noEmit -p .` and `next build` clean throughout. You ran
+migrations 0051 and 0052 against production Supabase directly and
+confirmed both — sync, real titles, working audio, no-duplicate
+assigns, and playback speed control all working live.
+
 ## Coaches tab: admin-editable meeting/classroom links (2026-08-27)
 
 Admin and admin_finance can now set/change each coach's Google Meet link
