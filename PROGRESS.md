@@ -3,6 +3,64 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Editable billing cycle anchor, and correcting an earlier explanation (2026-08-27)
+
+Follow-up to the "why did Sep 16 skip" question — you asked how to set
+the billing cycle anchor since you'd expect it to be right. Two things
+came out of digging in:
+
+**Correction to what I said earlier**: I'd attributed both the Sep 16
+*and* Oct 28 gaps to the same "5th Wednesday, cycle cap" mechanism. That
+was wrong for Oct 28 — actually ran `lib/scheduling/recurring.ts`'s exact
+`cycleOccurrenceNumber` math (not a guess) against Celine's real
+Wednesdays, and no single anchor date produces two skips that close
+together; the math only supports one. **Sep 16 is a genuine cap-driven
+skip** (the cycle's 5th same-weekday occurrence, per whatever
+`billing_anniversary_date` day-of-month was auto-assigned to this
+student). **Oct 28 (and November) is unrelated — it's simply past the
+8-week `WEEKS_AHEAD` generation horizon**, same as before; no anchor
+value affects that, it fills in on its own as the daily cron's horizon
+advances.
+
+**Built what you actually asked for — an editable billing cycle
+anchor**, since there was genuinely no way to set/correct
+`students.billing_anniversary_date` anywhere before now (only
+ever auto-set to "today" at provisioning/Kajabi-webhook/backfill time,
+per `app/api/admin/provision-student/route.ts`,
+`app/api/webhooks/kajabi/route.ts`, and the recurring-schedule route's
+own backfill — never admin-editable). Matters for real students where
+that auto-assigned date doesn't match their actual invoice/billing date,
+which is exactly what determines which week is the legitimate "week
+off."
+
+- New [app/api/admin/set-billing-anniversary/route.ts](app/api/admin/set-billing-anniversary/route.ts) —
+  updates `billing_anniversary_date`, same RLS-only posture as
+  `set-birth-date`/`set-referral` (0007's "admins can update all
+  students"). Then, since a changed anchor can retroactively make an
+  already-materialized future session wrong either way (a real session
+  that should now be a skip week, or a skip week that should now be a
+  real session) — and `materializeRecurringSessions` only ever fills in
+  what's missing, it never removes what no longer belongs — this route
+  deletes the student's own recurring-schedule-tied future `scheduled`
+  sessions and regenerates them under the corrected anchor immediately,
+  same delete-then-regenerate approach `recurring-schedule`'s own POST
+  route uses when the day/time itself changes. (Benefits from
+  migration 0054 above — this delete was silently broken the same way
+  until that policy existed.)
+- New [billing-anniversary-client.tsx](<app/(admin)/admin/students/[studentId]/billing-anniversary-client.tsx>) —
+  same click-to-edit pattern as Birthday, new "Billing cycle anchor" row
+  on the student detail page right after "With us".
+  [page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>) already
+  selected `billing_anniversary_date` (used for the renewal-date
+  display), so no new query needed.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested by
+  porting the exact `cycleOccurrenceNumber` algorithm into a mock and
+  running it against Celine's real Sep/Oct 2026 Wednesdays: reproduced
+  the Sep 16 skip exactly with a day-18 anchor, then edited the anchor
+  to day-3 and confirmed the skip week moved to Sep 2 — proving the fix
+  actually re-derives the right week, not just accepting any date:
+  [billing cycle anchor preview](https://claude.ai/code/artifact/0b05f9d4-64d0-4736-b6fc-db372d377bea).
+
 ## Root cause found: recurring-schedule changes leave duplicate sessions (2026-08-27)
 
 You caught this live testing Mimi Test's recurring schedule: change the

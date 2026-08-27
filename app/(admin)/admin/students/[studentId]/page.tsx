@@ -19,6 +19,7 @@ import ReassignSessionCoach from "./reassign-session-coach";
 import BirthDateClient from "./birth-date-client";
 import ReferralClient from "./referral-client";
 import CoachStartDateClient from "./coach-start-date-client";
+import BillingAnniversaryClient from "./billing-anniversary-client";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
 import styles from "../../../admin.module.css";
@@ -244,6 +245,12 @@ export default async function AdminStudentPage({
           <div className={styles.statRow}>
             <div className={styles.statKey}>With us</div>
             <div className={styles.statValue}>{formatTenure(student.created_at)}</div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Billing cycle anchor</div>
+            <div className={styles.statValue}>
+              <BillingAnniversaryClient studentId={student.id} initialValue={student.billing_anniversary_date} />
+            </div>
           </div>
 
           <SubscriptionLifecycleClient
