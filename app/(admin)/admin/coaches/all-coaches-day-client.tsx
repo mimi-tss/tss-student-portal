@@ -174,6 +174,9 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
         email: string;
         timezone: string;
         hiddenFromStudents: boolean;
+        meetLink: string | null;
+        workingHours: Record<string, [string, string][]>;
+        pendingEffectiveDate: string | null;
       }
     | { kind: "cancel"; sessionId: string; studentId: string; studentName: string; scheduledAt: string; isMakeup: boolean }
     | { kind: "cancelGroup"; groupLessonId: string; topic: string | null; scheduledAt: string }
@@ -859,6 +862,9 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                           email: c.email,
                           timezone: c.timezone,
                           hiddenFromStudents: c.hiddenFromStudents,
+                          meetLink: c.meetLink,
+                          workingHours: c.workingHours,
+                          pendingEffectiveDate: c.pendingEffectiveDate,
                         })
                       }
                     >
@@ -897,6 +903,9 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             initialEmail={panel.email}
             initialTimezone={panel.timezone}
             initialHiddenFromStudents={panel.hiddenFromStudents}
+            initialMeetLink={panel.meetLink}
+            initialWorkingHours={panel.workingHours}
+            pendingEffectiveDate={panel.pendingEffectiveDate}
             onClose={() => setPanel(null)}
             onSaved={() => { setPanel(null); router.refresh(); }}
           />
@@ -1062,12 +1071,24 @@ function AddCoachPanel({ onClose, onAdded }: { onClose: () => void; onAdded: () 
 // Supabase auth user's email), so fixing a typo'd email here is enough
 // on its own to fix that coach's login — no separate auth-side update
 // needed.
+//
+// Also folds in meeting link and availability — per your ask to edit
+// "everything in one go" instead of Edit + the roster's meeting-link
+// Edit + a separate Availability panel as three actions. Deliberately
+// NOT folding in hourly_rate: that's the one field with its own access
+// boundary (hasFinanceRole, Finance-tab-only) for a real reason — a
+// plain "admin" (not admin_finance) shouldn't see or set pay rate, and
+// this modal is isAdminRole (both roles), so adding it here would quietly
+// undo that boundary.
 function EditCoachPanel({
   coachId,
   initialName,
   initialEmail,
   initialTimezone,
   initialHiddenFromStudents,
+  initialMeetLink,
+  initialWorkingHours,
+  pendingEffectiveDate,
   onClose,
   onSaved,
 }: {
@@ -1076,6 +1097,9 @@ function EditCoachPanel({
   initialEmail: string;
   initialTimezone: string;
   initialHiddenFromStudents: boolean;
+  initialMeetLink: string | null;
+  initialWorkingHours: Record<string, [string, string][]>;
+  pendingEffectiveDate: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1083,6 +1107,12 @@ function EditCoachPanel({
   const [email, setEmail] = useState(initialEmail);
   const [timezone, setTimezone] = useState(initialTimezone);
   const [hiddenFromStudents, setHiddenFromStudents] = useState(initialHiddenFromStudents);
+  const [meetLink, setMeetLink] = useState(initialMeetLink ?? "");
+  const [hours, setHours] = useState<Record<string, [string, string][]>>(() => {
+    const copy: Record<string, [string, string][]> = {};
+    for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
+    return copy;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1093,20 +1123,33 @@ function EditCoachPanel({
     }
     setSaving(true);
     setError(null);
-    const res = await fetch("/api/admin/coach-info", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        coachId,
-        name: name.trim(),
-        email: email.trim(),
-        timezone,
-        hiddenFromStudents,
+    const [infoRes, linksRes, hoursRes] = await Promise.all([
+      fetch("/api/admin/coach-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coachId,
+          name: name.trim(),
+          email: email.trim(),
+          timezone,
+          hiddenFromStudents,
+        }),
       }),
-    });
+      fetch("/api/admin/coach-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coachId, meetLink: meetLink.trim() || null }),
+      }),
+      fetch("/api/admin/coach-working-hours", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coachId, workingHours: hours }),
+      }),
+    ]);
     setSaving(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
+    const failed = [infoRes, linksRes, hoursRes].find((r) => !r.ok);
+    if (failed) {
+      const body = await failed.json().catch(() => ({}));
       setError(body.error ?? "Could not save that coach.");
       return;
     }
@@ -1136,18 +1179,44 @@ function EditCoachPanel({
             ))}
           </select>
         </div>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <div className={styles.field} style={{ minWidth: 260 }}>
+          <label>Meeting link</label>
           <input
-            type="checkbox"
-            checked={hiddenFromStudents}
-            onChange={(e) => setHiddenFromStudents(e.target.checked)}
+            type="url"
+            placeholder="https://meet.google.com/…"
+            value={meetLink}
+            onChange={(e) => setMeetLink(e.target.value)}
+            className={styles.input}
           />
-          Hidden from trial picker
-        </label>
-        <button onClick={handleSave} disabled={saving} className={styles.ctaSmall}>
-          {saving ? "Saving…" : "Save"}
-        </button>
+        </div>
       </div>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
+        <input
+          type="checkbox"
+          checked={hiddenFromStudents}
+          onChange={(e) => setHiddenFromStudents(e.target.checked)}
+        />
+        Hidden from trial picker
+      </label>
+      <div style={{ marginTop: 4, marginBottom: 14 }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Availability
+        </h3>
+        <p className={styles.mutedText} style={{ marginBottom: 10, fontSize: 12 }}>
+          Times are in this coach&apos;s own timezone above. Saving here applies immediately — for an effective-dated
+          future change instead, use Availability from the day view.
+        </p>
+        {pendingEffectiveDate && (
+          <p className={styles.mutedText} style={{ marginBottom: 10, fontSize: 12 }}>
+            A change is already scheduled to take effect {pendingEffectiveDate}. Saving here applies these hours{" "}
+            <strong>immediately</strong> instead and cancels that scheduled change.
+          </p>
+        )}
+        <WorkingHoursGrid hours={hours} setHours={setHours} />
+      </div>
+      <button onClick={handleSave} disabled={saving} className={styles.ctaSmall}>
+        {saving ? "Saving…" : "Save"}
+      </button>
       {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
     </div>
   );

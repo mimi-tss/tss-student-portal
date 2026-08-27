@@ -3,6 +3,42 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Edit Coach: same all-in-one treatment as Add Coach (2026-08-27)
+
+Immediate follow-up to Add Coach above — you asked for the same "edit
+everything in one go" on the existing `EditCoachPanel`, which previously
+covered only name/email/timezone/visibility. Now also includes meeting
+link and the full weekly availability grid.
+
+- `EditCoachPanel` gained a Meeting link field and a `WorkingHoursGrid`
+  (the same shared component Add Coach uses), pre-filled from the
+  coach's live `meet_link`/`working_hours`. **Deliberately does not
+  include `hourly_rate`** — that field has its own access boundary
+  (`hasFinanceRole`, Finance-tab-only) for a real reason, and this modal
+  is `isAdminRole` (both `admin` and `admin_finance`); folding pay rate
+  in here would quietly undo that boundary for a plain `admin`.
+- **Save now fires 3 requests in parallel**: `coach-info` (name/email/
+  timezone/visibility), `coach-links` (meeting link), and
+  `coach-working-hours` (availability) — first failure surfaces its
+  error, matching the same all-or-partial-visibility tradeoff Add Coach's
+  single request doesn't have to make (Add Coach bundles everything into
+  one `provision-coach` insert instead).
+- **Availability here is intentionally simpler than the dedicated
+  Availability panel** — no effective-date field, always saves
+  immediately. If a change is already queued (`pending_effective_date`
+  set), the modal shows a warning that saving here applies the new hours
+  *now* and cancels that scheduled change — reusing
+  `coach-working-hours`'s existing documented behavior ("an immediate
+  save supersedes a pending one") rather than adding new backend logic.
+  The dedicated Availability panel (opened from the day-schedule column
+  header) remains the way to queue a future-dated change.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested in
+  the refreshed mock: meeting link and all working-hours windows
+  pre-filled correctly on open, the pending-change warning showed with
+  the right date, adding a window and saving cleared
+  `pendingEffectiveDate` back to null (matching the real route):
+  [edit coach info preview](https://claude.ai/code/artifact/d178fe14-aed4-4d1f-b8bf-7c817f6220f2).
+
 ## Add Coach: meeting link, visibility, and availability all in one form (2026-08-27)
 
 You asked to set everything about a new coach in one go, rather than
