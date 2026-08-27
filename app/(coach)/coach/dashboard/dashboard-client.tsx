@@ -76,6 +76,7 @@ function canMark(session: TodaySession): boolean {
 
 export default function DashboardClient({
   coachName,
+  meetLink,
   currentProfileId,
   today,
   todayGroupLessons,
@@ -90,6 +91,7 @@ export default function DashboardClient({
   newPayroll,
 }: {
   coachName: string;
+  meetLink: string | null;
   currentProfileId: string;
   today: TodaySession[];
   todayGroupLessons: CoachGroupLesson[];
@@ -205,6 +207,13 @@ export default function DashboardClient({
             You have {totalTodayCount} session{totalTodayCount === 1 ? "" : "s"} today
             {expiringMakeups.length > 0 ? ` · ${expiringMakeups.length} makeup${expiringMakeups.length === 1 ? "" : "s"} need scheduling` : ""}
           </p>
+          {meetLink && (
+            <p className={styles.panelText} style={{ marginTop: 4 }}>
+              <a href={meetLink} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>
+                Open my meeting room →
+              </a>
+            </p>
+          )}
         </div>
         <div className={styles.statPills}>
           <div className={styles.statPill}>

@@ -3,6 +3,46 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Meeting link: fixed staleness bug, added coach-side display (2026-08-27)
+
+You caught a real bug live: editing the meeting link inline in the
+roster (`CoachLinkCell`'s own "Edit" next to the link, separate from the
+full Edit-coach modal) then reopening the Edit-coach modal for the same
+coach still showed the *old* link. Root cause — `CoachLinkCell`'s
+`handleSave` only updated its own local `saved` state after a
+successful POST; it never called `router.refresh()`, so the page's
+server-fetched `coaches` array (which is exactly what feeds the
+Edit-coach modal's initial values when you click that row's other
+"Edit") stayed stale until a full reload. `EditCoachPanel` and
+`AddCoachPanel` already refreshed correctly on save — this one inline
+quick-editor was the only path that didn't. Fixed by adding
+`router.refresh()` there too, matching the other two.
+
+**Also, real gap you flagged: the coach's own dashboard never showed
+their meeting link at all** — only the student side did (via
+`JoinButton`). Added a small "Open my meeting room →" link to the coach
+dashboard hero (next to "You have N sessions today"), reading the same
+`coaches.meet_link` column:
+[app/(coach)/coach/dashboard/page.tsx](<app/(coach)/coach/dashboard/page.tsx>)
+now selects `meet_link` and passes it to
+[dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>).
+Unlike the student's `JoinButton` (which only appears 10 minutes before
+a specific session and links that session), this is the coach's one
+persistent room link, always visible when set — no time-gating, since
+it's the same link every session.
+
+The student side needed no code change — `student/dashboard/page.tsx`
+already selects `meet_link` fresh on every server render, so it was
+already correct once the coach-side data itself was correct; the bug
+was purely the admin-side staleness above.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Click-tested in a
+mock: inline-edited the link, confirmed the coach-dashboard link and
+student join link updated immediately, then reopened the Edit-coach
+modal and confirmed it showed the fresh value (not the stale one) —
+exactly reproducing and then fixing what you saw live:
+[meeting link sync preview](https://claude.ai/code/artifact/de1bb6fb-062b-4629-8739-bc5d604c86d5).
+
 ## Edit Coach: same all-in-one treatment as Add Coach (2026-08-27)
 
 Immediate follow-up to Add Coach above — you asked for the same "edit

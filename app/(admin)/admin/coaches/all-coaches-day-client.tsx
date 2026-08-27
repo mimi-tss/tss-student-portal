@@ -1282,6 +1282,7 @@ function CoachLinkCell({
   value: string | null;
   placeholder: string;
 }) {
+  const router = useRouter();
   const [saved, setSaved] = useState(value);
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(value ?? "");
@@ -1298,6 +1299,12 @@ function CoachLinkCell({
     if (res.ok) {
       setSaved(inputValue.trim() || null);
       setEditing(false);
+      // Without this, the parent's server-fetched `coaches` prop stays
+      // stale until a full reload — the Edit-coach modal (opened from
+      // this same row) reads its initial meetLink from that same prop,
+      // so it would silently show the pre-edit value if this quick
+      // inline edit didn't force a refetch.
+      router.refresh();
     } else {
       const body = await res.json().catch(() => ({}));
       window.alert(body.error ?? "Could not save that link.");

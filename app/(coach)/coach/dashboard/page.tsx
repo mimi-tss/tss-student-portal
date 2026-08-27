@@ -33,7 +33,7 @@ export default async function CoachDashboardPage({
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, name, timezone")
+    .select("id, name, timezone, meet_link")
     .eq("profile_id", user.id)
     .single();
   if (!coach) redirect("/login");
@@ -112,6 +112,7 @@ export default async function CoachDashboardPage({
     <main className={styles.wrap}>
       <DashboardClient
         coachName={coach.name}
+        meetLink={coach.meet_link}
         currentProfileId={user.id}
         today={today}
         todayGroupLessons={todayGroupLessons}
