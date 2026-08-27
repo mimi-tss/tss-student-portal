@@ -167,6 +167,14 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
     | { kind: "availability"; coachId: string; coachName: string }
     | { kind: "timeoff"; coachId: string; coachName: string }
     | { kind: "addCoach" }
+    | {
+        kind: "editCoach";
+        coachId: string;
+        name: string;
+        email: string;
+        timezone: string;
+        hiddenFromStudents: boolean;
+      }
     | { kind: "cancel"; sessionId: string; studentId: string; studentName: string; scheduledAt: string; isMakeup: boolean }
     | { kind: "cancelGroup"; groupLessonId: string; topic: string | null; scheduledAt: string }
   >(null);
@@ -840,12 +848,29 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                   <CoachLinkCell coachId={c.id} value={c.meetLink} placeholder="Not set" />
                 </td>
                 <td>
-                  <button
-                    className={c.active ? styles.dangerLink : styles.linkBtnSmall}
-                    onClick={() => handleToggleActive(c.id, !c.active, c.studentCount)}
-                  >
-                    {c.active ? "Remove" : "Reactivate"}
-                  </button>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <button
+                      className={styles.linkBtnSmall}
+                      onClick={() =>
+                        setPanel({
+                          kind: "editCoach",
+                          coachId: c.id,
+                          name: c.name,
+                          email: c.email,
+                          timezone: c.timezone,
+                          hiddenFromStudents: c.hiddenFromStudents,
+                        })
+                      }
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className={c.active ? styles.dangerLink : styles.linkBtnSmall}
+                      onClick={() => handleToggleActive(c.id, !c.active, c.studentCount)}
+                    >
+                      {c.active ? "Remove" : "Reactivate"}
+                    </button>
+                  </span>
                 </td>
               </tr>
             ))}
@@ -861,6 +886,20 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
       {panel?.kind === "addCoach" && (
         <ModalOverlay onClose={() => setPanel(null)}>
           <AddCoachPanel onClose={() => setPanel(null)} onAdded={() => { setPanel(null); router.refresh(); }} />
+        </ModalOverlay>
+      )}
+
+      {panel?.kind === "editCoach" && (
+        <ModalOverlay onClose={() => setPanel(null)}>
+          <EditCoachPanel
+            coachId={panel.coachId}
+            initialName={panel.name}
+            initialEmail={panel.email}
+            initialTimezone={panel.timezone}
+            initialHiddenFromStudents={panel.hiddenFromStudents}
+            onClose={() => setPanel(null)}
+            onSaved={() => { setPanel(null); router.refresh(); }}
+          />
         </ModalOverlay>
       )}
     </div>
@@ -961,6 +1000,107 @@ function AddCoachPanel({ onClose, onAdded }: { onClose: () => void; onAdded: () 
         </div>
         <button onClick={handleAdd} disabled={saving} className={styles.ctaSmall}>
           {saving ? "Adding…" : "Add coach"}
+        </button>
+      </div>
+      {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
+    </div>
+  );
+}
+
+// ---- Edit coach ----
+// Nothing let admin correct a coach's name/email/timezone/visibility
+// after AddCoachPanel created the row above — hourly_rate (Finance),
+// working_hours (Availability), active (Remove/Reactivate), and
+// meet_link (CoachLinkCell) already had their own edit paths, these four
+// didn't. Email is the actual login-lookup key
+// (lib/auth/resolve-account.ts reads coaches.email directly, not the
+// Supabase auth user's email), so fixing a typo'd email here is enough
+// on its own to fix that coach's login — no separate auth-side update
+// needed.
+function EditCoachPanel({
+  coachId,
+  initialName,
+  initialEmail,
+  initialTimezone,
+  initialHiddenFromStudents,
+  onClose,
+  onSaved,
+}: {
+  coachId: string;
+  initialName: string;
+  initialEmail: string;
+  initialTimezone: string;
+  initialHiddenFromStudents: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(initialName);
+  const [email, setEmail] = useState(initialEmail);
+  const [timezone, setTimezone] = useState(initialTimezone);
+  const [hiddenFromStudents, setHiddenFromStudents] = useState(initialHiddenFromStudents);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!name.trim() || !email.trim()) {
+      setError("Name and email are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/admin/coach-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coachId,
+        name: name.trim(),
+        email: email.trim(),
+        timezone,
+        hiddenFromStudents,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Could not save that coach.");
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>Edit coach</h2>
+        <button className={styles.linkBtnSmall} onClick={onClose}>Close</button>
+      </div>
+      <div className={styles.rowForm}>
+        <div className={styles.field}>
+          <label>Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Timezone</label>
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={styles.select}>
+            {allTimezones().map((tz) => (
+              <option key={tz} value={tz}>{timezoneLabel(tz)}</option>
+            ))}
+          </select>
+        </div>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={hiddenFromStudents}
+            onChange={(e) => setHiddenFromStudents(e.target.checked)}
+          />
+          Hidden from trial picker
+        </label>
+        <button onClick={handleSave} disabled={saving} className={styles.ctaSmall}>
+          {saving ? "Saving…" : "Save"}
         </button>
       </div>
       {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}

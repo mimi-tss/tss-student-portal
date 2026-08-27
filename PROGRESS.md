@@ -3,6 +3,36 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coaches tab: edit a coach's name/email/timezone/visibility (2026-08-27)
+
+You asked for full coach-info editing — name, email, etc. Turned out
+those four fields (name, email, timezone, `hidden_from_students`) had
+*never* been editable after `AddCoachPanel` first created the row:
+hourly_rate (Finance), working_hours (Availability), active (Remove/
+Reactivate), and meet_link (this session's earlier `CoachLinkCell`) all
+already had their own edit paths, these four didn't.
+
+- New [app/api/admin/coach-info/route.ts](app/api/admin/coach-info/route.ts) —
+  updates `name`/`email`/`timezone`/`hidden_from_students`. `isAdminRole`-
+  gated like `coach-links` (not money). Returns a clear 409 ("Another
+  coach already uses that email.") on the `coaches.email` unique-
+  constraint conflict rather than a raw Postgres error.
+- **`coaches.email` is the actual login-lookup key** —
+  [resolve-account.ts](lib/auth/resolve-account.ts) reads it directly to
+  decide where a login code goes, never the Supabase auth user's own
+  email. So fixing a typo'd coach email here is sufficient on its own to
+  fix that coach's login; no separate auth-side update needed.
+- New "Edit" button next to each roster row's Remove/Reactivate in
+  [all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+  opens a modal (new `EditCoachPanel`, same shape as the existing
+  `AddCoachPanel`) pre-filled with the coach's current values.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested in a
+  focused mock: editing Tara's name/timezone/visibility saved and
+  reflected immediately in the table; trying to save Test Coach's email
+  as Tara's already-in-use one surfaced the 409 error inline without
+  closing the modal:
+  [edit coach info preview](https://claude.ai/code/artifact/d178fe14-aed4-4d1f-b8bf-7c817f6220f2).
+
 ## Finance's Coach rates panel: same active-only filter as Coaches tab (2026-08-27)
 
 You spotted the same problem on the Finance page that the Coaches roster
