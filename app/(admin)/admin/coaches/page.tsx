@@ -12,7 +12,7 @@ export default async function AdminCoachesPage() {
     supabase
       .from("coaches")
       .select(
-        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, classroom_link",
+        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link",
       )
       .order("name"),
     supabase.from("students").select("assigned_coach_id").not("assigned_coach_id", "is", null),
@@ -36,7 +36,6 @@ export default async function AdminCoachesPage() {
     studentCount: studentCounts.get(c.id) ?? 0,
     active: c.active,
     meetLink: c.meet_link as string | null,
-    classroomLink: c.classroom_link as string | null,
   }));
 
   return (

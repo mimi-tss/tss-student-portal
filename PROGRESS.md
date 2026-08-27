@@ -90,7 +90,24 @@ except the student dashboard's "Join session" button.
   clearing one back to "Not set" all worked, with a visible "Saving…"
   state and a confirmation toast; republished after the active-only
   filter was added — unchecking "Show inactive coaches" hides an
-  inactive coach, checking it brings them back:
+  inactive coach, checking it brings them back.
+
+**Corrected same day: meeting link and classroom link are the same
+thing for this studio, not two separate links** — you caught this right
+after the two-column version deployed. Reverted to a single "Meeting
+link" column/field:
+- New migration
+  [0053_drop_coach_classroom_link.sql](supabase/migrations/0053_drop_coach_classroom_link.sql)
+  drops `coaches.classroom_link` again — it was live for under a day and
+  never actually used, so dropped rather than left as dead schema.
+  **Not yet confirmed applied** — see Action needed below.
+- [coach-links/route.ts](app/api/admin/coach-links/route.ts) now only
+  takes `meetLink`; `all-coaches-day-client.tsx`'s `CoachLinkCell` lost
+  its `field` prop (single-purpose now, hardcoded to `meet_link`); the
+  roster table is back to one link column, not two.
+- `npx tsc --noEmit -p .` and `next build` clean (had to clear a stale
+  `.next/types` cache again, same as the Finance-page-move session).
+  Re-verified in the same, now-single-column mock:
   [coach meeting links preview](https://claude.ai/code/artifact/90ea951a-bb13-4d77-a963-33e66120e19c).
 
 ## Exercise sync: root cause found — env var held a URL, not the id (2026-08-27)
@@ -483,9 +500,12 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0050 confirmed applied** (2026-08-27) — `coaches.classroom_link`
-is live; the Coaches tab's classroom-link editor is fully working, not
-just meeting-link.
+**New migration 0053 not yet confirmed applied** —
+`supabase/migrations/0053_drop_coach_classroom_link.sql` drops
+`coaches.classroom_link` again (0050 was reverted same-day — meeting
+link and classroom link turned out to be the same thing). Harmless
+either way: the app no longer reads or writes that column regardless of
+whether the drop has run.
 
 **New migration 0049 not yet confirmed applied** —
 `supabase/migrations/0049_login_codes.sql` adds the `login_codes`

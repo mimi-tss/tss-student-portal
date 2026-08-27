@@ -36,7 +36,6 @@ interface CoachRow {
   studentCount: number;
   active: boolean;
   meetLink: string | null;
-  classroomLink: string | null;
 }
 
 interface Session {
@@ -806,7 +805,6 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
               <th>Visibility</th>
               <th>Status</th>
               <th>Meeting link</th>
-              <th>Classroom link</th>
               <th></th>
             </tr>
           </thead>
@@ -839,10 +837,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                   )}
                 </td>
                 <td>
-                  <CoachLinkCell coachId={c.id} field="meetLink" value={c.meetLink} placeholder="Not set" />
-                </td>
-                <td>
-                  <CoachLinkCell coachId={c.id} field="classroomLink" value={c.classroomLink} placeholder="Not set" />
+                  <CoachLinkCell coachId={c.id} value={c.meetLink} placeholder="Not set" />
                 </td>
                 <td>
                   <button
@@ -1021,18 +1016,15 @@ function MetricBox({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Click-to-edit for coaches.meet_link/classroom_link — same pattern as
-// Finance's CoachRateRow, one field per instance so each link edits
-// independently. isAdminRole-gated on the API side (not finance-only):
-// these are session-joining links, not money.
+// Click-to-edit for coaches.meet_link — same pattern as Finance's
+// CoachRateRow. isAdminRole-gated on the API side (not finance-only):
+// this is a session-joining link, not money.
 function CoachLinkCell({
   coachId,
-  field,
   value,
   placeholder,
 }: {
   coachId: string;
-  field: "meetLink" | "classroomLink";
   value: string | null;
   placeholder: string;
 }) {
@@ -1046,7 +1038,7 @@ function CoachLinkCell({
     const res = await fetch("/api/admin/coach-links", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coachId, [field]: inputValue.trim() || null }),
+      body: JSON.stringify({ coachId, meetLink: inputValue.trim() || null }),
     });
     setSaving(false);
     if (res.ok) {
