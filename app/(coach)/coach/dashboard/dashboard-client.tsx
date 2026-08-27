@@ -7,6 +7,7 @@ import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
+import ExercisePlayer from "@/components/exercise-player";
 import styles from "../../coach.module.css";
 import type { TodaySession, ExpiringMakeup, UpcomingBirthday, StudentSnapshot } from "@/lib/coach/dashboard-data";
 import type { CoachGroupLesson } from "@/lib/group-lessons";
@@ -520,7 +521,11 @@ export default function DashboardClient({
                     {assignedExercises.map((ex) => (
                       <li key={ex.id} className={styles.listItem}>
                         <p>{ex.title}</p>
-                        {ex.audioUrl && <audio controls src={ex.audioUrl} style={{ width: "100%", marginTop: 6 }} />}
+                        {ex.audioUrl && (
+                          <div style={{ marginTop: 6 }}>
+                            <ExercisePlayer src={ex.audioUrl} />
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

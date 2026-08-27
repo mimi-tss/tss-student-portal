@@ -14,6 +14,7 @@ import JoinButton from "./join-button";
 import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
 import SharedFolderPanel from "@/components/shared-folder-panel";
+import ExercisePlayer from "@/components/exercise-player";
 import styles from "../../student.module.css";
 
 const TIER_LABEL: Record<string, string> = {
@@ -228,12 +229,9 @@ export default async function StudentDashboardPage() {
                   <div className={styles.exerciseTitle}>{ex.title}</div>
                   {ex.description && <div className={styles.exerciseMeta}>{ex.description}</div>}
                   {ex.audioUrl && (
-                    <audio
-                      controls
-                      controlsList="nodownload"
-                      src={ex.audioUrl}
-                      style={{ width: "100%", marginTop: 8 }}
-                    />
+                    <div style={{ marginTop: 8 }}>
+                      <ExercisePlayer src={ex.audioUrl} />
+                    </div>
                   )}
                 </div>
               </li>

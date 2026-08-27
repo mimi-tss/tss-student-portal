@@ -11,6 +11,7 @@ import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
+import ExercisePlayer from "@/components/exercise-player";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
@@ -393,7 +394,11 @@ export default async function AdminStudentPage({
             {assignedExercises.map((ex) => (
               <li key={ex.id} className={styles.listItem}>
                 <p>{ex.title}</p>
-                {ex.audioUrl && <audio controls src={ex.audioUrl} style={{ width: "100%", marginTop: 6 }} />}
+                {ex.audioUrl && (
+                  <div style={{ marginTop: 6 }}>
+                    <ExercisePlayer src={ex.audioUrl} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
