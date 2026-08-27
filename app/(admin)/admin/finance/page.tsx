@@ -8,7 +8,7 @@ import styles from "../../admin.module.css";
 export default async function AdminFinancePage() {
   await requireFinanceAccess();
   const supabase = await createClient();
-  const { data: coaches } = await supabase.from("coaches").select("id, name, hourly_rate").order("name");
+  const { data: coaches } = await supabase.from("coaches").select("id, name, hourly_rate, active").order("name");
 
   return (
     <main className={styles.wrap}>

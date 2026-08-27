@@ -3,6 +3,25 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Finance's Coach rates panel: same active-only filter as Coaches tab (2026-08-27)
+
+You spotted the same problem on the Finance page that the Coaches roster
+table just got fixed for: "Test Coach" (inactive) still showed up in the
+Coach rates list. Same fix, same pattern:
+- [finance/page.tsx](<app/(admin)/admin/finance/page.tsx>) now also
+  selects `active` from `coaches`.
+- [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>) —
+  new `showInactiveCoaches` state (unchecked by default) and a
+  `rateCoaches` filter, same "Show inactive coaches" checkbox placed
+  right above the Coach rates table. Deliberately scoped to just this
+  panel — the rollup coach-filter dropdown and the Add Adjustment coach
+  picker elsewhere on the page were untouched, not part of what you
+  flagged.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested in a
+  focused mock (just this panel): Test Coach hidden by default, checkbox
+  brings it back:
+  [coach rates filter preview](https://claude.ai/code/artifact/9fe034ad-67fc-4002-a308-3c68f12e75ff).
+
 ## Exercise sync fully working: RLS gap, stale list, duplicate assigns, playback speed (2026-08-27)
 
 Confirmed live: exercise sync itself (the URL-vs-bare-id fix from

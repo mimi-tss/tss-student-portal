@@ -7,6 +7,7 @@ interface Coach {
   id: string;
   name: string;
   hourly_rate: number;
+  active: boolean;
 }
 
 interface PayableSession {
@@ -166,6 +167,12 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [startDate, setStartDate] = useState(defaultRange.start);
   const [endDate, setEndDate] = useState(defaultRange.end);
   const [coachId, setCoachId] = useState("");
+
+  // Coach rates panel defaults to active-only, same reasoning and same
+  // toggle pattern as the Coaches tab's roster table — an inactive coach
+  // is never deleted (0042), so without this the rate list only grows.
+  const [showInactiveCoaches, setShowInactiveCoaches] = useState(false);
+  const rateCoaches = showInactiveCoaches ? coaches : coaches.filter((c) => c.active);
 
   const [summaries, setSummaries] = useState<CoachPayrollSummary[] | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -702,6 +709,24 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
 
       <div className={styles.panel}>
         <h2>Coach rates</h2>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 13,
+            color: "var(--text-muted)",
+            margin: "8px 0 12px",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showInactiveCoaches}
+            onChange={(e) => setShowInactiveCoaches(e.target.checked)}
+          />
+          Show inactive coaches
+        </label>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -710,11 +735,14 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
             </tr>
           </thead>
           <tbody>
-            {coaches.map((c) => (
+            {rateCoaches.map((c) => (
               <CoachRateRow key={c.id} coach={c} />
             ))}
           </tbody>
         </table>
+        {rateCoaches.length === 0 && (
+          <p className={styles.emptyState}>No active coaches — check “Show inactive coaches”.</p>
+        )}
       </div>
     </div>
   );
