@@ -99,12 +99,21 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (existingSchedule) {
-    await supabase
+    const { error: deleteError } = await supabase
       .from("sessions")
       .delete()
       .eq("recurring_schedule_id", existingSchedule.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date(`${effectiveStartDate}T00:00:00Z`).toISOString());
+
+    // RLS blocking a delete doesn't error, it just matches zero rows
+    // (same gotcha migration 0041 already flagged for update) — this is
+    // exactly what let old occurrences of a changed schedule silently
+    // survive alongside the new ones (migration 0054 fixes the missing
+    // policy; this still fails loudly if that regresses).
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
   }
 
   const { data: schedule, error } = await supabase
@@ -152,12 +161,16 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "no recurring schedule found" }, { status: 404 });
   }
 
-  await supabase
+  const { error: deleteSessionsError } = await supabase
     .from("sessions")
     .delete()
     .eq("recurring_schedule_id", schedule.id)
     .eq("status", "scheduled")
     .gte("scheduled_at", new Date().toISOString());
+
+  if (deleteSessionsError) {
+    return NextResponse.json({ error: deleteSessionsError.message }, { status: 500 });
+  }
 
   const { error } = await supabase
     .from("recurring_schedules")

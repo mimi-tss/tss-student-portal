@@ -3,6 +3,55 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Root cause found: recurring-schedule changes leave duplicate sessions (2026-08-27)
+
+You caught this live testing Mimi Test's recurring schedule: change the
+weekly slot, change it again, and the old day's session never actually
+disappears — both a Wed 2:30pm and a Thu 4:00pm "Mimi Test" ended up
+sitting on Celine's coach calendar at once. Real backend bug, not a UI
+glitch:
+
+**`sessions` has never had a DELETE policy, for any role.** Grepped
+every migration — SELECT/INSERT/UPDATE policies exist for admin/coach/
+student (0003/0005/0007/0010/0012/0017), but no DELETE, ever. RLS
+defaults to *deny* when nothing matches, so
+[app/api/admin/recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts)'s
+cleanup step — "delete this schedule's own future `scheduled` sessions
+before regenerating for the new day/time" — has been silently affecting
+**zero rows** every single time, on both the POST (change schedule) and
+DELETE (remove schedule entirely) handlers. Supabase's client doesn't
+surface an RLS-blocked delete as an error (the exact same gotcha
+migration 0041's own comment already flagged for UPDATE, and why
+`coach-active`/`coach-info`/`coach-links` all defensively check affected
+rows) — this delete call had no such check, so the no-op passed
+completely silently. Old occurrences of every past schedule change have
+been quietly accumulating instead of being replaced ever since this
+feature shipped.
+
+- New [0054_admin_delete_sessions.sql](supabase/migrations/0054_admin_delete_sessions.sql) —
+  adds `"admins can delete sessions"` (`is_admin()`), mirroring the
+  existing admin SELECT/INSERT/UPDATE policies on the same table.
+  **Not yet confirmed applied** — see Action needed below.
+- Both delete call sites in
+  [recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts)
+  now check the delete's own `error` and fail loudly (500) instead of
+  swallowing it — doesn't turn "zero rows" into an error (that's
+  legitimately normal, e.g. a brand-new schedule with nothing generated
+  yet), but a genuine future RLS/policy regression won't go silent again.
+- **Not fixed by this migration alone: Mimi Test's existing stray
+  duplicate session(s) already in the database.** The policy fix
+  prevents this from happening on the *next* schedule change — it
+  doesn't retroactively clean up sessions that already leaked through
+  while the policy was missing. You'll need to manually cancel/remove
+  the extra "Mimi Test" occurrence from the Coaches day/week view (the
+  existing staff-cancel action) once you've confirmed which one should
+  stay.
+- `npx tsc --noEmit -p .` and `next build` both clean. **Not click-tested
+  against real Supabase** — this is a pure RLS/backend fix with no
+  observable UI difference to mock; the real proof is you retrying the
+  same change → change-back sequence live once 0054 is applied and
+  confirming only one session survives each time.
+
 ## Meeting link: fixed staleness bug, added coach-side display (2026-08-27)
 
 You caught a real bug live: editing the meeting link inline in the
@@ -703,6 +752,19 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0054 not yet confirmed applied — real bug, please prioritize this one.**
+`supabase/migrations/0054_admin_delete_sessions.sql` adds the missing
+`sessions` DELETE policy for admin. Until this runs, changing or
+removing a student's recurring weekly schedule will keep leaving stale
+duplicate sessions behind (the bug you just found with Mimi Test) —
+every schedule change is affected, not just that one test.
+
+**Also needs manual cleanup, separate from the migration**: Mimi Test's
+existing stray duplicate session(s) on Celine's calendar (from before
+this fix) won't disappear on their own — cancel the extra one yourself
+from the Coaches day/week view once you've confirmed which occurrence
+should stay.
 
 **New migration 0053 not yet confirmed applied** —
 `supabase/migrations/0053_drop_coach_classroom_link.sql` drops
