@@ -25,39 +25,23 @@ export async function POST() {
     return NextResponse.json({ error: "admin only" }, { status: 403 });
   }
 
-  // Trimmed defensively — a stray trailing space/newline from a
-  // copy-paste into Vercel's env var UI is a real, easy-to-hit mistake
-  // and Drive's API error for a mangled id ("File not found: <id>.")
-  // doesn't make the cause obvious.
-  const folderId = process.env.GOOGLE_EXERCISES_FOLDER_ID?.trim();
+  // Accepts either a bare folder id or a full Drive share URL
+  // (drive.google.com/drive/folders/<id>) — confirmed live that the
+  // configured env var held the full URL, which Drive's API rejects
+  // with an opaque "File not found: ." rather than a clear format error.
+  // Also trimmed defensively for stray copy-paste whitespace.
+  const rawFolderId = process.env.GOOGLE_EXERCISES_FOLDER_ID?.trim();
+  const folderId = rawFolderId?.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1] ?? rawFolderId;
   if (!folderId) {
     return NextResponse.json({ error: "GOOGLE_EXERCISES_FOLDER_ID not configured" }, { status: 500 });
   }
-
-  // TEMP DEBUG (2026-08-27): "File not found: ." keeps coming back blank
-  // regardless of folder id / credential fixes — surfacing the actual
-  // runtime values (masked, no secrets) directly in the error response so
-  // we don't have to guess. Revert once root cause is found.
-  const debug = {
-    folderIdLength: folderId.length,
-    folderIdSnippet: folderId.length > 8 ? `${folderId.slice(0, 4)}...${folderId.slice(-4)}` : folderId,
-    serviceAccountEmailSet: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    serviceAccountEmailSnippet: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.slice(0, 6),
-    privateKeyLength: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.length ?? 0,
-    privateKeyStartsCorrect: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim().startsWith("-----BEGIN"),
-    adminEmailSet: !!process.env.GOOGLE_ADMIN_EMAIL,
-  };
 
   try {
     const result = await syncExercisesFromDrive(folderId);
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
     return NextResponse.json(
-      {
-        error: err instanceof Error ? err.message : "sync failed",
-        debug,
-        errDetail: err instanceof Error ? { name: err.name, code: (err as { code?: unknown }).code, errors: (err as { errors?: unknown }).errors } : String(err),
-      },
+      { error: err instanceof Error ? err.message : "sync failed" },
       { status: 500 },
     );
   }
