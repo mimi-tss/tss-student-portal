@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Exercise sync: root cause found — env var held a URL, not the id (2026-08-27)
+
+Picked up the exercise sync bug from the last session's handoff.
+Google service account credentials turned out fine all along — you
+regenerated the private key on the existing service account and
+redeployed, no change in the error, which was the first real signal
+credentials weren't it.
+
+Added temporary debug output to [sync/route.ts](app/api/admin/exercises/sync/route.ts)
+(masked env var lengths/snippets in the error response) and to
+[exercises-client.tsx](<app/(admin)/admin/exercises/exercises-client.tsx>)
+(show the full response body, since testing happens on phone with no
+easy devtools access) — two separate pushes, confirmed live. That
+surfaced it immediately: `GOOGLE_EXERCISES_FOLDER_ID` held the full
+`drive.google.com/drive/folders/<id>` share URL (72 chars, starts
+`http`), not the bare folder id. Drive's API doesn't validate/report
+that clearly — it just returns the same opaque `File not found: .`
+regardless of whether the id is missing, malformed, or a full URL,
+which is why every prior credential/permission theory kept looking
+plausible without ever resolving.
+
+Fixed the route to extract the id whether the env var holds a bare id
+or the full URL (`/\/folders\/([a-zA-Z0-9_-]+)/` match, falling back
+to the raw value), and reverted both temp debug additions. `npx tsc
+--noEmit -p .` and `next build` clean. **Not yet confirmed synced
+successfully** — waiting on you to retry after this deploys. If it
+still fails, the debug fields are gone now (reverted), so re-add them
+temporarily rather than guessing blind again.
+
 ## Exercise sync follow-up: found the real Drive issues (2026-08-26)
 
 Fixing the admin_finance 403 surfaced two more real, separate problems,
