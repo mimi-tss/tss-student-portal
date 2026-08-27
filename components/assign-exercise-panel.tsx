@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Exercise {
   id: string;
@@ -29,6 +30,7 @@ export default function AssignExercisePanel({
   const [assigning, setAssigning] = useState(false);
   const [done, setDone] = useState(false);
   const blurTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const router = useRouter();
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -69,7 +71,13 @@ export default function AssignExercisePanel({
       body: JSON.stringify({ exerciseId: selectedId, studentId }),
     });
     setAssigning(false);
-    if (res.ok) setDone(true);
+    if (res.ok) {
+      setDone(true);
+      // The assigned-exercises list below this panel is rendered by the
+      // parent server component from data fetched at page load — without
+      // this it stays on the pre-assign snapshot until a manual reload.
+      router.refresh();
+    }
   }
 
   if (exercises.length === 0) {
