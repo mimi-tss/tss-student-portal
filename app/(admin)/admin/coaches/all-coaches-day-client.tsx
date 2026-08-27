@@ -35,6 +35,8 @@ interface CoachRow {
   pendingEffectiveDate: string | null;
   studentCount: number;
   active: boolean;
+  meetLink: string | null;
+  classroomLink: string | null;
 }
 
 interface Session {
@@ -137,6 +139,14 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
   const [selectedCoachIds, setSelectedCoachIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState<"day" | "week">("day");
   const [weekRange, setWeekRange] = useState<{ start: Date; end: Date } | null>(null);
+
+  // Roster table defaults to active-only — an inactive coach is
+  // deliberately kept forever (0042's "never a hard delete"), so without
+  // this the table would only ever grow, cluttered with people no
+  // longer teaching. Independent of activeCoaches above, which only
+  // feeds the day-schedule coach picker.
+  const [showInactiveCoaches, setShowInactiveCoaches] = useState(false);
+  const rosterCoaches = showInactiveCoaches ? coaches : coaches.filter((c) => c.active);
 
   function toggleCoach(id: string) {
     const next = new Set(selectedCoachIds);
@@ -768,6 +778,24 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
       )}
 
       <div className={styles.panel} style={{ marginTop: 20 }}>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 13,
+            color: "var(--text-muted)",
+            marginBottom: 12,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showInactiveCoaches}
+            onChange={(e) => setShowInactiveCoaches(e.target.checked)}
+          />
+          Show inactive coaches
+        </label>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -777,11 +805,13 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
               <th>Students</th>
               <th>Visibility</th>
               <th>Status</th>
+              <th>Meeting link</th>
+              <th>Classroom link</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {coaches.map((c) => (
+            {rosterCoaches.map((c) => (
               <tr key={c.id}>
                 <td className={styles.rowName}>{c.name}</td>
                 <td className={styles.mutedText}>{c.email}</td>
@@ -809,6 +839,12 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                   )}
                 </td>
                 <td>
+                  <CoachLinkCell coachId={c.id} field="meetLink" value={c.meetLink} placeholder="Not set" />
+                </td>
+                <td>
+                  <CoachLinkCell coachId={c.id} field="classroomLink" value={c.classroomLink} placeholder="Not set" />
+                </td>
+                <td>
                   <button
                     className={c.active ? styles.dangerLink : styles.linkBtnSmall}
                     onClick={() => handleToggleActive(c.id, !c.active, c.studentCount)}
@@ -820,7 +856,11 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             ))}
           </tbody>
         </table>
-        {coaches.length === 0 && <p className={styles.emptyState}>No coaches yet.</p>}
+        {rosterCoaches.length === 0 && (
+          <p className={styles.emptyState}>
+            {coaches.length === 0 ? "No coaches yet." : "No active coaches — check “Show inactive coaches”."}
+          </p>
+        )}
       </div>
 
       {panel?.kind === "addCoach" && (
@@ -978,6 +1018,88 @@ function MetricBox({ label, value }: { label: string; value: string }) {
       </div>
       <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
     </div>
+  );
+}
+
+// Click-to-edit for coaches.meet_link/classroom_link — same pattern as
+// Finance's CoachRateRow, one field per instance so each link edits
+// independently. isAdminRole-gated on the API side (not finance-only):
+// these are session-joining links, not money.
+function CoachLinkCell({
+  coachId,
+  field,
+  value,
+  placeholder,
+}: {
+  coachId: string;
+  field: "meetLink" | "classroomLink";
+  value: string | null;
+  placeholder: string;
+}) {
+  const [saved, setSaved] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    const res = await fetch("/api/admin/coach-links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coachId, [field]: inputValue.trim() || null }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setSaved(inputValue.trim() || null);
+      setEditing(false);
+    } else {
+      const body = await res.json().catch(() => ({}));
+      window.alert(body.error ?? "Could not save that link.");
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        {saved ? (
+          <a href={saved} target="_blank" rel="noopener noreferrer" className={styles.linkBtnSmall}>
+            Open
+          </a>
+        ) : (
+          <span className={styles.mutedText}>{placeholder}</span>
+        )}
+        <button onClick={() => setEditing(true)} className={styles.linkBtnSmall}>
+          Edit
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <input
+        type="url"
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        disabled={saving}
+        placeholder="https://…"
+        className={styles.inputSmall}
+        style={{ width: 220 }}
+      />
+      <button onClick={handleSave} disabled={saving} className={styles.linkBtnSmall}>
+        {saving ? "Saving…" : "Save"}
+      </button>
+      <button
+        onClick={() => {
+          setInputValue(saved ?? "");
+          setEditing(false);
+        }}
+        disabled={saving}
+        className={styles.linkBtnSmall}
+      >
+        Cancel
+      </button>
+    </span>
   );
 }
 

@@ -3,6 +3,55 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coaches tab: admin-editable meeting/classroom links (2026-08-27)
+
+Admin and admin_finance can now set/change each coach's Google Meet link
+and (new) Google Classroom link directly from the Coaches roster table —
+previously `coaches.meet_link` (migration 0001) had no UI at all; it
+could only ever be set by hand in Supabase, and nothing read it anywhere
+except the student dashboard's "Join session" button.
+
+- New migration
+  [0050_coach_classroom_link.sql](supabase/migrations/0050_coach_classroom_link.sql) —
+  adds `coaches.classroom_link`. **Confirmed applied 2026-08-27.**
+- New [app/api/admin/coach-links/route.ts](app/api/admin/coach-links/route.ts) —
+  updates one or both of `meet_link`/`classroom_link`. Deliberately
+  `isAdminRole()`-gated, not `hasFinanceRole()`: these are session-joining
+  links, not money, so both `admin` and `admin_finance` get parity here
+  (same boundary `coach-active`/route.ts already uses), unlike
+  `coach-rate`'s finance-only gate. Relies on the existing "admins can
+  update coaches" RLS policy (0041) — no new policy needed, it's already
+  a table-wide policy widened to admit `admin_finance` via `is_admin()`
+  (0046).
+- Roster table in
+  [all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+  gained two columns, each independently click-to-edit (new
+  `CoachLinkCell`, same nothing-writes-until-Save pattern as Finance's
+  coach-rate row): a set link shows "Open" (opens in a new tab) + "Edit";
+  an unset one shows "Not set" + "Edit". Saving an empty value clears it
+  back to null rather than storing `""`.
+  [page.tsx](<app/(admin)/admin/coaches/page.tsx>) now selects both
+  columns and passes them through the existing `coachRows` mapping.
+- **Roster table now also defaults to active-only**, per your feedback
+  after seeing it live (you were on the deployed site testing before
+  this change had shipped, which is why the columns weren't visible yet
+  — this was still sitting locally, unpushed). New "Show inactive
+  coaches" checkbox above the table (`showInactiveCoaches` state,
+  unchecked by default); the table body now maps over `rosterCoaches`
+  (`showInactiveCoaches ? coaches : coaches.filter(c => c.active)`)
+  instead of raw `coaches`. Independent of the existing `activeCoaches`
+  filter that already fed the day-schedule coach picker above — that one
+  was untouched, only the bottom roster table lacked any filter before
+  this.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested via a
+  focused mock (just the roster table, not the full day-scheduler grid
+  above it — that part is unchanged): setting a link, opening it, and
+  clearing one back to "Not set" all worked, with a visible "Saving…"
+  state and a confirmation toast; republished after the active-only
+  filter was added — unchecking "Show inactive coaches" hides an
+  inactive coach, checking it brings them back:
+  [coach meeting links preview](https://claude.ai/code/artifact/90ea951a-bb13-4d77-a963-33e66120e19c).
+
 ## Exercise sync: root cause found — env var held a URL, not the id (2026-08-27)
 
 Picked up the exercise sync bug from the last session's handoff.
@@ -392,6 +441,10 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0050 confirmed applied** (2026-08-27) — `coaches.classroom_link`
+is live; the Coaches tab's classroom-link editor is fully working, not
+just meeting-link.
 
 **New migration 0049 not yet confirmed applied** —
 `supabase/migrations/0049_login_codes.sql` adds the `login_codes`
