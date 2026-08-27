@@ -6,6 +6,7 @@ type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export interface AssignedExercise {
   id: string;
+  exerciseId: string | null;
   title: string;
   description: string | null;
   category: string | null;
@@ -39,11 +40,12 @@ export async function listAssignedExercises(
     } | null;
 
     if (!exercise) {
-      return { id: a.id, title: "Exercise", description: null, category: null, audioUrl: null };
+      return { id: a.id, exerciseId: a.exercise_id, title: "Exercise", description: null, category: null, audioUrl: null };
     }
 
     return {
       id: a.id,
+      exerciseId: exercise.id,
       title: exercise.title,
       description: exercise.description,
       category: exercise.category,

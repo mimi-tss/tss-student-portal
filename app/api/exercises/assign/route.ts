@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (error) {
+    // 23505 = unique_violation — exercise_assignments_exercise_student_unique
+    // (migration 0052) rejects assigning the same exercise to the same
+    // student twice.
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "Already assigned to this student." }, { status: 409 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -230,7 +230,7 @@ export default async function StudentDashboardPage() {
                   {ex.audioUrl && (
                     <audio
                       controls
-                      controlsList="nodownload noplaybackrate"
+                      controlsList="nodownload"
                       src={ex.audioUrl}
                       style={{ width: "100%", marginTop: 8 }}
                     />

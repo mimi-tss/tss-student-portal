@@ -26,6 +26,7 @@ interface FolderFile {
 }
 interface AssignedExercise {
   id: string;
+  exerciseId: string | null;
   title: string;
   description: string | null;
   audioUrl: string | null;
@@ -134,6 +135,17 @@ export default function DashboardClient({
     },
     [selectedId, router],
   );
+
+  // Just the assigned-exercises list, for after an assign — assignedExercises
+  // is plain client state (not derived from a server component), so unlike
+  // the admin student-detail page a router.refresh() alone wouldn't update
+  // what's on screen. Skips loadingSnapshot so it doesn't dim the whole
+  // snapshot panel for what's really a one-list update.
+  const refreshAssignedExercises = useCallback((studentId: string) => {
+    fetch(`/api/coach/student-snapshot?studentId=${studentId}`)
+      .then((res) => res.json())
+      .then((data) => setAssignedExercises(data.assignedExercises ?? []));
+  }, []);
 
   function selectGroupLesson(groupLessonId: string) {
     setSelectedId(null);
@@ -497,7 +509,12 @@ export default function DashboardClient({
 
               <div className={styles.panel}>
                 <h2>Exercises</h2>
-                <AssignExercisePanel studentId={snapshot.id} exercises={catalog} />
+                <AssignExercisePanel
+                  studentId={snapshot.id}
+                  exercises={catalog}
+                  assignedExerciseIds={assignedExercises.map((ex) => ex.exerciseId).filter((id): id is string => !!id)}
+                  onAssigned={() => refreshAssignedExercises(snapshot.id)}
+                />
                 {assignedExercises.length > 0 ? (
                   <ul className={styles.list} style={{ marginTop: 14 }}>
                     {assignedExercises.map((ex) => (

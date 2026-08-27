@@ -383,7 +383,11 @@ export default async function AdminStudentPage({
 
       <div className={styles.panel}>
         <h2>Exercises</h2>
-        <AssignExercisePanel studentId={student.id} exercises={exerciseCatalog.data ?? []} />
+        <AssignExercisePanel
+          studentId={student.id}
+          exercises={exerciseCatalog.data ?? []}
+          assignedExerciseIds={assignedExercises.map((ex) => ex.exerciseId).filter((id): id is string => !!id)}
+        />
         {assignedExercises.length > 0 ? (
           <ul className={styles.list} style={{ marginTop: 14 }}>
             {assignedExercises.map((ex) => (
