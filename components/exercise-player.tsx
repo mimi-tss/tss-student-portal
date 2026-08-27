@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 const MIN_SPEED = 50;
 const MAX_SPEED = 200;
-const STEP = 10;
+const SPEED_STEP = 10;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -13,12 +13,14 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+type PopoverKind = "speed" | "volume" | null;
+
 // Shared exercise audio player (student, coach, admin). Fully custom
 // rather than <audio controls> — the native control bar carries its own
 // built-in playback-rate menu (fixed 0.5/0.75/1/1.25/1.5 presets, no way
 // to remove or hook into it), which fought visibly with an earlier
 // version's separate speed slider (two independent, out-of-sync sources
-// of truth for the same audio element). Building play/seek/speed
+// of truth for the same audio element). Building play/seek/speed/volume
 // ourselves means there's exactly one. Uses Tailwind arbitrary var()
 // classes rather than a CSS module so it renders correctly under any
 // route group's theme root, same reasoning as
@@ -26,22 +28,43 @@ function formatTime(seconds: number): string {
 export default function ExercisePlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const speedBtnRef = useRef<HTMLButtonElement>(null);
+  const volumeBtnRef = useRef<HTMLButtonElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(100);
-  const [speedOpen, setSpeedOpen] = useState(false);
+  const [volume, setVolume] = useState(100);
+  const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
+  // Popovers render position: fixed, computed from the trigger button's
+  // on-screen position — the exercise list's rounded-corner container
+  // clips overflow (student.module.css .exercisePanel), which cut off
+  // any popover attached with a normal absolute/relative position for
+  // exercises near the bottom of the list.
+  const [popoverPos, setPopoverPos] = useState({ top: 0, right: 0 });
 
   useEffect(() => {
-    if (!speedOpen) return;
+    if (!openPopover) return;
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setSpeedOpen(false);
+        setOpenPopover(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [speedOpen]);
+  }, [openPopover]);
+
+  function togglePopover(kind: PopoverKind, btnRef: React.RefObject<HTMLButtonElement | null>) {
+    if (openPopover === kind) {
+      setOpenPopover(null);
+      return;
+    }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPopoverPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setOpenPopover(kind);
+  }
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -61,6 +84,11 @@ export default function ExercisePlayer({ src }: { src: string }) {
   function handleSpeedChange(value: number) {
     setSpeed(value);
     if (audioRef.current) audioRef.current.playbackRate = value / 100;
+  }
+
+  function handleVolumeChange(value: number) {
+    setVolume(value);
+    if (audioRef.current) audioRef.current.volume = value / 100;
   }
 
   return (
@@ -108,22 +136,52 @@ export default function ExercisePlayer({ src }: { src: string }) {
         />
         <span className="w-9 flex-none text-xs text-[var(--text-muted)]">{formatTime(duration)}</span>
         <button
+          ref={volumeBtnRef}
           type="button"
-          onClick={() => setSpeedOpen((o) => !o)}
+          onClick={() => togglePopover("volume", volumeBtnRef)}
+          aria-label="Volume"
+          aria-expanded={openPopover === "volume"}
+          className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)]"
+        >
+          {volume === 0 ? (
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 6h3l4-3.5v11L5 10H2z" />
+              <path d="M10.5 5.5l4 4M14.5 5.5l-4 4" stroke="currentColor" strokeWidth="1.3" fill="none" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 6h3l4-3.5v11L5 10H2z" />
+              <path
+                d="M11 5.5a4 4 0 0 1 0 5"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                fill="none"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </button>
+        <button
+          ref={speedBtnRef}
+          type="button"
+          onClick={() => togglePopover("speed", speedBtnRef)}
           aria-label="Playback speed"
-          aria-expanded={speedOpen}
+          aria-expanded={openPopover === "speed"}
           className="flex-none rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text)]"
         >
           {speed / 100}×
         </button>
       </div>
-      {speedOpen && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-10 flex w-48 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 shadow-lg">
+      {openPopover === "speed" && (
+        <div
+          className="fixed z-10 flex w-48 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 shadow-lg"
+          style={{ top: popoverPos.top, right: popoverPos.right }}
+        >
           <input
             type="range"
             min={MIN_SPEED}
             max={MAX_SPEED}
-            step={STEP}
+            step={SPEED_STEP}
             value={speed}
             onChange={(e) => handleSpeedChange(Number(e.target.value))}
             style={{ accentColor: "var(--gold)" }}
@@ -131,6 +189,25 @@ export default function ExercisePlayer({ src }: { src: string }) {
             aria-label="Playback speed slider"
           />
           <span className="w-10 flex-none text-right text-xs text-[var(--text-muted)]">{speed}%</span>
+        </div>
+      )}
+      {openPopover === "volume" && (
+        <div
+          className="fixed z-10 flex w-40 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 shadow-lg"
+          style={{ top: popoverPos.top, right: popoverPos.right }}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={volume}
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            style={{ accentColor: "var(--gold)" }}
+            className="min-w-0 flex-1"
+            aria-label="Volume slider"
+          />
+          <span className="w-9 flex-none text-right text-xs text-[var(--text-muted)]">{volume}%</span>
         </div>
       )}
     </div>
