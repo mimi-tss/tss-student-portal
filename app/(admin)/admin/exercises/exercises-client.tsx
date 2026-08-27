@@ -36,7 +36,10 @@ export default function ExercisesClient() {
     setSyncing(false);
 
     if (!res.ok) {
-      setError(body.error ?? "Sync failed.");
+      // TEMP DEBUG (2026-08-27): show the full response, not just
+      // body.error, while chasing the blank "File not found: ." bug.
+      // Revert once root cause is found.
+      setError(JSON.stringify(body, null, 2));
       return;
     }
 
