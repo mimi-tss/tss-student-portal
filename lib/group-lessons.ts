@@ -268,6 +268,65 @@ export async function createRecurringGroupLessonSeries(
   return data.id;
 }
 
+// Updates the series definition, then reconciles already-materialized
+// future occurrences to match: any occurrence that's still empty (no
+// registrations yet) is deleted and regenerated at the new day/time/
+// duration/topic/cap, but an occurrence with even one real registered
+// student is left completely alone — an admin fixing a typo in the
+// topic or the wrong start time right after creating a series
+// shouldn't be able to silently blow away a paid registration as a
+// side effect. Deliberately not "delete every future occurrence and
+// regenerate" the way editing a 1:1 recurring_schedule is
+// (app/api/admin/recurring-schedule/route.ts) — that table has no
+// registrations to protect.
+export async function updateRecurringGroupLessonSeries(
+  supabase: SupabaseClient,
+  seriesId: string,
+  params: {
+    coachId: string;
+    topic?: string | null;
+    dayOfWeek: number;
+    startTime: string;
+    durationMinutes: number;
+    maxStudents?: number | null;
+    startDate: string;
+    endDate?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from("recurring_group_lessons")
+    .update({
+      coach_id: params.coachId,
+      topic: params.topic ?? null,
+      day_of_week: params.dayOfWeek,
+      start_time: params.startTime,
+      duration_minutes: params.durationMinutes,
+      max_students: params.maxStudents ?? null,
+      start_date: params.startDate,
+      end_date: params.endDate ?? null,
+    })
+    .eq("id", seriesId);
+  if (error) throw new Error(error.message);
+
+  const { data: futureLessons } = await supabase
+    .from("group_lessons")
+    .select("id, group_lesson_registrations(id)")
+    .eq("recurring_group_lesson_id", seriesId)
+    .gte("scheduled_at", new Date().toISOString())
+    .is("cancelled_at", null);
+
+  const emptyLessonIds = (futureLessons ?? [])
+    .filter((l) => !(l.group_lesson_registrations as unknown[] | null)?.length)
+    .map((l) => l.id);
+
+  if (emptyLessonIds.length > 0) {
+    const { error: deleteError } = await supabase.from("group_lessons").delete().in("id", emptyLessonIds);
+    if (deleteError) throw new Error(deleteError.message);
+  }
+
+  await materializeRecurringGroupLessons(supabase, { seriesId });
+}
+
 // Stops future occurrences from being generated. Deliberately leaves
 // already-materialized future group_lessons rows alone — an admin who
 // wants to cancel specific upcoming occurrences already has the

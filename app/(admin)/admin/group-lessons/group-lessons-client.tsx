@@ -66,6 +66,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
   const [topic, setTopic] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
 
   const selectedCoachZone = coaches.find((c) => c.id === coachId)?.timezone ?? DEFAULT_TIMEZONE;
 
@@ -101,73 +102,106 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
     setCreating(true);
     setError(null);
 
-    const res = await fetch(
-      mode === "one-time" ? "/api/admin/group-lessons" : "/api/admin/group-lessons/recurring",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          mode === "one-time"
-            ? {
-                coachId,
-                scheduledAt: new Date(scheduledAt).toISOString(),
-                durationMinutes: duration,
-                topic: topic.trim() || null,
-                maxStudents: maxStudents ? Number(maxStudents) : null,
-              }
-            : {
-                coachId,
-                dayOfWeek,
-                startTime,
-                startDate,
-                endDate: endDate || null,
-                durationMinutes: duration,
-                topic: topic.trim() || null,
-                maxStudents: maxStudents ? Number(maxStudents) : null,
-              },
-        ),
-      },
-    );
+    const recurringBody = {
+      coachId,
+      dayOfWeek,
+      startTime,
+      startDate,
+      endDate: endDate || null,
+      durationMinutes: duration,
+      topic: topic.trim() || null,
+      maxStudents: maxStudents ? Number(maxStudents) : null,
+    };
+
+    const res = editingSeriesId
+      ? await fetch("/api/admin/group-lessons/recurring", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingSeriesId, ...recurringBody }),
+        })
+      : await fetch(mode === "one-time" ? "/api/admin/group-lessons" : "/api/admin/group-lessons/recurring", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            mode === "one-time"
+              ? {
+                  coachId,
+                  scheduledAt: new Date(scheduledAt).toISOString(),
+                  durationMinutes: duration,
+                  topic: topic.trim() || null,
+                  maxStudents: maxStudents ? Number(maxStudents) : null,
+                }
+              : recurringBody,
+          ),
+        });
     setCreating(false);
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Couldn't create the group lesson.");
+      setError(body.error ?? "Couldn't save the group lesson.");
       return;
     }
 
+    resetForm();
+    load();
+  }
+
+  function resetForm() {
+    setEditingSeriesId(null);
+    setMode("one-time");
     setScheduledAt("");
+    setDayOfWeek(1);
+    setStartTime("16:00");
     setEndDate("");
+    setDuration(60);
     setTopic("");
     setMaxStudents("");
-    load();
+    setError(null);
+  }
+
+  function handleEditSeries(s: RecurringSeries) {
+    setEditingSeriesId(s.id);
+    setMode("recurring");
+    setCoachId(s.coachId);
+    setTopic(s.topic ?? "");
+    setDayOfWeek(s.dayOfWeek);
+    setStartTime(s.startTime);
+    setDuration(s.durationMinutes);
+    setMaxStudents(s.maxStudents ? String(s.maxStudents) : "");
+    setStartDate(s.startDate);
+    setEndDate(s.endDate ?? "");
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleStopSeries(id: string) {
     await fetch(`/api/admin/group-lessons/recurring?id=${id}`, { method: "DELETE" });
+    if (editingSeriesId === id) resetForm();
     load();
   }
 
   return (
     <div>
       <div className={styles.panel} style={{ maxWidth: 480 }}>
-        <h2>New group lesson</h2>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button
-            type="button"
-            onClick={() => setMode("one-time")}
-            className={mode === "one-time" ? styles.ctaSmall : styles.linkBtnSmall}
-          >
-            One-time
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("recurring")}
-            className={mode === "recurring" ? styles.ctaSmall : styles.linkBtnSmall}
-          >
-            Recurring
-          </button>
-        </div>
+        <h2>{editingSeriesId ? "Edit recurring series" : "New group lesson"}</h2>
+        {!editingSeriesId && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setMode("one-time")}
+              className={mode === "one-time" ? styles.ctaSmall : styles.linkBtnSmall}
+            >
+              One-time
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("recurring")}
+              className={mode === "recurring" ? styles.ctaSmall : styles.linkBtnSmall}
+            >
+              Recurring
+            </button>
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className={styles.field}>
             <label htmlFor="gl-coach">Coach</label>
@@ -229,7 +263,11 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
                   id="gl-start-date"
                   type="date"
                   value={startDate}
-                  min={todayInZone(selectedCoachZone)}
+                  // No min while editing an existing series — its
+                  // start_date is very likely already in the past by
+                  // the time an admin comes back to edit it, and the
+                  // input must still show/accept that saved value.
+                  min={editingSeriesId ? undefined : todayInZone(selectedCoachZone)}
                   onChange={(e) => setStartDate(e.target.value)}
                   className={styles.input}
                 />
@@ -281,9 +319,22 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
             />
           </div>
           {error && <p className={styles.errorText}>{error}</p>}
-          <button onClick={handleCreate} disabled={creating} className={styles.cta} style={{ alignSelf: "flex-start" }}>
-            {creating ? "Creating…" : mode === "one-time" ? "Create group lesson" : "Create recurring series"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleCreate} disabled={creating} className={styles.cta}>
+              {creating
+                ? "Saving…"
+                : editingSeriesId
+                  ? "Save changes"
+                  : mode === "one-time"
+                    ? "Create group lesson"
+                    : "Create recurring series"}
+            </button>
+            {editingSeriesId && (
+              <button type="button" onClick={resetForm} className={styles.linkBtnSmall}>
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -303,7 +354,14 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
             {series.map((s) => (
-              <div key={s.id} className={styles.panel} style={{ marginBottom: 0 }}>
+              <div
+                key={s.id}
+                className={styles.panel}
+                style={{
+                  marginBottom: 0,
+                  outline: editingSeriesId === s.id ? "2px solid var(--gold)" : undefined,
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <div>
                     <p className={styles.rowName}>{s.topic || "Group Lesson"}</p>
@@ -316,9 +374,14 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
                       {s.endDate ? ` → ${s.endDate}` : " (ongoing)"}
                     </p>
                   </div>
-                  <button onClick={() => handleStopSeries(s.id)} className={styles.linkBtnSmall}>
-                    Stop
-                  </button>
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <button onClick={() => handleEditSeries(s)} className={styles.linkBtnSmall}>
+                      Edit
+                    </button>
+                    <button onClick={() => handleStopSeries(s.id)} className={styles.linkBtnSmall}>
+                      Stop
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

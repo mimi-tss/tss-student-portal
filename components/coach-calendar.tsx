@@ -318,6 +318,33 @@ export default function CoachCalendar({
         }
       }
     }
+
+    // A group lesson (e.g. a bootcamp) is deliberately not restricted to
+    // the coach's configured working hours the way a 1:1 recurring slot
+    // is (slotFitsWorkingHours) — it can legitimately run at a time no
+    // individual session ever would. The row range above only accounts
+    // for working-hours windows, so a lesson outside them had nowhere to
+    // render and was silently invisible on this grid even though the
+    // data was there. Expand the range to cover every real group lesson
+    // too, same conversion approach as the working-hours windows above.
+    for (const lesson of data?.groupLessons ?? []) {
+      const startInstant = new Date(lesson.scheduledAt);
+      const endInstant = new Date(startInstant.getTime() + lesson.durationMinutes * 60_000);
+      const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
+      const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
+      const gStart = gsh * 60 + gsm;
+      const gEnd = geh === 0 && gem === 0 ? 24 * 60 : geh * 60 + gem;
+
+      if (!found) {
+        min = gStart;
+        max = gEnd;
+        found = true;
+      } else {
+        min = Math.min(min, gStart);
+        max = Math.max(max, gEnd);
+      }
+    }
+
     return { rowStartMinutes: min, rowEndMinutes: max };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, coachTimeZone, gridTimeZone, weekStartKey]);

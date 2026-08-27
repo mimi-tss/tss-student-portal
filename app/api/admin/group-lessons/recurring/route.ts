@@ -4,6 +4,7 @@ import {
   createRecurringGroupLessonSeries,
   deactivateRecurringGroupLessonSeries,
   getActiveRecurringGroupLessons,
+  updateRecurringGroupLessonSeries,
 } from "@/lib/group-lessons";
 
 // Admin's recurring group lesson series management — separate from
@@ -46,6 +47,42 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "couldn't create the recurring series" },
+      { status: 500 },
+    );
+  }
+}
+
+// Updates the series and reconciles not-yet-registered future
+// occurrences to match (see updateRecurringGroupLessonSeries's own
+// comment for what's protected and what isn't).
+export async function PATCH(req: NextRequest) {
+  const { id, coachId, topic, dayOfWeek, startTime, durationMinutes, maxStudents, startDate, endDate } =
+    await req.json();
+
+  if (!id || !coachId || dayOfWeek === undefined || dayOfWeek === null || !startTime || !startDate) {
+    return NextResponse.json(
+      { error: "id, coachId, dayOfWeek, startTime, and startDate are required" },
+      { status: 400 },
+    );
+  }
+
+  const supabase = await createClient();
+
+  try {
+    await updateRecurringGroupLessonSeries(supabase, id, {
+      coachId,
+      topic: topic || null,
+      dayOfWeek: Number(dayOfWeek),
+      startTime,
+      durationMinutes: Number(durationMinutes) || 60,
+      maxStudents: maxStudents ? Number(maxStudents) : null,
+      startDate,
+      endDate: endDate || null,
+    });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "couldn't update the recurring series" },
       { status: 500 },
     );
   }
