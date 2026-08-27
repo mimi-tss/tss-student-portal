@@ -931,11 +931,20 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
 // purchases (see app/api/webhooks/kajabi/route.ts) — so this is a purely
 // internal, admin-driven flow, mirroring ProvisionStudentClient's manual
 // path rather than anything Kajabi-triggered.
+function emptyWorkingHours(): Record<string, [string, string][]> {
+  const hours: Record<string, [string, string][]> = {};
+  for (const day of DAY_KEYS) hours[day] = [];
+  return hours;
+}
+
 function AddCoachPanel({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [hourlyRate, setHourlyRate] = useState("");
+  const [meetLink, setMeetLink] = useState("");
+  const [hiddenFromStudents, setHiddenFromStudents] = useState(false);
+  const [hours, setHours] = useState<Record<string, [string, string][]>>(emptyWorkingHours);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -949,7 +958,15 @@ function AddCoachPanel({ onClose, onAdded }: { onClose: () => void; onAdded: () 
     const res = await fetch("/api/admin/provision-coach", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), email: email.trim(), timezone, hourlyRate: Number(hourlyRate) }),
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim(),
+        timezone,
+        hourlyRate: Number(hourlyRate),
+        meetLink: meetLink.trim() || null,
+        hiddenFromStudents,
+        workingHours: hours,
+      }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -998,10 +1015,38 @@ function AddCoachPanel({ onClose, onAdded }: { onClose: () => void; onAdded: () 
             className={styles.input}
           />
         </div>
-        <button onClick={handleAdd} disabled={saving} className={styles.ctaSmall}>
-          {saving ? "Adding…" : "Add coach"}
-        </button>
+        <div className={styles.field} style={{ minWidth: 260 }}>
+          <label>Meeting link</label>
+          <input
+            type="url"
+            placeholder="https://meet.google.com/…"
+            value={meetLink}
+            onChange={(e) => setMeetLink(e.target.value)}
+            className={styles.input}
+          />
+        </div>
       </div>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
+        <input
+          type="checkbox"
+          checked={hiddenFromStudents}
+          onChange={(e) => setHiddenFromStudents(e.target.checked)}
+        />
+        Hidden from trial picker
+      </label>
+      <div style={{ marginTop: 4, marginBottom: 14 }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Availability
+        </h3>
+        <p className={styles.mutedText} style={{ marginBottom: 10, fontSize: 12 }}>
+          Times are in this coach&apos;s own timezone above. A day with no windows is a day off — can also be set later
+          from Availability.
+        </p>
+        <WorkingHoursGrid hours={hours} setHours={setHours} />
+      </div>
+      <button onClick={handleAdd} disabled={saving} className={styles.ctaSmall}>
+        {saving ? "Adding…" : "Add coach"}
+      </button>
       {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
     </div>
   );
@@ -1595,18 +1640,6 @@ function AvailabilityPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function addWindow(day: string) {
-    setHours((prev) => ({ ...prev, [day]: [...(prev[day] ?? []), ["09:00", "17:00"]] }));
-  }
-  function removeWindow(day: string, idx: number) {
-    setHours((prev) => ({ ...prev, [day]: prev[day].filter((_, i) => i !== idx) }));
-  }
-  function updateWindow(day: string, idx: number, which: 0 | 1, value: string) {
-    setHours((prev) => ({
-      ...prev,
-      [day]: prev[day].map((w, i) => (i === idx ? ((which === 0 ? [value, w[1]] : [w[0], value]) as [string, string]) : w)),
-    }));
-  }
   function discardPending() {
     const copy: Record<string, [string, string][]> = {};
     for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
@@ -1661,32 +1694,60 @@ function AvailabilityPanel({
             : `Current hours stay live until ${effectiveDate} — nothing changes before then.`}
         </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {DAY_KEYS.map((day) => (
-          <div key={day} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-            <div style={{ width: 90, paddingTop: 6, fontSize: 13 }}>{DAY_LABELS[day]}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
-              {(hours[day] ?? []).map((w, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="time" value={w[0]} onChange={(e) => updateWindow(day, i, 0, e.target.value)} className={styles.inputSmall} />
-                  <span className={styles.mutedText}>to</span>
-                  <input type="time" value={w[1]} onChange={(e) => updateWindow(day, i, 1, e.target.value)} className={styles.inputSmall} />
-                  <button className={styles.dangerLink} onClick={() => removeWindow(day, i)}>Remove</button>
-                </div>
-              ))}
-              <button className={styles.linkBtnSmall} onClick={() => addWindow(day)}>
-                + Add window
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <WorkingHoursGrid hours={hours} setHours={setHours} />
       <div style={{ marginTop: 14 }}>
         <button onClick={handleSave} disabled={saving} className={styles.ctaSmall}>
           {saving ? "Saving…" : "Save availability"}
         </button>
       </div>
       {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
+    </div>
+  );
+}
+
+// Shared by AvailabilityPanel (editing an existing coach's hours) and
+// AddCoachPanel (setting initial hours at creation) — same day-by-window
+// picker either way, just a different setHours state behind it.
+function WorkingHoursGrid({
+  hours,
+  setHours,
+}: {
+  hours: Record<string, [string, string][]>;
+  setHours: React.Dispatch<React.SetStateAction<Record<string, [string, string][]>>>;
+}) {
+  function addWindow(day: string) {
+    setHours((prev) => ({ ...prev, [day]: [...(prev[day] ?? []), ["09:00", "17:00"]] }));
+  }
+  function removeWindow(day: string, idx: number) {
+    setHours((prev) => ({ ...prev, [day]: prev[day].filter((_, i) => i !== idx) }));
+  }
+  function updateWindow(day: string, idx: number, which: 0 | 1, value: string) {
+    setHours((prev) => ({
+      ...prev,
+      [day]: prev[day].map((w, i) => (i === idx ? ((which === 0 ? [value, w[1]] : [w[0], value]) as [string, string]) : w)),
+    }));
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {DAY_KEYS.map((day) => (
+        <div key={day} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ width: 90, paddingTop: 6, fontSize: 13 }}>{DAY_LABELS[day]}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+            {(hours[day] ?? []).map((w, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="time" value={w[0]} onChange={(e) => updateWindow(day, i, 0, e.target.value)} className={styles.inputSmall} />
+                <span className={styles.mutedText}>to</span>
+                <input type="time" value={w[1]} onChange={(e) => updateWindow(day, i, 1, e.target.value)} className={styles.inputSmall} />
+                <button className={styles.dangerLink} onClick={() => removeWindow(day, i)}>Remove</button>
+              </div>
+            ))}
+            <button className={styles.linkBtnSmall} onClick={() => addWindow(day)}>
+              + Add window
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

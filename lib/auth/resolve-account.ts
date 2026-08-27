@@ -42,8 +42,11 @@ export async function resolveAccountByEmail(admin: AdminClient, rawEmail: string
   const { data: student } = await admin.from("students").select("email").ilike("email", email).maybeSingle();
   if (student) return { email: student.email, redirectPath: "/student/dashboard" };
 
-  const { data: coach } = await admin.from("coaches").select("email").ilike("email", email).maybeSingle();
-  if (coach) return { email: coach.email, redirectPath: "/coach/dashboard" };
+  // active=false (0042's soft "Remove", never a hard delete) blocks login
+  // here too, not just new bookings/scheduling — a removed coach's email
+  // resolves to nothing, same as if they'd never been provisioned.
+  const { data: coach } = await admin.from("coaches").select("email, active").ilike("email", email).maybeSingle();
+  if (coach?.active) return { email: coach.email, redirectPath: "/coach/dashboard" };
 
   const matchedUser = await findAuthUserByEmail(admin, email);
   if (matchedUser) {

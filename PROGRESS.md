@@ -3,6 +3,54 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Add Coach: meeting link, visibility, and availability all in one form (2026-08-27)
+
+You asked to set everything about a new coach in one go, rather than
+Add coach → Availability panel → CoachLinkCell edit as three separate
+steps. `AddCoachPanel` in
+[all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+now also has a Meeting link field, a "Hidden from trial picker"
+checkbox, and a full weekly Availability grid — same day-by-window
+picker `AvailabilityPanel` already used.
+
+- **Extracted `WorkingHoursGrid`** — the day-by-window UI (add/remove/
+  edit a time window per day) used to live inline inside
+  `AvailabilityPanel` only; pulled out into its own component taking
+  `hours`/`setHours` so both `AvailabilityPanel` (editing an existing
+  coach) and the new `AddCoachPanel` section (setting initial hours) share
+  one implementation instead of two copies. New `emptyWorkingHours()`
+  gives the Add-coach form's grid its starting all-days-off state.
+- [provision-coach/route.ts](app/api/admin/provision-coach/route.ts) now
+  accepts optional `meetLink`, `hiddenFromStudents`, and `workingHours` in
+  the insert — all still optional/backward-compatible (defaults match
+  the old behavior: `{}`, `null`, `false`) in case anything else ever
+  calls this route directly.
+- `npx tsc --noEmit -p .` and `next build` both clean. Click-tested in a
+  focused mock: filled name/email/rate/meeting-link, added a Monday
+  9–5 window, submitted, and confirmed the assembled payload matched the
+  real route's expected body shape exactly:
+  [add coach all-in-one preview](https://claude.ai/code/artifact/efdd7c42-e68b-4216-bb40-be935128a6b1).
+
+**Related question you asked, answered by reading the actual code (not
+assumed):** a newly added coach *does* get automatic working access —
+`provision-coach` already creates their Supabase auth user, a `profiles`
+row (`role: "coach"`), links `profile_id`, and emails them a magic-link
+straight to `/coach/dashboard`. Nothing needed to change there.
+
+**Follow-up you also asked about, and this one *was* a real gap:**
+removing a coach (`active = false`) only ever hid them from new
+bookings/scheduling — [resolve-account.ts](lib/auth/resolve-account.ts)'s
+coach lookup (used by both the login-code request and verify steps)
+matched on email alone, so a removed coach could still request a code
+and log straight into `/coach/dashboard`. You confirmed you want login
+blocked too, so the coach lookup now also requires `active`, matching a
+never-registered email's behavior (same generic "you don't have
+permission" message, no separate wording needed). **Known limitation,
+not fixed here:** this only blocks *new* logins — a coach already mid-
+session with a valid cookie when removed isn't forcibly signed out; that
+would need active session revocation, a bigger change nobody asked for
+yet.
+
 ## Student dashboard: de-duplicated homework notes, coach chat labels (2026-08-27)
 
 Found while click-testing the student dashboard live: two small,

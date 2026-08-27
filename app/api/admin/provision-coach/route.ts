@@ -11,7 +11,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 // same createUser + profiles-row pattern, just for role "coach" instead of
 // "student", plus a coaches row instead of a students row.
 export async function POST(req: NextRequest) {
-  const { name, email, timezone, hourlyRate } = await req.json();
+  const { name, email, timezone, hourlyRate, meetLink, hiddenFromStudents, workingHours } = await req.json();
 
   if (!name || !email || !timezone || hourlyRate == null) {
     return NextResponse.json(
@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
       email,
       timezone,
       hourly_rate: hourlyRate,
-      working_hours: {},
+      working_hours: workingHours ?? {},
+      meet_link: meetLink || null,
+      hidden_from_students: !!hiddenFromStudents,
     })
     .select("id")
     .single();
