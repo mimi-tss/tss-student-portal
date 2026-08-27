@@ -7,7 +7,6 @@ import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
 import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime, FormattedTime } from "@/components/formatted-time";
-import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import { currentBillingCycleRange, CYCLE_SESSION_CAP } from "@/lib/scheduling/recurring";
 import JoinButton from "./join-button";
@@ -200,11 +199,6 @@ export default async function StudentDashboardPage() {
       )}
 
       <StreakPing initialCount={student.streak_count ?? 0} />
-
-      <div className={styles.sectionTitle}>
-        <h2>Homework notes</h2>
-      </div>
-      <NotesPanel studentId={student.id} initialLimit={5} dark />
 
       <div className={styles.sectionTitle}>
         <h2>Chat{coachFirstName ? ` with Coach ${coachFirstName}` : ""}</h2>

@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student dashboard: de-duplicated homework notes, coach chat labels (2026-08-27)
+
+Found while click-testing the student dashboard live: two small,
+unrelated bugs.
+
+- **"Homework Notes" was rendered twice** —
+  [student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>)
+  had both a cursive "spotlight" card (the latest note,
+  `spotlightNotes[0]`) near the top, *and* a full "Homework notes"
+  heading + `<NotesPanel>` list directly above Chat that repeated the
+  same entries. Per your ask, removed the one above Chat (the heading +
+  `NotesPanel` block) and kept the spotlight card as the single
+  homework-notes surface on this page; the now-unused `NotesPanel` import
+  removed too.
+- **Coach chat messages read "{name} (coach)", not "Coach {name}".**
+  [app/api/chat/messages/route.ts](app/api/chat/messages/route.ts)'s
+  `GET` builds a `participants` map used to label every non-mine chat
+  bubble ([chat-panel.tsx](components/chat-panel.tsx)) — coach senders
+  now resolve to `Coach {firstName}` (e.g. "Coach Tara", "Coach Celine"),
+  matching the "Coach {firstName}" phrasing already used elsewhere on
+  this same page (`Chat with Coach {coachFirstName}`, etc.). Admin
+  senders are untouched (still label "Admin"); this is one shared route
+  used by every `ChatPanel` instance (student dashboard, `/student/chat`,
+  coach's own chat, admin's student-detail chat), so the fix applies
+  everywhere at once, not just the dashboard.
+- `npx tsc --noEmit -p .` and `next build` both clean. Visually verified
+  in a mock (spotlight note only, no duplicate list; "Coach Tara" and
+  "Admin" bubbles distinct, student's own reply right-aligned with no
+  label):
+  [dashboard chat fixes preview](https://claude.ai/code/artifact/4cc3ef21-476a-412a-8552-27c05096de5d).
+
 ## Coaches tab: edit a coach's name/email/timezone/visibility (2026-08-27)
 
 You asked for full coach-info editing — name, email, etc. Turned out

@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     for (const c of coachSenders ?? []) {
-      participants[c.profile_id] = `${c.name} (coach)`;
+      participants[c.profile_id] = `Coach ${c.name.trim().split(/\s+/)[0]}`;
     }
     for (const s of studentSenders ?? []) {
       participants[s.profile_id] = s.name;
