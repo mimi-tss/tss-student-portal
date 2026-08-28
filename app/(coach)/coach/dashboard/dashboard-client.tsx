@@ -49,7 +49,8 @@ function statusDotClass(session: TodaySession): string {
   // grid uses for this and for a paused student's reserved slot ("paused"
   // status, migration 0040 — a session that already existed when the
   // pause was set).
-  if (session.status === "cancelled-no-notice" || session.status === "paused") return styles.dotHeld;
+  if (session.status === "cancelled-no-notice" || session.status === "paused" || session.status === "holiday")
+    return styles.dotHeld;
   if (session.isTrial) return styles.dotTrial;
   return styles.dotUpcoming;
 }
@@ -60,6 +61,7 @@ const STATUS_LABEL: Record<string, string> = {
   "late-forfeit": "Late-forfeit",
   "cancelled-no-notice": "Late cancel — held",
   paused: "Paused — held, not paid",
+  holiday: "Studio holiday — held, not paid",
 };
 
 // A coach can re-mark a session any time, not just once — quick-mark
@@ -68,7 +70,8 @@ const STATUS_LABEL: Record<string, string> = {
 // by a dot color. A late cancellation or a paused-held slot is already
 // resolved (nothing to attend-mark), so neither gets quick-mark controls.
 function canMark(session: TodaySession): boolean {
-  if (session.status === "cancelled-no-notice" || session.status === "paused") return false;
+  if (session.status === "cancelled-no-notice" || session.status === "paused" || session.status === "holiday")
+    return false;
   if (session.status !== "scheduled") return true;
   const sessionEnd = new Date(session.scheduledAt).getTime() + session.durationMinutes * 60 * 1000;
   return sessionEnd <= Date.now();

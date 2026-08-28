@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
 import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
+import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 
 // Computes open slots for the student's own assigned coach:
 // coach working_hours minus coach_blocks minus existing sessions.
@@ -137,6 +138,7 @@ export async function GET(req: NextRequest) {
 
   const slots: Slot[] = [];
   const effectiveStart = rangeStart > now ? rangeStart : now;
+  const holidayDates = await getHolidayDateKeys(supabase);
 
   // Walk pure calendar days (Date.UTC on Y/M/D numbers) from rangeStart's
   // date through rangeEnd's date, both read in the *coach's* timezone
@@ -154,6 +156,14 @@ export async function GET(req: NextRequest) {
     const month = cursorDate.getUTCMonth() + 1;
     const day = cursorDate.getUTCDate();
     const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+    // The studio is closed studio-wide on a holiday date — no slots at
+    // all that day, for any coach, regardless of their own working hours.
+    if (holidayDates.has(dateKey)) {
+      cursorDate = new Date(cursorDate.getTime() + 24 * 60 * 60 * 1000);
+      continue;
+    }
+
     const dayWorkingHours = resolveWorkingHoursForDate(
       {
         workingHours: (coach?.working_hours ?? {}) as WorkingHours,

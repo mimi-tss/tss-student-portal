@@ -1,4 +1,5 @@
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
+import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 
 // How far ahead recurring occurrences are materialized. Topped up daily
 // by /api/cron/materialize-recurring, so a recurring schedule already
@@ -176,7 +177,10 @@ export function slotFitsWorkingHours(
 // wall-clock lesson time put. When billingAnniversaryDate is given, any
 // occurrence that would be the 5th of that weekday in its billing cycle
 // is left out entirely (spec section 4) — no session row is ever
-// created for it, rather than creating then hiding one.
+// created for it, rather than creating then hiding one. Same treatment
+// for holidayDates (studio_holidays, migration 0055) — a studio-closed
+// date is never even offered a session to skip, matching how the
+// billing-cap "week off" already works.
 export function occurrencesFor(
   dayOfWeek: number,
   startTime: string,
@@ -184,6 +188,7 @@ export function occurrencesFor(
   from: Date,
   weeksAhead = WEEKS_AHEAD,
   billingAnniversaryDate?: string | null,
+  holidayDates?: Set<string>,
 ): Date[] {
   const [hh, mm] = startTime.split(":").map(Number);
   const [y, m, d] = zonedYearMonthDay(from, timeZone);
@@ -195,6 +200,7 @@ export function occurrencesFor(
   for (let i = 0; i < weeksAhead * 7; i++) {
     const dateOnly = new Date(Date.UTC(y, m - 1, d + i));
     if (dateOnly.getUTCDay() !== dayOfWeek) continue;
+    if (holidayDates?.has(dateOnly.toISOString().slice(0, 10))) continue;
 
     const instant = zonedTimeToUtc(
       dateOnly.getUTCFullYear(),
@@ -280,6 +286,7 @@ export async function materializeRecurringSessions(
   const now = new Date();
   let created = 0;
   let skipped = 0;
+  const holidayDates = await getHolidayDateKeys(supabase);
 
   for (const schedule of schedules ?? []) {
     const [{ data: coach }, { data: student }, { data: cancelRequest }] = await Promise.all([
@@ -324,6 +331,7 @@ export async function materializeRecurringSessions(
       effectiveFrom,
       WEEKS_AHEAD,
       student?.billing_anniversary_date,
+      holidayDates,
     );
 
     // A paused student's slot stays reserved, not billed (spec section
@@ -436,6 +444,7 @@ export async function getHeldRecurringSlots(
 
   const weeksAhead = Math.max(1, Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1);
   const held: HeldRecurringSlot[] = [];
+  const holidayDates = await getHolidayDateKeys(supabase);
 
   for (const schedule of schedules ?? []) {
     const student = Array.isArray(schedule.students) ? schedule.students[0] : schedule.students;
@@ -451,6 +460,7 @@ export async function getHeldRecurringSlots(
       new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000),
       weeksAhead,
       null,
+      holidayDates,
     );
 
     for (const occ of occurrences) {

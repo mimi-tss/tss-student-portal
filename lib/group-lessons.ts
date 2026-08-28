@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { occurrencesFor, WEEKS_AHEAD } from "@/lib/scheduling/recurring";
+import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -397,6 +398,7 @@ export async function materializeRecurringGroupLessons(
   const now = new Date();
   let created = 0;
   const debug: NonNullable<MaterializeGroupLessonsResult["debug"]> = [];
+  const holidayDates = await getHolidayDateKeys(supabase);
 
   for (const s of series ?? []) {
     const { data: coach } = await supabase.from("coaches").select("timezone").eq("id", s.coach_id).single();
@@ -405,7 +407,7 @@ export async function materializeRecurringGroupLessons(
     const startDate = s.start_date ? new Date(`${s.start_date}T00:00:00Z`) : null;
     const effectiveFrom = startDate && startDate > now ? startDate : now;
 
-    let instants = occurrencesFor(s.day_of_week, s.start_time, timeZone, effectiveFrom, WEEKS_AHEAD);
+    let instants = occurrencesFor(s.day_of_week, s.start_time, timeZone, effectiveFrom, WEEKS_AHEAD, null, holidayDates);
 
     if (s.end_date) {
       const cutoff = new Date(`${s.end_date}T23:59:59.999Z`);

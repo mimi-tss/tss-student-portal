@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
+import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { zonedYearMonthDay } from "@/lib/timezone";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -152,6 +154,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // The studio is closed on studio_holidays dates (migration 0055) —
+  // hard block, no admin override, since "make sure no one is scheduled"
+  // is exactly the point. Checked in the coach's own zone, same as every
+  // other "which day is this" decision in this app.
+  const { data: bookingCoach } = await supabase.from("coaches").select("timezone").eq("id", coachId).maybeSingle();
+  const holidayDates = await getHolidayDateKeys(supabase);
+  const [hy, hm, hd] = zonedYearMonthDay(new Date(slotStart), bookingCoach?.timezone ?? "America/New_York");
+  const slotDateKey = `${hy}-${String(hm).padStart(2, "0")}-${String(hd).padStart(2, "0")}`;
+  if (holidayDates.has(slotDateKey)) {
+    return NextResponse.json({ error: "The studio is closed that day — no sessions can be booked." }, { status: 409 });
+  }
+
   // Re-check the slot is still free — another student could have claimed it
   // between the slots fetch and this request. Must exclude cancelled
   // sessions the same way the slots endpoint does, or a cancelled session
@@ -161,7 +175,7 @@ export async function POST(req: NextRequest) {
     .select("id")
     .eq("actual_coach_id", coachId)
     .eq("scheduled_at", slotStart)
-    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)")
+    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,holiday)")
     .maybeSingle();
 
   if (clash) {

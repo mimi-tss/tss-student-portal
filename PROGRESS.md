@@ -3,6 +3,102 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Studio holidays: full-closure dates, auto-forfeit, no makeup (2026-08-28)
+
+You gave the studio's 2026 official holiday list and asked to guarantee
+nobody's scheduled on those dates, with any existing session on one
+auto-forfeited and no makeup credit issued. This is a real, admin-
+managed feature now, not a one-off — you flagged yourself that Easter/
+Thanksgiving shift every year, so a hardcoded date list would go stale;
+built a proper `studio_holidays` table + admin UI instead.
+
+**New migration [0055_studio_holidays.sql](supabase/migrations/0055_studio_holidays.sql)** —
+**not yet confirmed applied, this is the one that matters most right
+now**, see Action needed below:
+- `studio_holidays` table (`date` unique, `label`), admin-manage RLS
+  (`is_admin()`, both `admin`/`admin_finance`) + read for any
+  authenticated user. Seeded with all 7 dates you gave, for 2026
+  specifically (Jan 1, Apr 5 Easter, Jul 4, Nov 26 Thanksgiving, Dec 24,
+  Dec 25, Dec 31) — next year's Easter/Thanksgiving need re-adding via
+  the new admin panel, they don't auto-shift.
+- Widens `sessions_status_check` to add a new **`'holiday'`** status —
+  deliberately its own value, not reusing `cancelled-no-notice` or
+  `paused`: same "held, grey, no attendance" display treatment as both,
+  but unlike `cancelled-no-notice` it's **not** a paid status (studio's
+  closed, nobody's working, so `lib/payroll/calculate.ts`'s
+  `PAID_STATUSES` simply omits it — no coach compensation), and unlike
+  `paused` it's a permanent single-date forfeit, not a resumable window.
+  **No makeup credit is ever granted or reinstated for it** — a
+  dedicated forfeit path, not `lib/booking/cancel-session.ts`'s normal
+  cancellation flow, which always would grant or reinstate one.
+
+**New [lib/scheduling/holidays.ts](lib/scheduling/holidays.ts)** — shared
+by everything below:
+- `getHolidayDateKeys()` — the studio_holidays date set, fetched fresh
+  each call (cheap, one small table).
+- `forfeitHolidaySessions()` — the retroactive sweep. Finds every
+  `'scheduled'` session and non-cancelled group lesson landing on a
+  holiday date (matched in **the coach's own timezone**, same as every
+  other "which day is this" decision in this app — not a bare UTC date
+  slice), flips sessions to `status: 'holiday'` and sets group lessons'
+  `cancelled_at`. Touches `makeup_credits` **not at all** — "no makeup"
+  means exactly that. Idempotent (only ever matches not-yet-forfeited
+  rows), so safe to run on every cron tick forever.
+
+**Prevented going forward, four places**:
+- `lib/scheduling/recurring.ts`'s `occurrencesFor()` — a holiday date is
+  never even offered a session to skip, same treatment as the existing
+  "5th Wednesday" billing-cap skip. `materializeRecurringSessions()` and
+  `getHeldRecurringSlots()` (the paused-slot display/blocking helper)
+  both fetch the holiday set once and pass it through.
+- [lib/group-lessons.ts](lib/group-lessons.ts)'s
+  `materializeRecurringGroupLessons()` — same filter, recurring group
+  series never generate onto a holiday either.
+- [app/api/booking/slots/route.ts](app/api/booking/slots/route.ts) — a
+  holiday date shows zero bookable slots for any coach, full stop.
+- [app/api/booking/book/route.ts](app/api/booking/book/route.ts) — hard
+  409 reject if the requested slot's date (coach's zone) is a holiday.
+  **No admin override** — "make sure no one is scheduled" means no
+  exceptions; if a real exception is ever needed, remove that date from
+  the list instead.
+
+**Wired into the existing daily cron** —
+[materialize-recurring/route.ts](app/api/cron/materialize-recurring/route.ts)
+now runs `forfeitHolidaySessions()` right after the pause auto-resume
+step and before materializing new occurrences, so the very next nightly
+run both cleans up anything already sitting on these dates *and* stops
+new occurrences from ever landing there again, with zero manual
+intervention.
+
+**New "Studio holidays" admin panel**, Coaches tab (next to "+ Add
+coach") — new
+[app/api/admin/studio-holidays/route.ts](app/api/admin/studio-holidays/route.ts)
+(GET/POST/DELETE, `isAdminRole`-gated — this is scheduling policy, not
+money) and `StudioHolidaysPanel` in
+[all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>):
+lists every holiday with a Remove link, plus an add form (date + optional
+label). This is the actual answer to "how do I add next year's Easter" —
+a real UI, not a Supabase-only list.
+
+**Every existing "held" display/exclusion spot updated to also cover
+`'holiday'`**, mirroring exactly how `paused` was rolled out (grepped
+every `cancelled-no-notice`/`paused` reference, not guessed): coach
+calendar (both admin all-coaches and per-coach views, including the
+Month-view day summary that feeds the "N session(s)" badge), coach
+dashboard's dot/label/mark-eligibility helpers, and every cycle-cap /
+"active sessions" exclusion query (student dashboard, coach dashboard,
+admin overview, reassign-coach). Deliberately **left out** of
+`lib/payroll/calculate.ts`'s `PAID_STATUSES` (unpaid, by design) and
+`lib/admin/attention-items.ts`'s `MISS_STATUSES` (not the student's or
+coach's fault, shouldn't trigger a no-show/late-cancel streak).
+
+`npx tsc --noEmit -p .` and `next build` both clean throughout. Click-
+tested in a mock: all 7 seeded holidays listed, added and removed one,
+a session on Nov 26 rendering as "Studio holiday — Mimi Test" (held,
+grey), and a booking attempt on that date returning the 409 rejection
+message:
+[studio holidays preview](https://claude.ai/code/artifact/2a07b1b1-3eaa-4743-ad41-e7a02addcb7a).
+
 ## Recurring sessions: extended the generation horizon from ~2 months to a year (2026-08-28)
 
 Follow-up to the November-is-blank question — you asked to make it
@@ -849,6 +945,15 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0055 not yet confirmed applied — this is what actually enforces the holiday closures.**
+`supabase/migrations/0055_studio_holidays.sql` creates the
+`studio_holidays` table (seeded with your 7 given 2026 dates) and adds
+the `'holiday'` session status. Until this runs: no one is blocked from
+booking on these dates, nothing already scheduled on them gets
+forfeited, and the new "Studio holidays" panel on the Coaches tab will
+error (no table to read/write). This is the actual mechanism behind
+everything described below — please prioritize it alongside 0054.
 
 **New migration 0054 not yet confirmed applied — real bug, please prioritize this one.**
 `supabase/migrations/0054_admin_delete_sessions.sql` adds the missing

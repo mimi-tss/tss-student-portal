@@ -14,6 +14,7 @@ import { useTimeZone } from "@/components/timezone-context";
 import AddCoachBlockForm from "@/components/add-coach-block-form";
 import CoachCalendar from "@/components/coach-calendar";
 import AdminCancelButtons from "../students/[studentId]/admin-cancel-buttons";
+import { formatPlainDate } from "@/lib/format-date";
 import styles from "../../admin.module.css";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -167,6 +168,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
     | { kind: "availability"; coachId: string; coachName: string }
     | { kind: "timeoff"; coachId: string; coachName: string }
     | { kind: "addCoach" }
+    | { kind: "studioHolidays" }
     | {
         kind: "editCoach";
         coachId: string;
@@ -316,10 +318,15 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
     });
     if (session) {
       const isStart = slotStart.getTime() === new Date(session.scheduledAt).getTime();
-      if (session.status === "cancelled-no-notice" || session.status === "paused") {
+      if (session.status === "cancelled-no-notice" || session.status === "paused" || session.status === "holiday") {
         return {
           type: "held",
-          reason: session.status === "paused" ? `Reserved — ${session.studentName} (paused)` : `Late cancel — ${session.studentName}`,
+          reason:
+            session.status === "paused"
+              ? `Reserved — ${session.studentName} (paused)`
+              : session.status === "holiday"
+                ? `Studio holiday — ${session.studentName}`
+                : `Late cancel — ${session.studentName}`,
           isStart,
         };
       }
@@ -396,6 +403,13 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
           style={{ flex: "0 1 auto", marginLeft: 4 }}
         >
           + Add coach
+        </button>
+        <button
+          onClick={() => setPanel({ kind: "studioHolidays" })}
+          className={styles.linkBtnSmall}
+          style={{ flex: "0 1 auto" }}
+        >
+          Studio holidays
         </button>
       </div>
 
@@ -911,6 +925,12 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
           />
         </ModalOverlay>
       )}
+
+      {panel?.kind === "studioHolidays" && (
+        <ModalOverlay onClose={() => setPanel(null)}>
+          <StudioHolidaysPanel onClose={() => setPanel(null)} onChanged={() => router.refresh()} />
+        </ModalOverlay>
+      )}
     </div>
   );
 
@@ -1217,6 +1237,135 @@ function EditCoachPanel({
       <button onClick={handleSave} disabled={saving} className={styles.ctaSmall}>
         {saving ? "Saving…" : "Save"}
       </button>
+      {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
+    </div>
+  );
+}
+
+// ---- Studio holidays ----
+// Studio-wide closure dates (studio_holidays, migration 0055) — distinct
+// from a per-coach "Add time off" block: every coach is closed at once,
+// no new bookings anywhere, and an already-scheduled session on one of
+// these dates gets auto-forfeited with no makeup credit (the daily
+// materialize-recurring cron sweeps for this). A real admin-managed
+// list, not a hardcoded date set, since Easter/Thanksgiving shift every
+// year.
+interface StudioHoliday {
+  id: string;
+  date: string;
+  label: string | null;
+}
+
+function StudioHolidaysPanel({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const [holidays, setHolidays] = useState<StudioHoliday[] | null>(null);
+  const [newDate, setNewDate] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/admin/studio-holidays");
+    const body = await res.json().catch(() => ({}));
+    setHolidays(body.holidays ?? []);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleAdd() {
+    if (!newDate) {
+      setError("A date is required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/admin/studio-holidays", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: newDate, label: newLabel.trim() || null }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Could not add that date.");
+      return;
+    }
+    setNewDate("");
+    setNewLabel("");
+    await load();
+    onChanged();
+  }
+
+  async function handleRemove(id: string) {
+    setRemovingId(id);
+    await fetch("/api/admin/studio-holidays", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setRemovingId(null);
+    await load();
+    onChanged();
+  }
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>Studio holidays</h2>
+        <button className={styles.linkBtnSmall} onClick={onClose}>Close</button>
+      </div>
+      <p className={styles.mutedText} style={{ marginBottom: 14, fontSize: 12 }}>
+        No coach can be booked on these dates, and any session already sitting on one is auto-forfeited with no
+        makeup credit (the nightly job sweeps for this — it can take up to a day for a just-added date to clear out
+        anything already scheduled on it).
+      </p>
+      <table className={styles.table} style={{ marginBottom: 16 }}>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Label</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(holidays ?? []).map((h) => (
+            <tr key={h.id}>
+              <td>{formatPlainDate(h.date)}</td>
+              <td className={styles.mutedText}>{h.label ?? "—"}</td>
+              <td>
+                <button
+                  className={styles.dangerLink}
+                  onClick={() => handleRemove(h.id)}
+                  disabled={removingId === h.id}
+                >
+                  {removingId === h.id ? "Removing…" : "Remove"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {holidays?.length === 0 && <p className={styles.mutedText}>No holidays on the list yet.</p>}
+      <div className={styles.rowForm}>
+        <div className={styles.field}>
+          <label>Date</label>
+          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field} style={{ minWidth: 200 }}>
+          <label>Label (optional)</label>
+          <input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="e.g. Thanksgiving Day"
+            className={styles.input}
+          />
+        </div>
+        <button onClick={handleAdd} disabled={saving} className={styles.ctaSmall}>
+          {saving ? "Adding…" : "Add holiday"}
+        </button>
+      </div>
       {error && <p className={styles.errorText} style={{ marginTop: 8 }}>{error}</p>}
     </div>
   );

@@ -407,14 +407,18 @@ export default function CoachCalendar({
       // session that fell inside a pause window gets the identical
       // treatment (status "paused", migration 0040) — same grey, just a
       // different reason label; the distinct status exists so payroll
-      // (PAID_STATUSES) can tell the two apart, not the calendar.
-      if (session.status === "cancelled-no-notice" || session.status === "paused") {
+      // (PAID_STATUSES) can tell the two apart, not the calendar. Same
+      // again for a studio-holiday forfeit (status "holiday", migration
+      // 0055) — also unpaid, also no makeup, just a different reason.
+      if (session.status === "cancelled-no-notice" || session.status === "paused" || session.status === "holiday") {
         return {
           type: "held" as const,
           reason:
             session.status === "paused"
               ? `Reserved — ${session.studentName} (paused)`
-              : `Late cancel — ${session.studentName}`,
+              : session.status === "holiday"
+                ? `Studio holiday — ${session.studentName}`
+                : `Late cancel — ${session.studentName}`,
           isHeldStart: isStart,
         };
       }
@@ -464,11 +468,17 @@ export default function CoachCalendar({
     };
 
     const sessions = (data?.sessions ?? []).filter(
-      (s) => within(s.scheduledAt) && s.status !== "cancelled-no-notice" && s.status !== "paused",
+      (s) =>
+        within(s.scheduledAt) &&
+        s.status !== "cancelled-no-notice" &&
+        s.status !== "paused" &&
+        s.status !== "holiday",
     );
     const heldToday = [
       ...(data?.sessions ?? []).filter(
-        (s) => within(s.scheduledAt) && (s.status === "cancelled-no-notice" || s.status === "paused"),
+        (s) =>
+          within(s.scheduledAt) &&
+          (s.status === "cancelled-no-notice" || s.status === "paused" || s.status === "holiday"),
       ),
       ...(data?.heldSlots ?? []).filter((h) => within(h.scheduledAt)),
     ];

@@ -236,7 +236,7 @@ export async function getStudentSnapshot(
         .from("sessions")
         .select("id", { count: "exact", head: true })
         .eq("student_id", studentId)
-        .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused)")
+        .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)")
         .gte("scheduled_at", cycleStart.toISOString())
         .lt("scheduled_at", cycleEnd.toISOString()),
       supabase

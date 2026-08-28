@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     .eq("actual_coach_id", coachId)
     .eq("scheduled_at", session.scheduled_at)
     .neq("id", sessionId)
-    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)")
+    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,holiday)")
     .maybeSingle();
 
   if (clash) {

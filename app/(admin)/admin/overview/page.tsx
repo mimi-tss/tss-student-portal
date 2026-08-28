@@ -39,7 +39,7 @@ export default async function AdminOverviewPage() {
         .select("actual_coach_id")
         .gte("scheduled_at", dayStart.toISOString())
         .lt("scheduled_at", dayEnd.toISOString())
-        .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused)"),
+        .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)"),
       supabase
         .from("students")
         .select(

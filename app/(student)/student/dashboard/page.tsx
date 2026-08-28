@@ -89,7 +89,7 @@ export default async function StudentDashboardPage() {
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("student_id", student.id)
-      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused)")
+      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)")
       .gte("scheduled_at", cycleStart.toISOString())
       .lt("scheduled_at", cycleEnd.toISOString()),
     // Most recent homework note, pinned ones first — spotlighted above
