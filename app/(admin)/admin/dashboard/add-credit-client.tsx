@@ -11,7 +11,7 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleAdd() {
+  async function handleAdd(quantity: number) {
     if (!expiresAt) return;
     setSaving(true);
     setError(null);
@@ -23,6 +23,7 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
         studentId,
         expiresAt: new Date(`${expiresAt}T23:59:59`).toISOString(),
         durationMinutes,
+        quantity,
       }),
     });
 
@@ -66,8 +67,11 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
         onChange={(e) => setExpiresAt(e.target.value)}
         className={styles.inputSmall}
       />
-      <button onClick={handleAdd} disabled={!expiresAt || saving} className={styles.ctaSmall}>
+      <button onClick={() => handleAdd(1)} disabled={!expiresAt || saving} className={styles.ctaSmall}>
         {saving ? "…" : "Add"}
+      </button>
+      <button onClick={() => handleAdd(4)} disabled={!expiresAt || saving} className={styles.ctaSmall}>
+        {saving ? "…" : "Grant 4-pack"}
       </button>
       <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
         Cancel

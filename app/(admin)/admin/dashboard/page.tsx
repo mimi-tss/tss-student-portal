@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { FormattedDateTime } from "@/components/formatted-time";
 import ProvisionStudentClient from "./provision-student-client";
+import ImportStudentsClient from "./import-students-client";
 import StudentTable from "./student-table";
 import styles from "../../admin.module.css";
 
@@ -17,7 +18,7 @@ export default async function AdminDashboardPage() {
         .from("students")
         .select("id, name, email, tier, assigned_coach_id, payment_status")
         .order("name"),
-      supabase.from("coaches").select("id, name").eq("active", true).order("name"),
+      supabase.from("coaches").select("id, name, timezone").eq("active", true).order("name"),
       supabase
         .from("entitlements")
         .select("student_id")
@@ -46,6 +47,8 @@ export default async function AdminDashboardPage() {
       </div>
 
       <ProvisionStudentClient coaches={coaches ?? []} />
+
+      <ImportStudentsClient />
 
       {recentBlocks && recentBlocks.length > 0 && (
         <div className={styles.panel}>

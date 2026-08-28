@@ -8,7 +8,7 @@ import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime, FormattedTime } from "@/components/formatted-time";
 import ChatPanel from "@/components/chat-panel";
-import { currentBillingCycleRange, CYCLE_SESSION_CAP } from "@/lib/scheduling/recurring";
+import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/scheduling/recurring";
 import JoinButton from "./join-button";
 import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
@@ -20,6 +20,16 @@ const TIER_LABEL: Record<string, string> = {
   suite: "Sing Smarter Suite",
   pro: "Sing Smarter Pro",
   elite: "Sing Smarter Elite",
+};
+
+// Short form used only for ambassadors ("Pro (Ambassador)") — the full
+// TIER_LABEL names would read as "Sing Smarter Pro (Ambassador)", longer
+// than the admin asked for.
+const SHORT_TIER_LABEL: Record<string, string> = {
+  lite: "Lite",
+  suite: "Suite",
+  pro: "Pro",
+  elite: "Elite",
 };
 
 function firstName(name: string) {
@@ -39,7 +49,7 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count, ambassador",
     )
     .eq("profile_id", user.id)
     .single();
@@ -59,6 +69,7 @@ export default async function StudentDashboardPage() {
     { data: spotlightNotes },
     { data: upcomingCycleSessions },
     { data: pendingRequests },
+    { data: recurringSchedule },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -119,7 +130,14 @@ export default async function StudentDashboardPage() {
       .eq("student_id", student.id)
       .eq("status", "pending")
       .limit(1),
+    supabase
+      .from("recurring_schedules")
+      .select("cadence")
+      .eq("student_id", student.id)
+      .maybeSingle(),
   ]);
+
+  const sessionCycleCap = effectiveSessionCycleCap(student.tier, recurringSchedule?.cadence);
 
   const hasPendingCancelRequest = (pendingRequests?.length ?? 0) > 0;
 
@@ -254,7 +272,9 @@ export default async function StudentDashboardPage() {
             <div className={styles.statKey}>Membership</div>
             <div className={styles.statValue}>
               <span className={styles.tierBadge}>
-                {TIER_LABEL[student.tier] ?? student.tier}
+                {student.ambassador
+                  ? `${SHORT_TIER_LABEL[student.tier] ?? student.tier} (Ambassador)`
+                  : TIER_LABEL[student.tier] ?? student.tier}
               </span>
             </div>
           </div>
@@ -266,7 +286,7 @@ export default async function StudentDashboardPage() {
             <div className={styles.statKey}>Sessions this cycle</div>
             <div className={styles.statValue}>
               {sessionsThisCycle ?? 0}
-              {student.tier !== "suite" ? ` of ${CYCLE_SESSION_CAP} used` : ""}
+              {sessionCycleCap !== null ? ` of ${sessionCycleCap} used` : ""}
             </div>
           </div>
           <div className={styles.statRow}>

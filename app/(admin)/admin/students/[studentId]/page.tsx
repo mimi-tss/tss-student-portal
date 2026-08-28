@@ -17,19 +17,15 @@ import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
 import ReassignSessionCoach from "./reassign-session-coach";
 import BirthDateClient from "./birth-date-client";
+import MembershipTierClient from "./membership-tier-client";
 import ReferralClient from "./referral-client";
+import AmbassadorClient from "./ambassador-client";
 import CoachStartDateClient from "./coach-start-date-client";
+import StudentSinceClient from "./student-since-client";
 import BillingAnniversaryClient from "./billing-anniversary-client";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
 import styles from "../../../admin.module.css";
-
-const TIER_LABEL: Record<string, string> = {
-  lite: "Lite",
-  suite: "Suite",
-  pro: "Pro",
-  elite: "Elite",
-};
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -49,7 +45,7 @@ export default async function AdminStudentPage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id",
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override",
     )
     .eq("id", studentId)
     .maybeSingle();
@@ -99,7 +95,7 @@ export default async function AdminStudentPage({
       .order("expires_at", { ascending: true, nullsFirst: false }),
     supabase
       .from("recurring_schedules")
-      .select("day_of_week, start_time, duration_minutes, start_date, coach_id")
+      .select("day_of_week, start_time, duration_minutes, start_date, coach_id, cadence")
       .eq("student_id", student.id)
       .maybeSingle(),
     supabase.from("coaches").select("id, name").eq("active", true).order("name"),
@@ -213,12 +209,22 @@ export default async function AdminStudentPage({
           <div className={styles.statRow}>
             <div className={styles.statKey}>Membership</div>
             <div className={styles.statValue}>
-              <span className={styles.badge}>{TIER_LABEL[student.tier] ?? student.tier}</span>
+              <MembershipTierClient
+                studentId={student.id}
+                initialTier={student.tier}
+                cadence={recurringSchedule?.cadence ?? "weekly"}
+              />
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Coach</div>
             <div className={styles.statValue}>{coach?.name ?? "Not yet assigned"}</div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Ambassador</div>
+            <div className={styles.statValue}>
+              <AmbassadorClient studentId={student.id} initialAmbassador={student.ambassador} />
+            </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Referred by</div>
@@ -244,7 +250,13 @@ export default async function AdminStudentPage({
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>With us</div>
-            <div className={styles.statValue}>{formatTenure(student.created_at)}</div>
+            <div className={styles.statValue}>
+              <StudentSinceClient
+                studentId={student.id}
+                initialValue={student.student_since_override}
+                createdAt={student.created_at}
+              />
+            </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Billing cycle anchor</div>
@@ -298,6 +310,7 @@ export default async function AdminStudentPage({
                   durationMinutes: recurringSchedule.duration_minutes,
                   startDate: recurringSchedule.start_date,
                   coachId: recurringSchedule.coach_id,
+                  cadence: recurringSchedule.cadence ?? "weekly",
                 }
               : null
           }

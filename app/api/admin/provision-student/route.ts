@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
-import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { isAdminRole } from "@/lib/auth/roles";
+import { provisionStudent } from "@/lib/admin/provision-student";
 
 // Manually provisions a student — for ambassadors given free access via
 // Kajabi's "Grant Offer" or a 100%-off coupon (neither fires a purchase
@@ -15,13 +14,27 @@ import { isAdminRole } from "@/lib/auth/roles";
 // Session Upgrade add-on, for Tara's students who won't ever purchase
 // that Kajabi offer.
 //
-// Uses the service-role client for the auth-user/profile creation steps
-// (creating a Supabase auth user isn't something a regular session's RLS
-// grants can do — it needs the service role, same as the webhook route)
-// but only after confirming the caller is an admin via the normal
-// session-scoped client first.
+// The actual insert-student/create-auth-user/drive-folder/login-link
+// sequence lives in lib/admin/provision-student.ts, shared with the CSV
+// bulk-import route (app/api/admin/bulk-import-students/route.ts) — this
+// handler is just the admin-auth check plus that one call.
 export async function POST(req: NextRequest) {
-  const { email, name, tier, coachId, sessionDurationMinutes } = await req.json();
+  const {
+    email,
+    name,
+    tier,
+    coachId,
+    sessionDurationMinutes,
+    ambassador,
+    lessonType,
+    dayOfWeek,
+    startTime,
+    startDate,
+    creditExpiresAt,
+    birthDate,
+    billingAnniversaryDate,
+    studentSinceOverride,
+  } = await req.json();
 
   if (!email || !name || !tier) {
     return NextResponse.json({ error: "email, name, and tier required" }, { status: 400 });
@@ -43,52 +56,26 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-
-  const { data: student, error } = await admin
-    .from("students")
-    .insert({
-      email,
-      name,
-      tier,
-      assigned_coach_id: coachId || null,
-      subscription_status: "active",
-      payment_status: "ok",
-      session_duration_minutes: sessionDurationMinutes === 60 ? 60 : 30,
-      // Anchors the 4-per-billing-cycle recurring-session cap (spec
-      // section 4) — Stripe-billed students never fire a Kajabi webhook
-      // to set this any other way.
-      billing_anniversary_date: new Date().toISOString().slice(0, 10),
-    })
-    .select("id")
-    .single();
-
-  if (error || !student) {
-    return NextResponse.json({ error: error?.message ?? "insert failed" }, { status: 500 });
-  }
-
-  const { data: authUser, error: createErr } = await admin.auth.admin.createUser({
+  const result = await provisionStudent(admin, {
     email,
-    email_confirm: true,
+    name,
+    tier,
+    coachId,
+    sessionDurationMinutes,
+    ambassador,
+    lessonType,
+    dayOfWeek,
+    startTime,
+    startDate,
+    creditExpiresAt,
+    birthDate,
+    billingAnniversaryDate,
+    studentSinceOverride,
   });
 
-  if (!createErr && authUser.user) {
-    await admin.from("profiles").insert({ id: authUser.user.id, role: "student" });
-    await admin.from("students").update({ profile_id: authUser.user.id }).eq("id", student.id);
+  if (!result.success) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  if (tier === "suite") {
-    await admin.from("entitlements").insert({
-      student_id: student.id,
-      perk_type: "trial_lesson",
-      recurrence: "one-time",
-    });
-  }
-
-  // Only does something immediately if a coach was picked at
-  // provisioning time — otherwise no-ops until assign-coach later sets one.
-  await ensureStudentDriveFolder(student.id);
-
-  await issueAndSendLoginLink(student.id, email);
-
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, studentId: result.studentId });
 }

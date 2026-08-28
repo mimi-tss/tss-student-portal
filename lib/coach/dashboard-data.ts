@@ -1,6 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay, zonedTimeToUtc } from "@/lib/timezone";
-import { currentBillingCycleRange, CYCLE_SESSION_CAP } from "@/lib/scheduling/recurring";
+import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/scheduling/recurring";
 import { getCoachGroupLessons, type CoachGroupLesson } from "@/lib/group-lessons";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -230,7 +230,7 @@ export async function getStudentSnapshot(
 
   const { start: cycleStart, end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
 
-  const [{ count: sessionsThisCycle }, { data: credits }, { data: nextSession }, { data: firstSession }, { data: cancelRequest }] =
+  const [{ count: sessionsThisCycle }, { data: credits }, { data: nextSession }, { data: firstSession }, { data: cancelRequest }, { data: recurringSchedule }] =
     await Promise.all([
       supabase
         .from("sessions")
@@ -276,6 +276,11 @@ export async function getStudentSnapshot(
         .order("requested_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("recurring_schedules")
+        .select("cadence")
+        .eq("student_id", studentId)
+        .maybeSingle(),
     ]);
 
   return {
@@ -284,7 +289,7 @@ export async function getStudentSnapshot(
     tier: student.tier,
     subscriptionStatus: student.subscription_status,
     sessionsThisCycle: sessionsThisCycle ?? 0,
-    sessionCycleCap: student.tier === "suite" ? null : CYCLE_SESSION_CAP,
+    sessionCycleCap: effectiveSessionCycleCap(student.tier, recurringSchedule?.cadence),
     makeupCreditsAvailable: credits?.length ?? 0,
     nextSession: nextSession ? { scheduledAt: nextSession.scheduled_at, durationMinutes: nextSession.duration_minutes } : null,
     withYouSince: student.coach_start_date_override ?? firstSession?.scheduled_at ?? null,

@@ -76,6 +76,28 @@ export function nextWeeklySlotInstant(
 // occurrence simply isn't scheduled ("week off"), not billed or booked.
 export const CYCLE_SESSION_CAP = 4;
 
+// The recurring-schedule cadence: "weekly" (default, everyone today) or
+// "biweekly" — an admin-only, off-the-books accommodation for a handful
+// of exception students kept on via a Stripe-billed side arrangement,
+// not a Kajabi offer. Capped at 2 sessions/month regardless of tier (see
+// occurrencesFor's monthOccurrenceNumber branch below) rather than the
+// billing-cycle-anchored CYCLE_SESSION_CAP weekly schedules use.
+export type ScheduleCadence = "weekly" | "biweekly";
+
+// The effective "sessions per cycle" cap shown on the coach/student
+// dashboards. Suite tier stays unlimited (null) regardless of cadence;
+// everyone else is CYCLE_SESSION_CAP (4) unless their recurring_schedules
+// row is biweekly, in which case it's 2 — otherwise the dashboard would
+// show a misleading "2 of 4 used" for an exception student whose
+// schedule only ever produces 2 sessions in the first place.
+export function effectiveSessionCycleCap(
+  tier: string,
+  cadence: ScheduleCadence | null | undefined,
+): number | null {
+  if (tier === "suite") return null;
+  return cadence === "biweekly" ? 2 : CYCLE_SESSION_CAP;
+}
+
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
@@ -113,6 +135,20 @@ function cycleOccurrenceNumber(instant: Date, anchorDay: number, timeZone: strin
   const dateOnly = Date.UTC(y, m - 1, d);
   const daysSinceCycleStart = Math.round((dateOnly - cycleStart) / 86_400_000);
   return Math.floor(daysSinceCycleStart / 7) + 1;
+}
+
+// 1-indexed position of `instant` among same-weekday dates within its
+// plain calendar month (not the billing cycle — deliberately unanchored
+// to billing_anniversary_date, so a biweekly schedule always lands on
+// the same fixed weeks regardless of when a given student's billing
+// cycle starts). Occurrence #1 always falls within days 1-7 and #3
+// within days 15-21, both of which exist in every month, so filtering a
+// biweekly schedule down to occurrences 1 and 3 always yields exactly 2
+// sessions/month — including 5-week months, where occurrences 2, 4, and
+// 5 are simply the ones left out.
+function monthOccurrenceNumber(instant: Date, timeZone: string): number {
+  const [, , d] = zonedYearMonthDay(instant, timeZone);
+  return Math.floor((d - 1) / 7) + 1;
 }
 
 // The [start, end) instants of the billing cycle `now` currently falls
@@ -184,6 +220,10 @@ export function slotFitsWorkingHours(
 // against Florida's own calendar date (isHolidayInstant), not this
 // coach's zone — the studio's closure dates are fixed to one place, not
 // per-coach, unlike everything else this function resolves in `timeZone`.
+// A "biweekly" cadence bypasses the billing-cycle cap entirely and
+// instead keeps only the month's 1st and 3rd same-weekday occurrences
+// (monthOccurrenceNumber) — always exactly 2/month, on fixed calendar
+// weeks rather than anchored to the student's own billing date.
 export function occurrencesFor(
   dayOfWeek: number,
   startTime: string,
@@ -192,6 +232,7 @@ export function occurrencesFor(
   weeksAhead = WEEKS_AHEAD,
   billingAnniversaryDate?: string | null,
   holidayDates?: Set<string>,
+  cadence: ScheduleCadence = "weekly",
 ): Date[] {
   const [hh, mm] = startTime.split(":").map(Number);
   const [y, m, d] = zonedYearMonthDay(from, timeZone);
@@ -215,7 +256,10 @@ export function occurrencesFor(
     if (instant <= from) continue;
     if (holidayDates && isHolidayInstant(instant, holidayDates)) continue;
 
-    if (anchorDay !== null) {
+    if (cadence === "biweekly") {
+      const occurrenceNumber = monthOccurrenceNumber(instant, timeZone);
+      if (occurrenceNumber !== 1 && occurrenceNumber !== 3) continue;
+    } else if (anchorDay !== null) {
       const occurrenceNumber = cycleOccurrenceNumber(instant, anchorDay, timeZone);
       if (occurrenceNumber > CYCLE_SESSION_CAP) continue;
     }
@@ -279,7 +323,7 @@ export async function materializeRecurringSessions(
 ): Promise<MaterializeResult> {
   let query = supabase
     .from("recurring_schedules")
-    .select("id, student_id, coach_id, day_of_week, start_time, duration_minutes, start_date")
+    .select("id, student_id, coach_id, day_of_week, start_time, duration_minutes, start_date, cadence")
     .eq("active", true);
 
   if (opts.studentId) query = query.eq("student_id", opts.studentId);
@@ -335,6 +379,7 @@ export async function materializeRecurringSessions(
       WEEKS_AHEAD,
       student?.billing_anniversary_date,
       holidayDates,
+      schedule.cadence ?? "weekly",
     );
 
     // A paused student's slot stays reserved, not billed (spec section
@@ -438,7 +483,7 @@ export async function getHeldRecurringSlots(
 ): Promise<HeldRecurringSlot[]> {
   const { data: schedules } = await supabase
     .from("recurring_schedules")
-    .select("day_of_week, start_time, duration_minutes, students(name, subscription_status, paused_start, paused_end)")
+    .select("day_of_week, start_time, duration_minutes, cadence, students(name, subscription_status, paused_start, paused_end)")
     .eq("coach_id", coachId)
     .eq("active", true);
 
@@ -464,6 +509,7 @@ export async function getHeldRecurringSlots(
       weeksAhead,
       null,
       holidayDates,
+      schedule.cadence ?? "weekly",
     );
 
     for (const occ of occurrences) {

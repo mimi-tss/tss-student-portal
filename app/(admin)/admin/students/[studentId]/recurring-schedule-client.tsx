@@ -14,6 +14,7 @@ interface Schedule {
   durationMinutes: number;
   startDate: string;
   coachId: string;
+  cadence: "weekly" | "biweekly";
 }
 
 interface Coach {
@@ -64,6 +65,7 @@ export default function RecurringScheduleClient({
   const [startTime, setStartTime] = useState(schedule?.startTime ?? "16:00");
   const [durationMinutes, setDurationMinutes] = useState(schedule?.durationMinutes ?? 30);
   const [coachId, setCoachId] = useState(schedule?.coachId ?? defaultCoachId ?? "");
+  const [cadence, setCadence] = useState<"weekly" | "biweekly">(schedule?.cadence ?? "weekly");
   // Defaults to today for a brand new schedule (takes effect right
   // away); defaults to today for a change too, so by default a change
   // applies immediately unless the admin picks a future date — matching
@@ -86,6 +88,7 @@ export default function RecurringScheduleClient({
         durationMinutes,
         startDate,
         coachId,
+        cadence,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -148,6 +151,7 @@ export default function RecurringScheduleClient({
         <>
           {weekday}s at {formatTimeInZone(instant, viewTimeZone)} ({schedule.durationMinutes} min)
           {coachName ? ` with ${coachName}` : ""}
+          {schedule.cadence === "biweekly" ? " — biweekly" : ""}
           {schedule.startDate > today ? ` — starting ${schedule.startDate}` : ""}
         </>
       );
@@ -215,6 +219,14 @@ export default function RecurringScheduleClient({
       >
         <option value={30}>30 min</option>
         <option value={60}>60 min</option>
+      </select>
+      <select
+        value={cadence}
+        onChange={(e) => setCadence(e.target.value as "weekly" | "biweekly")}
+        className={styles.select}
+      >
+        <option value="weekly">Weekly</option>
+        <option value="biweekly">Biweekly</option>
       </select>
       <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 4 }}>
         Starting

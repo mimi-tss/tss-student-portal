@@ -3,6 +3,214 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## One-go lesson setup on "Add ambassador / manual student" (2026-08-28)
+
+You asked for the manual-provisioning form itself to set up a student's
+lesson plan at creation — weekly, biweekly, or a 4-pack — instead of
+adding basic info and then opening the new student's profile to set it
+up as a second step. Added a "Lesson type" select
+([provision-student-client.tsx](app/(admin)/admin/dashboard/provision-student-client.tsx):
+"Not set yet" / Weekly / Biweekly / 4-pack) that reveals Day/Time/Starting
+fields (weekly/biweekly) or a credit-expiry date (4-pack); left at "Not
+set yet", behavior is identical to before this existed.
+
+All of it happens inside the existing single POST to
+`/api/admin/provision-student` — extended
+[lib/admin/provision-student.ts](lib/admin/provision-student.ts)'s
+`provisionStudent()` to validate the coach/day/time (weekly/biweekly) or
+expiry (4-pack) **before** inserting the student row, so a foreseeable
+input mistake never leaves a half-provisioned student behind. After a
+successful insert it either creates the `recurring_schedules` row and
+immediately materializes real sessions (same `materializeRecurringSessions`
+call the dedicated recurring-schedule route uses), or inserts 4
+`purchased-addon` `makeup_credits` rows — same shapes as
+[recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts)
+and [add-credit/route.ts](app/api/admin/add-credit/route.ts) already use
+elsewhere, just reached from one form instead of two. A secondary
+DB-level failure at that point (student already real) logs rather than
+rolling back, same posture this file already had for the Drive folder
+and login-link steps.
+
+Note: a concurrent session building CSV bulk-import landed its own
+separate `lib/admin/create-recurring-schedule.ts` helper for the same
+"set up a recurring schedule" need (see the entry below this one) — that
+one is only used by the bulk-import route, this session's logic lives
+inline in `provisionStudent()` for the single-add route, so there's no
+collision, just two independent paths doing similar work. Worth
+revisiting whether to consolidate later, not urgent.
+
+`npx tsc --noEmit -p .` and `next build` both clean (after the
+concurrent session's own in-progress `bulk-import-students/route.ts`
+edit settled — hit one transient type error from that unrelated file
+mid-session, resolved on its own, not touched here). Click-tested all
+three lesson-type paths (weekly with/without a coach selected, 4-pack
+with/without an expiry date) in the browser mock, including the
+client-side validation blocking Add before it would even hit the
+server-side checks.
+
+## Ambassador tag, 4-pack credits, CSV bulk import (2026-08-28)
+
+Three items off the onboarding backlog (biweekly cadence was already done by
+a concurrent session — see the entry right below this one; this session
+deliberately left that file's uncommitted work alone rather than risk
+colliding with it, only adding the migration 0058 below it in sequence).
+
+**Ambassador tag** — `students.ambassador` boolean (migration
+[0058_student_ambassador_flag.sql](supabase/migrations/0058_student_ambassador_flag.sql)),
+same no-new-RLS-needed posture as `coaches.active`/`referred_by_coach_id`.
+Toggle lives on the student detail page
+([ambassador-client.tsx](<app/(admin)/admin/students/[studentId]/ambassador-client.tsx>),
+immediate-save checkbox, no financial consequence so no separate Save step
+like [referral-client.tsx](<app/(admin)/admin/students/[studentId]/referral-client.tsx>)
+needs) and as an explicit opt-in checkbox on the "Add ambassador / manual
+student" form (defaults unchecked — that form also provisions Coach Tara's
+non-ambassador Stripe students, so it can't default to true). Student
+dashboard shows "Pro (Ambassador)" — a new short `SHORT_TIER_LABEL` map,
+not the existing full `TIER_LABEL` ("Sing Smarter Pro"), per how the label
+was specifically asked for.
+
+**4-pack credit purchases** — admin-granted only, no checkout/payment
+build. [add-credit/route.ts](app/api/admin/add-credit/route.ts) now takes
+an optional `quantity` (1-10, default 1) and inserts that many
+`purchased-addon` makeup-credit rows in one call; no migration needed,
+the table was already generic. UI: a "Grant 4-pack" button next to the
+existing "Add" button in
+[add-credit-client.tsx](app/(admin)/admin/dashboard/add-credit-client.tsx).
+
+**CSV bulk-import for students** — new admin panel on the Students
+dashboard ([import-students-client.tsx](app/(admin)/admin/dashboard/import-students-client.tsx)
+→ [bulk-import-students/route.ts](app/api/admin/bulk-import-students/route.ts)),
+for onboarding many real students at once instead of one at a time.
+Column schema: `name,email,tier,session_duration_minutes,coach,day_of_week,
+start_time,frequency,ambassador,birth_date,billing_start_date,student_since`
+— only name/email/tier required. `coach` resolves by exact email first,
+else exact name restricted to active coaches (reports "not found" or
+"ambiguous — use email instead" per row). The three date columns are
+`YYYY-MM-DD`, all optional (validated with the same regex client- and
+server-side) — `birth_date` and `billing_start_date` (overrides the
+otherwise-default-to-today billing anchor) are plain passthroughs onto
+existing columns; `student_since` is new (see below).
+Two-phase: every row is validated up front and if ANY row fails, nothing
+is created at all (cheap to fix the whole sheet and re-upload); once every
+row passes, creation proceeds in batches of 5 and does NOT abort on a
+single row's failure (a Drive-API hiccup on row 23 of 50 shouldn't discard
+22 good rows — Supabase gives no real cross-row transaction here anyway),
+returning a per-row created/failed report instead. Re-uploading the same
+CSV afterward cleanly skips already-created rows at the duplicate-email
+check. `maxDuration = 300` set on the route since each row does a DB
+insert + Supabase Admin auth-user creation + Drive API call + email send.
+
+Extracted two shared helpers so this doesn't duplicate the existing
+single-add logic: [lib/admin/provision-student.ts](lib/admin/provision-student.ts)
+(insert student → create auth user/profile → link → trial entitlement for
+Suite → Drive folder → login email — now also used by
+[provision-student/route.ts](app/api/admin/provision-student/route.ts))
+and [lib/admin/create-recurring-schedule.ts](lib/admin/create-recurring-schedule.ts)
+(working-hours-validated upsert + materialize — a copy of the logic in
+[recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts),
+kept as a copy rather than refactoring that route to call it, since the
+concurrent biweekly-cadence session had that exact file open — the copy's
+`cadence` handling is kept byte-for-byte identical to avoid drift).
+`lib/admin/parse-csv.ts` is a small hand-rolled parser (quoted-field
+support) rather than a new dependency — no CSV library was already in
+`package.json` and the project keeps its dependency footprint minimal.
+
+**Follow-up same day: billing start date, birthday, and a new "student
+since" override**, all now settable at CSV-import time (and the first
+two were already admin-editable post-creation; the third is brand new).
+New `students.student_since_override` date column (migration
+[0059_student_since_override.sql](supabase/migrations/0059_student_since_override.sql)),
+same override/fallback pattern as `coach_start_date_override` — blank
+falls back to the row's own `created_at`. The student detail page's
+"With us" row (previously a plain, non-editable
+`formatTenure(student.created_at)`) is now
+[student-since-client.tsx](<app/(admin)/admin/students/[studentId]/student-since-client.tsx>)
+→ [set-student-since/route.ts](app/api/admin/set-student-since/route.ts),
+same click-to-edit-with-clear-override shape as
+[coach-start-date-client.tsx](<app/(admin)/admin/students/[studentId]/coach-start-date-client.tsx>).
+`provisionStudent()` gained `birthDate`/`billingAnniversaryDate`/
+`studentSinceOverride` passthrough fields — note `lib/admin/provision-student.ts`
+and `app/api/admin/provision-student/route.ts` were, in the same window,
+being actively extended by the concurrent session above (one-go
+lesson/4-pack setup on the manual-add form) — these three fields were
+merged in alongside that work rather than written against a stale copy;
+re-read both files immediately before each edit to confirm.
+
+`npx tsc --noEmit -p .` and `next build` both clean (the first `next
+build` attempt hit a spurious `ENOENT` renaming `.next/export/500.html`
+— caused by a dev server also writing to the same `.next/` directory at
+the same time, not a real bug; stopping the dev server and rebuilding
+was clean). Re-verified interaction logic in the same click-tested mock
+— valid dates on all three columns pass, a malformed `birth_date` like
+`04/02/1998` is rejected with an explicit "must be YYYY-MM-DD" message,
+and blank dates behave as before. Mock link unchanged (redeployed same
+artifact):
+https://claude.ai/code/artifact/2a71bb7e-0a3e-4f0b-8b96-0a2637de0388 Verified interaction
+logic (not the real DB/Drive/email calls, which need a real login this
+project can't test against) by copying the same validation code into a
+click-tested mock — coach-email/name resolution, ambiguous-name rejection,
+duplicate-email-in-CSV rejection, missing/invalid field rejection, and the
+ambassador-toggle-updates-dashboard-label live behavior all confirmed
+working as designed. Mock published:
+https://claude.ai/code/artifact/2a71bb7e-0a3e-4f0b-8b96-0a2637de0388
+
+Still needed from you: manually test the recording-added-to-folder and
+folder-per-student flows against a real student (no automated pipeline
+exists for either — recordings are just files placed in Drive by hand),
+and a full click-through of student/coach/admin dashboards once real
+student data is loaded, per the onboarding backlog.
+
+## Biweekly recurring schedule for exception students (2026-08-28)
+
+A handful of students are being kept on via an off-the-books, Stripe-billed
+arrangement: Sing Smarter Suite tier plus a manually-arranged biweekly
+lesson slot — not a Kajabi offer, admin-only, not to be advertised. Added
+a `cadence` field to `recurring_schedules` (`weekly`/`biweekly`,
+[0057_recurring_schedule_cadence.sql](supabase/migrations/0057_recurring_schedule_cadence.sql))
+so admin can now set a student's regular slot to fire every other week
+instead of building a second scheduling mechanism from scratch.
+
+Cap is calendar-month anchored, not billing-cycle anchored like the
+existing weekly "5th occurrence, week off" cap — a biweekly schedule
+always lands on the month's 1st and 3rd occurrence of that weekday
+(`monthOccurrenceNumber` in
+[lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)), so a 5-week
+month yields exactly 2 sessions, not 3, regardless of the student's own
+billing anniversary date.
+
+Also fixed a real (if minor) side effect: the coach/student dashboards'
+"Sessions this cycle: X of 4 used" was a flat hardcoded `4` gated only on
+`tier === "suite"` — would've shown a misleading "2 of 4 used" for a
+biweekly student who's actually fully booked. Added
+`effectiveSessionCycleCap(tier, cadence)` as the one shared source of
+truth for both
+[lib/coach/dashboard-data.ts](lib/coach/dashboard-data.ts) and
+[app/(student)/student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>),
+which weren't sharing this logic with each other before.
+
+Admin UI: new Weekly/Biweekly selector on the recurring-schedule form
+([recurring-schedule-client.tsx](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>)),
+summary label shows "— biweekly" when set.
+
+Also made the Membership badge on the student detail page itself
+editable ([membership-tier-client.tsx](<app/(admin)/admin/students/[studentId]/membership-tier-client.tsx>),
+[/api/admin/set-tier](app/api/admin/set-tier/route.ts)) — same
+click-to-edit shape as the existing Referred-by field, plus the
+"(Biweekly)" suffix when the student's schedule is biweekly. Editing
+tier pops a native confirm first (`window.confirm`, "this overwrites
+what Kajabi has on file...") since `tier` is otherwise only ever written
+by the Kajabi webhook's `purchase.created` handler — confirmed that
+handler does a blind `upsert`, so it isn't blocked by this override and
+will freely overwrite it again on the student's next real
+upgrade/downgrade in Kajabi, same as before this override existed. No
+webhook changes needed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Traced the
+month-occurrence math against a known 5-Friday month (October 2027:
+Fridays on 1/8/15/22/29) — confirmed only the 1st and 15th are kept, the
+rest correctly skipped. Click-tested the Membership edit/confirm/cancel
+flow and the live "(Biweekly)" suffix toggle in the browser mock.
+
 ## Group lessons never displayed anywhere: RLS policy recursion (2026-08-28)
 
 Root cause of "the bootcamp doesn't show on the coach calendar", found
@@ -1081,6 +1289,30 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0057 not yet confirmed applied** —
+`supabase/migrations/0057_recurring_schedule_cadence.sql` adds a
+`cadence` column (`weekly`/`biweekly`) to `recurring_schedules`. Until
+this runs, the new Weekly/Biweekly selector on a student's recurring
+schedule form will fail to save for anyone who picks Biweekly (the
+upsert will hit the missing column). Weekly schedules are unaffected —
+`cadence` defaults to `'weekly'` once the column exists, so existing
+schedules don't need any backfill.
+
+**New migration 0058 not yet confirmed applied** —
+`supabase/migrations/0058_student_ambassador_flag.sql` adds an
+`ambassador` boolean to `students`, default `false`. Until this runs,
+the new Ambassador checkbox (student detail page + the "Add ambassador /
+manual student" form) and the CSV bulk-import route will error on any
+write that touches it. No backfill needed — every existing student
+becomes `ambassador = false` automatically once the column exists.
+
+**New migration 0059 not yet confirmed applied** —
+`supabase/migrations/0059_student_since_override.sql` adds a nullable
+`student_since_override` date to `students`. Until this runs, the student
+detail page's "With us" row (now editable) and the CSV `student_since`
+column will error on any write that touches it. No backfill needed —
+leaving it blank falls back to `created_at`, same as today's display.
 
 **Migrations 0045–0055 all confirmed applied** (2026-08-28). Covers:
 0045 referral bonus column, 0046 admin_finance role, 0047 payroll manual

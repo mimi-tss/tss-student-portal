@@ -10,7 +10,7 @@ import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/schedu
 // daily cron top-up uses, so the change shows up on the coach calendar
 // right away rather than waiting for tomorrow's run.
 export async function POST(req: NextRequest) {
-  const { studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId } =
+  const { studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId, cadence } =
     await req.json();
 
   if (
@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
         start_time: startTime,
         duration_minutes: durationMinutes,
         start_date: effectiveStartDate,
+        cadence: cadence === "biweekly" ? "biweekly" : "weekly",
         active: true,
         updated_at: new Date().toISOString(),
       },
