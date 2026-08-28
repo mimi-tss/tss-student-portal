@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
-import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
-import { zonedYearMonthDay } from "@/lib/timezone";
+import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -156,13 +155,11 @@ export async function POST(req: NextRequest) {
 
   // The studio is closed on studio_holidays dates (migration 0055) —
   // hard block, no admin override, since "make sure no one is scheduled"
-  // is exactly the point. Checked in the coach's own zone, same as every
-  // other "which day is this" decision in this app.
-  const { data: bookingCoach } = await supabase.from("coaches").select("timezone").eq("id", coachId).maybeSingle();
+  // is exactly the point. The studio itself is in Florida, so this is
+  // always checked against that fixed zone (isHolidayInstant), not
+  // whichever zone this particular coach happens to be in.
   const holidayDates = await getHolidayDateKeys(supabase);
-  const [hy, hm, hd] = zonedYearMonthDay(new Date(slotStart), bookingCoach?.timezone ?? "America/New_York");
-  const slotDateKey = `${hy}-${String(hm).padStart(2, "0")}-${String(hd).padStart(2, "0")}`;
-  if (holidayDates.has(slotDateKey)) {
+  if (isHolidayInstant(new Date(slotStart), holidayDates)) {
     return NextResponse.json({ error: "The studio is closed that day — no sessions can be booked." }, { status: 409 });
   }
 

@@ -1,5 +1,5 @@
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
-import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 
 // How far ahead recurring occurrences are materialized. Topped up daily
 // by /api/cron/materialize-recurring, so a recurring schedule already
@@ -180,7 +180,10 @@ export function slotFitsWorkingHours(
 // created for it, rather than creating then hiding one. Same treatment
 // for holidayDates (studio_holidays, migration 0055) — a studio-closed
 // date is never even offered a session to skip, matching how the
-// billing-cap "week off" already works.
+// billing-cap "week off" already works. The holiday check is deliberately
+// against Florida's own calendar date (isHolidayInstant), not this
+// coach's zone — the studio's closure dates are fixed to one place, not
+// per-coach, unlike everything else this function resolves in `timeZone`.
 export function occurrencesFor(
   dayOfWeek: number,
   startTime: string,
@@ -200,7 +203,6 @@ export function occurrencesFor(
   for (let i = 0; i < weeksAhead * 7; i++) {
     const dateOnly = new Date(Date.UTC(y, m - 1, d + i));
     if (dateOnly.getUTCDay() !== dayOfWeek) continue;
-    if (holidayDates?.has(dateOnly.toISOString().slice(0, 10))) continue;
 
     const instant = zonedTimeToUtc(
       dateOnly.getUTCFullYear(),
@@ -211,6 +213,7 @@ export function occurrencesFor(
       timeZone,
     );
     if (instant <= from) continue;
+    if (holidayDates && isHolidayInstant(instant, holidayDates)) continue;
 
     if (anchorDay !== null) {
       const occurrenceNumber = cycleOccurrenceNumber(instant, anchorDay, timeZone);

@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Studio holidays correction: dates are Florida time, not per-coach zone (2026-08-28)
+
+You caught this right after the feature above shipped: the studio itself
+is in Florida, so "closed Dec 25" means Dec 25 midnight-to-midnight
+*there* — not each coach's own local day. My first pass had every
+holiday check resolving in whichever timezone the affected coach was
+in, following the same "resolve in the coach's own zone" convention this
+codebase uses everywhere else (working hours, recurring occurrences) —
+wrong for this one specific case, since a holiday is a fixed studio-wide
+policy anchored to one place, not per-coach.
+
+- New `isHolidayInstant()` in [lib/scheduling/holidays.ts](lib/scheduling/holidays.ts) —
+  resolves any instant against `DEFAULT_TIMEZONE`
+  (`America/New_York`, Florida's own zone — already this app's
+  studio-wide fallback elsewhere) unconditionally, replacing the old
+  per-coach `dateKeyInZone()`.
+- `forfeitHolidaySessions()` simplified — no longer needs to join coach
+  timezones at all, just checks every candidate session/group-lesson
+  against the one fixed zone.
+- `occurrencesFor()` (lib/scheduling/recurring.ts) — the holiday check
+  moved to *after* the occurrence's real UTC instant is computed, checked
+  via `isHolidayInstant`, instead of comparing the coach-zone-walked
+  calendar date directly against the holiday set.
+- [booking/book/route.ts](app/api/booking/book/route.ts) — dropped the
+  coach-timezone fetch entirely, checks the requested slot's instant
+  against Florida directly.
+- [booking/slots/route.ts](app/api/booking/slots/route.ts) — the
+  holiday check moved from the coach-zone day-walk level down to each
+  candidate slot's actual instant, since a coach-zone calendar day and
+  Florida's calendar day aren't the same window for a coach outside
+  Eastern — e.g. a California coach's late-evening slot can already be
+  the *next* Florida calendar day.
+- Real, if edge-case, consequence worth knowing: for a coach in an
+  earlier zone (Pacific), a slot late enough in their own evening can
+  now be blocked as "the next day's Florida holiday" even though it's
+  still the prior calendar date for them locally — exactly what you
+  described (Florida's clock governs, full stop), not a bug.
+- `npx tsc --noEmit -p .` and `next build` both clean. No new mock — same
+  feature, just correcting which timezone anchors it; the studio
+  holidays preview from the entry above is unaffected (it never modeled
+  multi-timezone behavior, so nothing there needed to change).
+
 ## Studio holidays: full-closure dates, auto-forfeit, no makeup (2026-08-28)
 
 You gave the studio's 2026 official holiday list and asked to guarantee

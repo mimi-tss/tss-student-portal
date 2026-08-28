@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
 import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
-import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 
 // Computes open slots for the student's own assigned coach:
 // coach working_hours minus coach_blocks minus existing sessions.
@@ -157,13 +157,6 @@ export async function GET(req: NextRequest) {
     const day = cursorDate.getUTCDate();
     const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-    // The studio is closed studio-wide on a holiday date — no slots at
-    // all that day, for any coach, regardless of their own working hours.
-    if (holidayDates.has(dateKey)) {
-      cursorDate = new Date(cursorDate.getTime() + 24 * 60 * 60 * 1000);
-      continue;
-    }
-
     const dayWorkingHours = resolveWorkingHoursForDate(
       {
         workingHours: (coach?.working_hours ?? {}) as WorkingHours,
@@ -187,8 +180,12 @@ export async function GET(req: NextRequest) {
         const overlapsBusy = busyRanges.some(
           ([bStart, bEnd]) => cursor < bEnd && slotEnd > bStart,
         );
+        // The studio is closed studio-wide on a holiday date, in
+        // Florida's own calendar day — not this coach's zone, which is
+        // what `dateKey` above actually represents.
+        const isHoliday = isHolidayInstant(cursor, holidayDates);
 
-        if (inRange && !overlapsBusy) {
+        if (inRange && !overlapsBusy && !isHoliday) {
           slots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
         }
 
