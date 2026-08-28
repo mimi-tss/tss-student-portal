@@ -3,6 +3,45 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recurring sessions: extended the generation horizon from ~2 months to a year (2026-08-28)
+
+Follow-up to the November-is-blank question — you asked to make it
+effectively indefinite (until cancelled) instead of stopping after ~2
+months. That "stops after 2 months" look was purely
+`WEEKS_AHEAD` in [lib/scheduling/recurring.ts](lib/scheduling/recurring.ts) —
+a recurring schedule already runs forever in practice (the daily
+`materialize-recurring` cron slides the horizon one more day out every
+day it runs, with no end, until you change/remove the schedule or the
+student's subscription gets cancelled/paused — both of those already
+stop generation past their own effective date). `WEEKS_AHEAD` is just
+how much runway sits pre-generated as real `sessions` rows at any given
+moment, not a cap on the booking's lifetime — there's no such thing as a
+literal unbounded lookahead for a materialized-row model, since there's
+no "last" occurrence to stop at.
+
+- Bumped `WEEKS_AHEAD` from 8 (~2 months) to **52 (a full year)** — long
+  enough that nobody should ever see an artificial-looking gap like
+  November's again, without generating an unreasonable number of rows
+  for students who change their schedule long before most of them would
+  ever be used. Shared by both individual recurring schedules and
+  [recurring group lessons](lib/group-lessons.ts) (this session's other
+  work), so both get the same extended runway.
+- **Takes effect on the next `materialize-recurring` cron run, not
+  gradually** — `occurrencesFor` always recomputes the full window from
+  "now" out to `WEEKS_AHEAD` weeks every time it runs, then only inserts
+  whatever's missing; it doesn't build on the previous horizon
+  incrementally. So the very next daily cron run (or immediately, if you
+  edit a schedule or billing anchor for a specific student, which also
+  calls this) fills the entire gap between the old ~2-month horizon and
+  the new 1-year one in one pass — you don't need to wait months for the
+  buffer to naturally extend.
+- `npx tsc --noEmit -p .` and `next build` both clean. No mock for this
+  one — it's a single constant with well-defined, already-verified
+  arithmetic (same `occurrencesFor`/cap logic exercised in the billing-
+  anchor mock above), nothing new to click-test; the real proof is
+  November (and beyond) populating with sessions after the next cron
+  run.
+
 ## Editable billing cycle anchor, and correcting an earlier explanation (2026-08-27)
 
 Follow-up to the "why did Sep 16 skip" question — you asked how to set

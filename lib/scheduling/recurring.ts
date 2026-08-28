@@ -1,9 +1,20 @@
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 
 // How far ahead recurring occurrences are materialized. Topped up daily
-// by /api/cron/materialize-recurring, so the calendar always has roughly
-// this much runway rather than running dry.
-export const WEEKS_AHEAD = 8;
+// by /api/cron/materialize-recurring, so a recurring schedule already
+// continues indefinitely in practice — every day the cron runs, the
+// horizon slides one day further out, forever, until the schedule
+// itself is changed/removed or the student's subscription is cancelled
+// (materializeRecurringSessions already stops populating past a
+// cancellation's effective date, and cuts off at a pause window). A
+// literal unbounded lookahead isn't meaningful for a *materialized* real
+// `sessions` row per occurrence — there's no "last" week to stop at, so
+// this is just how much runway sits ready at any one time, not a cap on
+// how long the recurring booking lasts. Bumped from 8 (~2 months, felt
+// like an artificial wall in the Month view) to a full year — plenty of
+// visible runway without generating an unreasonable number of rows for
+// students who end up changing their schedule long before using them.
+export const WEEKS_AHEAD = 52;
 
 export const DAY_NAMES = [
   "Sunday",
