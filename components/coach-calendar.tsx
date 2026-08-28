@@ -381,8 +381,14 @@ export default function CoachCalendar({
       return coachMinutes >= sh * 60 + sm && coachMinutes < eh * 60 + em;
     });
 
-    if (!inWorkingHours) return { type: "blank" as const };
-
+    // Checked before the working-hours gate below — a group lesson is
+    // deliberately not restricted to the coach's configured hours (see
+    // the row-range comment above), so a real one must render
+    // regardless of whether its slot falls inside them. This was the
+    // actual remaining bug after widening the row axis: the axis fix
+    // alone made the row exist, but this per-cell gate still returned
+    // "blank" for every cell outside working hours before ever checking
+    // for a group lesson, hiding it anyway.
     const groupLesson = (data?.groupLessons ?? []).find((g) => {
       const gStart = new Date(g.scheduledAt);
       const gEnd = new Date(gStart.getTime() + g.durationMinutes * 60 * 1000);
@@ -392,6 +398,8 @@ export default function CoachCalendar({
       const isGroupStart = slotStart.getTime() === new Date(groupLesson.scheduledAt).getTime();
       return { type: "group" as const, groupLesson, isGroupStart };
     }
+
+    if (!inWorkingHours) return { type: "blank" as const };
 
     const session = (data?.sessions ?? []).find((s) => {
       const sStart = new Date(s.scheduledAt);

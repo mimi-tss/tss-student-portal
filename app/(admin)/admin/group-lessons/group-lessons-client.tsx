@@ -67,11 +67,6 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
-  // TEMP DEBUG (2026-08-28): surfaces materializeRecurringGroupLessons's
-  // real per-series diagnostics after a recurring create/edit, since a
-  // created series wasn't producing a visible occurrence and the
-  // insert error was previously swallowed silently. Revert once fixed.
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   const selectedCoachZone = coaches.find((c) => c.id === coachId)?.timezone ?? DEFAULT_TIMEZONE;
 
@@ -147,10 +142,6 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
       return;
     }
 
-    if (mode === "recurring" || editingSeriesId) {
-      setDebugInfo(JSON.stringify(body.materialize, null, 2));
-    }
-
     resetForm();
     load();
   }
@@ -191,17 +182,6 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
 
   return (
     <div>
-      {debugInfo && (
-        <div className={styles.panel} style={{ maxWidth: 900 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 style={{ margin: 0 }}>Materialize debug (temp)</h2>
-            <button type="button" onClick={() => setDebugInfo(null)} className={styles.linkBtnSmall}>
-              Clear
-            </button>
-          </div>
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, marginTop: 8, overflowX: "auto" }}>{debugInfo}</pre>
-        </div>
-      )}
       <div className={styles.panel} style={{ maxWidth: 480 }}>
         <h2>{editingSeriesId ? "Edit recurring series" : "New group lesson"}</h2>
         {!editingSeriesId && (
