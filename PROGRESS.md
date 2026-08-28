@@ -54,9 +54,8 @@ managed feature now, not a one-off — you flagged yourself that Easter/
 Thanksgiving shift every year, so a hardcoded date list would go stale;
 built a proper `studio_holidays` table + admin UI instead.
 
-**New migration [0055_studio_holidays.sql](supabase/migrations/0055_studio_holidays.sql)** —
-**not yet confirmed applied, this is the one that matters most right
-now**, see Action needed below:
+**New migration [0055_studio_holidays.sql](supabase/migrations/0055_studio_holidays.sql)**
+— **confirmed applied 2026-08-28**:
 - `studio_holidays` table (`date` unique, `label`), admin-manage RLS
   (`is_admin()`, both `admin`/`admin_finance`) + read for any
   authenticated user. Seeded with all 7 dates you gave, for 2026
@@ -988,14 +987,11 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0055 not yet confirmed applied — this is what actually enforces the holiday closures.**
-`supabase/migrations/0055_studio_holidays.sql` creates the
-`studio_holidays` table (seeded with your 7 given 2026 dates) and adds
-the `'holiday'` session status. Until this runs: no one is blocked from
-booking on these dates, nothing already scheduled on them gets
-forfeited, and the new "Studio holidays" panel on the Coaches tab will
-error (no table to read/write). This is the actual mechanism behind
-everything described below — please prioritize it alongside 0054.
+**Migration 0055 confirmed applied** (2026-08-28) — `studio_holidays`
+table is live (seeded with your 7 given 2026 dates) and the `'holiday'`
+session status exists. Holiday closures are fully enforced now: no
+booking on those dates, and the nightly cron will forfeit anything
+already scheduled on one (no makeup credit).
 
 **New migration 0054 not yet confirmed applied — real bug, please prioritize this one.**
 `supabase/migrations/0054_admin_delete_sessions.sql` adds the missing
