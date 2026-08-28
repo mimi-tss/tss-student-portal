@@ -21,6 +21,12 @@ npm-debug.log*
 # local Claude Code settings (machine/session-specific)
 .claude/settings.local.json
 
+# Claude Code skill/agent tooling installs (not project code)
+/.agents/
+/.claude/skills/
+/agent/
+/skills-lock.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
