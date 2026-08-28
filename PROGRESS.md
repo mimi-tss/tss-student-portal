@@ -3,6 +3,58 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group lessons never displayed anywhere: RLS policy recursion (2026-08-28)
+
+Root cause of "the bootcamp doesn't show on the coach calendar", found
+only after several wrong turns — worth reading before touching group
+lessons again.
+
+**The bug:** migration 0031's policies are mutually recursive.
+`group_lessons`' student policy subqueries `group_lesson_registrations`,
+and that table's coach policies subquery `group_lessons`. Postgres
+aborts any RLS-scoped read of *either* table with `42P17: infinite
+recursion detected in policy for relation "group_lesson_registrations"`.
+This is precisely the cycle migration 0007 was written to eliminate,
+reintroduced. Fixed in **migration 0056** with the same SECURITY
+DEFINER helper pattern 0007 established (`auth_student_group_lesson_ids()`,
+`auth_coach_group_lesson_ids()`).
+
+**Why it hid for so long, and why it wasted a lot of this session:** an
+INSERT only evaluates `WITH CHECK` (`is_admin()`, non-recursive), so
+admin *writes* kept succeeding while every *read* errored — and every
+caller discarded the error (`const { data } = await ...`, no error
+check), so a failed query was indistinguishable from "nothing
+scheduled". Three separate symptoms all traced back to this one cause:
+group lessons never appearing on any coach/admin calendar, the admin
+"Upcoming group lessons" list staying empty, and
+`updateRecurringGroupLessonSeries`' "delete the empty future
+occurrences" step reading zero rows and deleting nothing — which let a
+single occurrence accumulate ~13 duplicate rows across repeated saves.
+
+**Two calendar-rendering fixes were also real and are kept**, but
+neither was the cause and neither would have helped alone: the grid's
+row range only spanned working hours (a lesson outside them had no row
+to render into), and `cellState` returned "blank" for any cell outside
+working hours *before* ever checking for a group lesson. Group lessons
+are deliberately not constrained to a coach's working hours, unlike 1:1
+recurring slots (`slotFitsWorkingHours`), so both were genuine.
+
+**Process note:** the thing that finally cracked it was a read-only
+script querying production directly with the service-role key from
+`.env.local`, instead of another round of deploy-and-look. Service role
+bypasses RLS, so comparing it against an anon-key read is what surfaced
+the 42P17 error the app had been swallowing. Worth reaching for that
+much earlier next time a "the data is there but nothing renders" bug
+appears.
+
+Also hardened: `getCoachGroupLessons` now logs its error instead of
+discarding it, and the delete-then-regenerate step throws rather than
+silently duplicating.
+
+Not yet confirmed on screen — migration 0056 needs running against
+production, and the ~30 accumulated duplicate rows still want cleaning
+up (separate, destructive, not done without asking).
+
 ## Studio holidays: fixed the actual visible bug — empty slots weren't blocked (2026-08-28)
 
 You caught the real remaining gap live: Nov 26 (Thanksgiving) still
@@ -1023,67 +1075,13 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0055 confirmed applied** (2026-08-28) — `studio_holidays`
-table is live (seeded with your 7 given 2026 dates) and the `'holiday'`
-session status exists. Holiday closures are fully enforced now: no
-booking on those dates, and the nightly cron will forfeit anything
-already scheduled on one (no makeup credit).
-
-**New migration 0054 not yet confirmed applied — real bug, please prioritize this one.**
-`supabase/migrations/0054_admin_delete_sessions.sql` adds the missing
-`sessions` DELETE policy for admin. Until this runs, changing or
-removing a student's recurring weekly schedule will keep leaving stale
-duplicate sessions behind (the bug you just found with Mimi Test) —
-every schedule change is affected, not just that one test.
-
-**Also needs manual cleanup, separate from the migration**: Mimi Test's
-existing stray duplicate session(s) on Celine's calendar (from before
-this fix) won't disappear on their own — cancel the extra one yourself
-from the Coaches day/week view once you've confirmed which occurrence
-should stay.
-
-**New migration 0053 not yet confirmed applied** —
-`supabase/migrations/0053_drop_coach_classroom_link.sql` drops
-`coaches.classroom_link` again (0050 was reverted same-day — meeting
-link and classroom link turned out to be the same thing). Harmless
-either way: the app no longer reads or writes that column regardless of
-whether the drop has run.
-
-**New migration 0049 not yet confirmed applied** —
-`supabase/migrations/0049_login_codes.sql` adds the `login_codes`
-table. Until this runs, the `/login` page's "send me a code" step will
-fail (the insert has nowhere to write to) — nobody can complete the
-new email-then-code flow.
-
-**New migration 0048 not yet confirmed applied** —
-`supabase/migrations/0048_payroll_coach_seen.sql` adds
-`payroll_entries.coach_seen_at`. Until this runs, a coach visiting
-`/coach/payroll` (or the dashboard querying for it) will error on the
-write/read to that column — the "new payroll" dashboard banner won't
-work. The admin confirmation popup itself (after Generate) doesn't
-depend on this column and will work regardless.
-
-**New migration 0047 not yet confirmed applied** —
-`supabase/migrations/0047_payroll_manual_adjustments.sql` adds
-`payroll_entries.is_manual`/`reason` and widens the session/group-lesson
-check constraint to allow a third "manual" case. Until this runs, the
-new "Add adjustment" panel on Finance will fail to insert (constraint
-violation).
-
-**New migration 0046 not yet confirmed applied** —
-`supabase/migrations/0046_admin_finance_role.sql` adds the `admin_finance`
-role (widens `profiles.role`'s check constraint and the `is_admin()` SQL
-function to admit it). Until this runs, you can't set any account's role
-to `admin_finance` — the insert/update will fail the old check
-constraint. No UI creates this account yet (see below) — you'll set the
-role directly in Supabase for now.
-
-**New migration 0045 not yet confirmed applied** —
-`supabase/migrations/0045_referral_bonus.sql` adds
-`students.referred_by_coach_id`. Referral tagging on the student page and
-the payroll referral-bonus calc will silently do nothing (or error) until
-this runs. Same `SLACK_WEBHOOK_URL` env var below now also gates the new
-Finance "Notify coaches" attendance nudge, not just coach-block alerts.
+**Migrations 0045–0055 all confirmed applied** (2026-08-28). Covers:
+0045 referral bonus column, 0046 admin_finance role, 0047 payroll manual
+adjustments, 0048 payroll coach_seen_at, 0049 login_codes table, 0053
+drop coach classroom_link, 0054 sessions DELETE policy for admin
+(recurring-schedule changes no longer leave stale duplicate sessions
+behind), 0055 studio_holidays. Mimi Test's stray duplicate session on
+Celine's calendar (the pre-0054 leftover) is also resolved.
 
 **Migrations 0036–0044 confirmed applied.** ✅ (0044 confirmed 2026-08-25 —
 `coaches.pending_working_hours` / `pending_effective_date`, effective-dated

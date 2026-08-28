@@ -32,7 +32,7 @@ export async function getCoachGroupLessons(
   start: string,
   end: string,
 ): Promise<CoachGroupLesson[]> {
-  const { data: lessons } = await supabase
+  const { data: lessons, error } = await supabase
     .from("group_lessons")
     .select(
       "id, topic, scheduled_at, duration_minutes, max_students, group_lesson_registrations(id, student_id, status, students(name))",
@@ -42,6 +42,16 @@ export async function getCoachGroupLessons(
     .gte("scheduled_at", start)
     .lte("scheduled_at", end)
     .order("scheduled_at");
+
+  // Never swallow this again: an RLS policy recursion (42P17, fixed in
+  // migration 0056) made this query fail for months while the discarded
+  // error left every calendar looking simply empty — indistinguishable
+  // from "no group lessons scheduled", which is what made it so hard to
+  // find. Logged rather than thrown so one bad query can't take down a
+  // whole schedule page that still renders sessions fine.
+  if (error) {
+    console.error(`getCoachGroupLessons failed for coach ${coachId}`, error.message);
+  }
 
   return (lessons ?? []).map((l) => ({
     id: l.id,
@@ -309,12 +319,19 @@ export async function updateRecurringGroupLessonSeries(
     .eq("id", seriesId);
   if (error) throw new Error(error.message);
 
-  const { data: futureLessons } = await supabase
+  const { data: futureLessons, error: futureError } = await supabase
     .from("group_lessons")
     .select("id, group_lesson_registrations(id)")
     .eq("recurring_group_lesson_id", seriesId)
     .gte("scheduled_at", new Date().toISOString())
     .is("cancelled_at", null);
+
+  // Thrown rather than logged: silently reading zero rows here means the
+  // delete below no-ops and materialize then re-inserts the same
+  // occurrences, which is exactly how ~13 duplicate rows of one lesson
+  // accumulated before migration 0056 fixed the underlying RLS
+  // recursion. Failing loudly beats silently duplicating.
+  if (futureError) throw new Error(futureError.message);
 
   const emptyLessonIds = (futureLessons ?? [])
     .filter((l) => !(l.group_lesson_registrations as unknown[] | null)?.length)
