@@ -3,6 +3,42 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Studio holidays: fixed the actual visible bug — empty slots weren't blocked (2026-08-28)
+
+You caught the real remaining gap live: Nov 26 (Thanksgiving) still
+showed as plain "Available" (clickable, "Click to book with a makeup
+credit") on Celine's Week view, not blocked. Root cause — every backend
+piece from the two entries above was correct (booking APIs reject it,
+recurring generation skips it, an already-forfeited session shows
+"Studio holiday — held"), but the **coach calendar's own empty-slot
+color** is computed entirely client-side by a `cellState()` function in
+both [components/coach-calendar.tsx](components/coach-calendar.tsx) and
+[all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+— from working hours + coach_blocks + existing sessions — and neither
+had ever been told about `studio_holidays` at all. A day with nothing
+already scheduled on it just fell through to plain "Available."
+
+- Both components now fetch `/api/admin/studio-holidays` once on mount
+  (already RLS-readable by any authenticated user, no new endpoint
+  needed) and check `isHolidayInstant()` as the very last fallback in
+  `cellState()`, right before "available" — deliberately placed *after*
+  every other check (session/group-lesson/held/block), so a real
+  forfeited session's own "Studio holiday — held" rendering is
+  untouched; this only fires for a slot nothing else already claimed.
+- Reuses the existing solid "Blocked" rendering (same color as a coach's
+  own time-off block) by synthesizing a `Block`-shaped object with just
+  a `reason` string (`"Studio holiday — Thanksgiving Day"`) — no new
+  visual state, no new legend entry, and for free: a "block" cell was
+  already non-clickable in both components' existing click logic, so
+  this closes the actual "still not blocked" complaint (nothing to book
+  there) without touching any click-handling code at all.
+- `npx tsc --noEmit -p .` and `next build` both clean. Visually
+  confirmed in a mock reproducing the exact Week-view layout from your
+  screenshot: Thu 26 renders as a solid black closure with "Studio
+  holiday — Thanksgiving Day" on its first row, every other day stays
+  normal "Available" shading:
+  [holiday grid fix preview](https://claude.ai/code/artifact/694365e8-edf7-46ab-8246-82ba8778f2c2).
+
 ## Studio holidays correction: dates are Florida time, not per-coach zone (2026-08-28)
 
 You caught this right after the feature above shipped: the studio itself

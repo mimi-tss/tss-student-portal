@@ -7,9 +7,11 @@ import {
   zonedTimeToUtc,
   zonedHourMinute,
   zonedDayKey,
+  zonedYearMonthDay,
   timezoneAbbreviation,
 } from "@/lib/timezone";
 import { allTimezones, timezoneLabel, DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { useTimeZone } from "@/components/timezone-context";
 import AddCoachBlockForm from "@/components/add-coach-block-form";
 import CoachCalendar from "@/components/coach-calendar";
@@ -129,6 +131,18 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
   const [schedules, setSchedules] = useState<CoachDaySchedule[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [holidays, setHolidays] = useState<{ date: string; label: string | null }[]>([]);
+
+  // Studio-wide closure dates (studio_holidays, migration 0055) — one
+  // fetch on mount, same as CoachCalendar's own copy of this.
+  useEffect(() => {
+    fetch("/api/admin/studio-holidays")
+      .then((res) => res.json())
+      .then((body) => setHolidays(body.holidays ?? []))
+      .catch(() => {});
+  }, []);
+  const holidayDates = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
+  const holidayLabelByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h.label])), [holidays]);
 
   // Empty set = "All coaches". Otherwise an arbitrary multi-coach
   // selection — Day view renders however many columns that is side by
@@ -348,6 +362,26 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
       return slotStart < bEnd && slotEnd > bStart;
     });
     if (block) return { type: "block", block, isStart: slotStart.getTime() === new Date(block.start_at).getTime() };
+
+    // Studio-wide closure (studio_holidays, migration 0055) — same
+    // fallback-only placement and synthesized Block as CoachCalendar's
+    // own copy of this check: a forfeited session already renders via
+    // the "held" branch above, this only fires for an otherwise-open slot.
+    if (holidayDates.size > 0 && isHolidayInstant(slotStart, holidayDates)) {
+      const [hy, hm, hd] = zonedYearMonthDay(slotStart, "America/New_York");
+      const holidayKey = `${hy}-${String(hm).padStart(2, "0")}-${String(hd).padStart(2, "0")}`;
+      const label = holidayLabelByDate.get(holidayKey);
+      const earliestWindowStart = windows.reduce<number | null>((min, [s]) => {
+        const [sh, sm] = s.split(":").map(Number);
+        const mins = sh * 60 + sm;
+        return min === null || mins < min ? mins : min;
+      }, null);
+      return {
+        type: "block",
+        block: { id: "holiday", start_at: "", end_at: "", reason: `Studio holiday${label ? ` — ${label}` : ""}` },
+        isStart: earliestWindowStart !== null && coachMinutes === earliestWindowStart,
+      };
+    }
 
     return { type: "available" };
   }

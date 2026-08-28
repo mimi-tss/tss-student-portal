@@ -12,6 +12,7 @@ import {
   timezoneAbbreviation,
 } from "@/lib/timezone";
 import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
+import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { useTimeZone } from "./timezone-context";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -221,6 +222,21 @@ export default function CoachCalendar({
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [selectedGroupLesson, setSelectedGroupLesson] = useState<GroupLesson | null>(null);
   const [marking, setMarking] = useState(false);
+  const [holidays, setHolidays] = useState<{ date: string; label: string | null }[]>([]);
+
+  // Studio-wide closure dates (studio_holidays, migration 0055) — a
+  // small, rarely-changing list, so one fetch on mount rather than
+  // re-fetching per range change like `data` above. Read-only for any
+  // authenticated caller (RLS), so this works whether CoachCalendar is
+  // rendered for an admin or the coach's own dashboard.
+  useEffect(() => {
+    fetch("/api/admin/studio-holidays")
+      .then((res) => res.json())
+      .then((body) => setHolidays(body.holidays ?? []))
+      .catch(() => {});
+  }, []);
+  const holidayDates = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
+  const holidayLabelByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h.label])), [holidays]);
 
   // Month view fetches the whole calendar month in one go (same
   // start/end-driven API every other view already uses — no backend
@@ -458,6 +474,34 @@ export default function CoachCalendar({
     if (block) {
       const isBlockStart = slotStart.getTime() === new Date(block.start_at).getTime();
       return { type: "block" as const, block, isBlockStart };
+    }
+
+    // Studio-wide closure (studio_holidays, migration 0055) — checked
+    // last, as a fallback over an otherwise-open slot: a real forfeited
+    // session on this date already renders via the "held" branch above
+    // (status "holiday"), so this only ever fires for a slot nothing
+    // else claimed. Reuses the existing "block" rendering (same solid
+    // color as a coach's own time-off) rather than a new visual state —
+    // synthesizes a Block-shaped object since only `.reason` is ever
+    // read downstream, not the real start/end instants.
+    if (holidayDates.size > 0 && isHolidayInstant(slotStart, holidayDates)) {
+      const [hy, hm, hd] = zonedYearMonthDay(slotStart, "America/New_York");
+      const dateKey = `${hy}-${String(hm).padStart(2, "0")}-${String(hd).padStart(2, "0")}`;
+      const label = holidayLabelByDate.get(dateKey);
+      // Only the day's very first working-hours row gets the label —
+      // mirrors a real block's isBlockStart (true only for its first
+      // row), so the caption shows once at the top of the shaded region
+      // instead of on every 30-min row.
+      const earliestWindowStart = windows.reduce<number | null>((min, [s]) => {
+        const [sh, sm] = s.split(":").map(Number);
+        const mins = sh * 60 + sm;
+        return min === null || mins < min ? mins : min;
+      }, null);
+      return {
+        type: "block" as const,
+        block: { id: "holiday", start_at: "", end_at: "", reason: `Studio holiday${label ? ` — ${label}` : ""}` },
+        isBlockStart: earliestWindowStart !== null && coachMinutes === earliestWindowStart,
+      };
     }
 
     return { type: "available" as const, slotStart };
