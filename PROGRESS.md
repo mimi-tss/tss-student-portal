@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Multi-line credit grants, editable name/email (2026-08-28)
+
+Replaced "Grant 4-pack" with N free-form lines, each its own
+quantity + expiry date, one shared duration — e.g. 2 credits expiring
+9/26 and 2 expiring 10/14 in one submit. Still calls
+`/api/admin/add-credit` once per line (no batch endpoint needed, it
+already takes a `quantity`); if a line fails partway through, the ones
+that already succeeded are dropped from the form and the failing line
+stays for a straight retry — no rollback attempted since those credits
+are already real.
+[add-credit-client.tsx](app/(admin)/admin/dashboard/add-credit-client.tsx)
+
+Student name/email are now editable on the student detail page, same
+click-to-edit pattern as birth date —
+[name-client.tsx](<app/(admin)/admin/students/[studentId]/name-client.tsx>),
+[email-client.tsx](<app/(admin)/admin/students/[studentId]/email-client.tsx>)
+→ [set-student-info/route.ts](app/api/admin/set-student-info/route.ts).
+Email doubles as the Kajabi webhook's match key — changing it here
+doesn't touch Kajabi's own records.
+
+## CSV import: download-template button instead of an inline column dump (2026-08-28)
+
+You flagged the "Import students from CSV" panel's hint text as too much
+raw column-list text to read live on the page. Replaced it with a short
+one-line reminder of the two real gotchas (coach matching,
+day_of_week/start_time pairing) plus a "Download CSV template" button
+([import-students-client.tsx](app/(admin)/admin/dashboard/import-students-client.tsx))
+that generates the same header-row-plus-example-row CSV client-side via a
+`Blob` + temporary `<a download>` — no server round-trip, no new route.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## One-go lesson setup on "Add ambassador / manual student" (2026-08-28)
 
 You asked for the manual-provisioning form itself to set up a student's

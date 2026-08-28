@@ -19,6 +19,20 @@ interface RowResult {
 const COLUMNS =
   "name,email,tier,session_duration_minutes,coach,day_of_week,start_time,frequency,ambassador,birth_date,billing_start_date,student_since";
 
+const TEMPLATE_CSV = `${COLUMNS}
+Jane Example,jane@example.com,pro,30,celine@studio.test,tuesday,16:30,weekly,no,1998-04-02,2026-01-15,2024-09-01
+`;
+
+function downloadTemplate() {
+  const blob = new Blob([TEMPLATE_CSV], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "students-import-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Bulk counterpart to the "Add ambassador / manual student" form above —
 // for onboarding many real students at once instead of one at a time.
 // See app/api/admin/bulk-import-students/route.ts for the full column
@@ -76,14 +90,15 @@ export default function ImportStudentsClient() {
     <div className={styles.panel}>
       <h2>Import students from CSV</h2>
       <p className={styles.mutedText}>
-        Header row required, columns: <code>{COLUMNS}</code>. Only name, email, and tier are
-        required — the rest can be left blank. <code>coach</code> matches by email (unambiguous)
-        or exact name (must be an active coach). <code>day_of_week</code> and{" "}
-        <code>start_time</code> must both be set together to create a recurring schedule.{" "}
-        <code>birth_date</code>, <code>billing_start_date</code>, and <code>student_since</code>{" "}
-        are all <code>YYYY-MM-DD</code> — leave any blank to use the default (no birthday on
-        file, today as the billing anchor, or account-creation date for "with us").
+        Only name, email, and tier are required — everything else can be left blank.{" "}
+        <code>coach</code> matches by email or exact name; <code>day_of_week</code> and{" "}
+        <code>start_time</code> must be set together or both left blank.
       </p>
+      <div>
+        <button type="button" onClick={downloadTemplate} className={styles.linkBtnSmall}>
+          Download CSV template
+        </button>
+      </div>
 
       <input
         ref={fileInputRef}
