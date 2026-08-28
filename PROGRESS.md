@@ -1321,8 +1321,17 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0060 confirmed applied** (2026-08-28) — fixed the
-makeup_credits RLS recursion. Multi-line "Add credit" grants work now.
+**New migration 0061 not yet confirmed applied** — 0060 didn't
+actually fix the makeup_credits recursion; it hit a *different*,
+genuinely self-referential policy from 0012 (student-fault cap check
+subqueries makeup_credits itself), confirmed still failing live after
+0060 was applied. `0061_fix_makeup_credits_self_reference.sql` moves
+that count into a SECURITY DEFINER function. Until this runs, granting
+a credit (single or multi-line) will keep failing with "infinite
+recursion detected in policy for relation makeup_credits".
+
+**Migration 0060 confirmed applied** (2026-08-28) — fixed 4 of the 5
+makeup_credits policies, just not the one actually causing the error.
 
 **Migrations 0057–0059 confirmed applied** (2026-08-28). Covers: 0057
 `recurring_schedules.cadence` (weekly/biweekly), 0058
