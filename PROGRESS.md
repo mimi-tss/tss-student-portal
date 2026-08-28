@@ -51,9 +51,16 @@ Also hardened: `getCoachGroupLessons` now logs its error instead of
 discarding it, and the delete-then-regenerate step throws rather than
 silently duplicating.
 
-Not yet confirmed on screen — migration 0056 needs running against
-production, and the ~30 accumulated duplicate rows still want cleaning
-up (separate, destructive, not done without asking).
+Migration 0056 confirmed live — re-ran the anon-vs-service-role RLS
+probe after you applied it, recursion is gone and nested embeds
+resolve cleanly. Cleanup done too: verified a delete plan against
+production first (36 rows, nothing with a registration, nothing a
+one-off, keep-earliest-per-occurrence for the active series, drop all
+of a stopped series' leftovers), previewed it, you approved, applied
+it — 34 deleted, 2 real occurrences left (Sep 5 and Sep 12, both
+BOOTCAMP C1, 19:00 UTC = 15:00 ET, the active series' actual time —
+not 16:00, which was a since-superseded series). Confirmed via a
+follow-up SELECT.
 
 ## Studio holidays: fixed the actual visible bug — empty slots weren't blocked (2026-08-28)
 
