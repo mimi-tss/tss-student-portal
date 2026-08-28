@@ -1290,29 +1290,21 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0057 not yet confirmed applied** —
-`supabase/migrations/0057_recurring_schedule_cadence.sql` adds a
-`cadence` column (`weekly`/`biweekly`) to `recurring_schedules`. Until
-this runs, the new Weekly/Biweekly selector on a student's recurring
-schedule form will fail to save for anyone who picks Biweekly (the
-upsert will hit the missing column). Weekly schedules are unaffected —
-`cadence` defaults to `'weekly'` once the column exists, so existing
-schedules don't need any backfill.
+**Migrations 0057–0059 confirmed applied** (2026-08-28). Covers: 0057
+`recurring_schedules.cadence` (weekly/biweekly), 0058
+`students.ambassador`, 0059 `students.student_since_override`. Code
+built against these (Weekly/Biweekly selector, Ambassador toggle, CSV
+bulk-import, the "With us" override) can now be committed/deployed
+without hitting missing-column errors.
 
-**New migration 0058 not yet confirmed applied** —
-`supabase/migrations/0058_student_ambassador_flag.sql` adds an
-`ambassador` boolean to `students`, default `false`. Until this runs,
-the new Ambassador checkbox (student detail page + the "Add ambassador /
-manual student" form) and the CSV bulk-import route will error on any
-write that touches it. No backfill needed — every existing student
-becomes `ambassador = false` automatically once the column exists.
-
-**New migration 0059 not yet confirmed applied** —
-`supabase/migrations/0059_student_since_override.sql` adds a nullable
-`student_since_override` date to `students`. Until this runs, the student
-detail page's "With us" row (now editable) and the CSV `student_since`
-column will error on any write that touches it. No backfill needed —
-leaving it blank falls back to `created_at`, same as today's display.
+**Still not deployed: none of this session's code has been pushed to
+`main` yet** (ambassador tag, 4-pack credits, CSV bulk import, the
+biweekly cadence UI, the one-go lesson setup on the manual-add form, the
+three new date fields — all still local/uncommitted as of this note).
+Production (Vercel, deploys off `main`) still shows the old Students
+page with none of it — confirmed live, this is exactly why the new
+"Import students from CSV" panel wasn't visible yet. Commit + push
+whenever you're ready for it to go live.
 
 **Migrations 0045–0055 all confirmed applied** (2026-08-28). Covers:
 0045 referral bonus column, 0046 admin_finance role, 0047 payroll manual

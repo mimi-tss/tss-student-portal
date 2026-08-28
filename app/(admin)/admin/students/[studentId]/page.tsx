@@ -16,6 +16,8 @@ import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
 import ReassignSessionCoach from "./reassign-session-coach";
+import NameClient from "./name-client";
+import EmailClient from "./email-client";
 import BirthDateClient from "./birth-date-client";
 import MembershipTierClient from "./membership-tier-client";
 import ReferralClient from "./referral-client";
@@ -196,15 +198,17 @@ export default async function AdminStudentPage({
         ← Back to students
       </Link>
 
-      <h1 className={styles.pageTitle} style={{ marginBottom: 16 }}>
-        {student.name}
-      </h1>
+      <div style={{ marginBottom: 16 }}>
+        <NameClient studentId={student.id} initialValue={student.name} />
+      </div>
 
       <div className={styles.overviewGrid} style={{ marginTop: 0, marginBottom: 20 }}>
         <div className={styles.panel} style={{ marginBottom: 0 }}>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Email</div>
-            <div className={styles.statValue}>{student.email}</div>
+            <div className={styles.statValue}>
+              <EmailClient studentId={student.id} initialValue={student.email} />
+            </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Membership</div>
