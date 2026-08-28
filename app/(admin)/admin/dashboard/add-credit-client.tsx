@@ -124,6 +124,15 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
             onChange={(e) => updateLine(line.id, { expiresAt: e.target.value })}
             className={styles.inputSmall}
           />
+          {/* A day that doesn't exist for the picked month (e.g. Nov 31)
+              resolves this input's own value to "" even though the
+              typed digits are still showing in the box — the disabled
+              Add button below gives no clue why, so say it here. */}
+          {!line.expiresAt && (
+            <span className={styles.errorText} style={{ fontSize: "0.8em" }}>
+              pick a valid date
+            </span>
+          )}
           {lines.length > 1 && (
             <button onClick={() => removeLine(line.id)} className={styles.linkBtnSmall}>
               Remove
