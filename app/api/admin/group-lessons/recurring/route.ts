@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
 
   try {
-    const id = await createRecurringGroupLessonSeries(supabase, {
+    const { id, materialize } = await createRecurringGroupLessonSeries(supabase, {
       coachId,
       topic: topic || null,
       dayOfWeek: Number(dayOfWeek),
@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
       startDate,
       endDate: endDate || null,
     });
-    return NextResponse.json({ success: true, id });
+    // TEMP DEBUG (2026-08-28): `materialize` included until the
+    // silent-occurrence-loss bug is found. Revert once fixed.
+    return NextResponse.json({ success: true, id, materialize });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "couldn't create the recurring series" },
@@ -69,7 +71,7 @@ export async function PATCH(req: NextRequest) {
   const supabase = await createClient();
 
   try {
-    await updateRecurringGroupLessonSeries(supabase, id, {
+    const materialize = await updateRecurringGroupLessonSeries(supabase, id, {
       coachId,
       topic: topic || null,
       dayOfWeek: Number(dayOfWeek),
@@ -79,7 +81,8 @@ export async function PATCH(req: NextRequest) {
       startDate,
       endDate: endDate || null,
     });
-    return NextResponse.json({ success: true });
+    // TEMP DEBUG (2026-08-28): see the POST handler's note.
+    return NextResponse.json({ success: true, materialize });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "couldn't update the recurring series" },

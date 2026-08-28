@@ -247,7 +247,10 @@ export async function createRecurringGroupLessonSeries(
     startDate: string;
     endDate?: string | null;
   },
-): Promise<string> {
+  // TEMP DEBUG (2026-08-28): return type widened to include the
+  // materialize result until the silent-occurrence-loss bug is found.
+  // Revert to Promise<string> once fixed.
+): Promise<{ id: string; materialize: MaterializeGroupLessonsResult }> {
   const { data, error } = await supabase
     .from("recurring_group_lessons")
     .insert({
@@ -264,8 +267,8 @@ export async function createRecurringGroupLessonSeries(
     .single();
 
   if (error || !data) throw new Error(error?.message ?? "insert failed");
-  await materializeRecurringGroupLessons(supabase, { seriesId: data.id });
-  return data.id;
+  const materialize = await materializeRecurringGroupLessons(supabase, { seriesId: data.id });
+  return { id: data.id, materialize };
 }
 
 // Updates the series definition, then reconciles already-materialized
@@ -292,7 +295,9 @@ export async function updateRecurringGroupLessonSeries(
     startDate: string;
     endDate?: string | null;
   },
-): Promise<void> {
+  // TEMP DEBUG (2026-08-28): return type widened, see
+  // createRecurringGroupLessonSeries's own note.
+): Promise<MaterializeGroupLessonsResult> {
   const { error } = await supabase
     .from("recurring_group_lessons")
     .update({
@@ -324,7 +329,7 @@ export async function updateRecurringGroupLessonSeries(
     if (deleteError) throw new Error(deleteError.message);
   }
 
-  await materializeRecurringGroupLessons(supabase, { seriesId });
+  return materializeRecurringGroupLessons(supabase, { seriesId });
 }
 
 // Stops future occurrences from being generated. Deliberately leaves
@@ -346,6 +351,22 @@ export async function deactivateRecurringGroupLessonSeries(
 
 interface MaterializeGroupLessonsResult {
   created: number;
+  // TEMP DEBUG (2026-08-28): a created series isn't producing a visible
+  // occurrence and the insert error below was previously swallowed
+  // silently (`if (!error) created += rows.length` — no else branch).
+  // Surfacing real per-series diagnostics until root cause is found.
+  // Revert once fixed.
+  debug?: {
+    seriesId: string;
+    timeZone: string;
+    startDate: string | null;
+    endDate: string | null;
+    effectiveFrom: string;
+    instants: string[];
+    existingCount: number;
+    rowsAttempted: number;
+    insertError: string | null;
+  }[];
 }
 
 // Creates any missing future group_lessons occurrences for active
@@ -375,6 +396,7 @@ export async function materializeRecurringGroupLessons(
   const { data: series } = await query;
   const now = new Date();
   let created = 0;
+  const debug: NonNullable<MaterializeGroupLessonsResult["debug"]> = [];
 
   for (const s of series ?? []) {
     const { data: coach } = await supabase.from("coaches").select("timezone").eq("id", s.coach_id).single();
@@ -390,7 +412,20 @@ export async function materializeRecurringGroupLessons(
       instants = instants.filter((i) => i <= cutoff);
     }
 
-    if (instants.length === 0) continue;
+    if (instants.length === 0) {
+      debug.push({
+        seriesId: s.id,
+        timeZone,
+        startDate: s.start_date,
+        endDate: s.end_date,
+        effectiveFrom: effectiveFrom.toISOString(),
+        instants: [],
+        existingCount: 0,
+        rowsAttempted: 0,
+        insertError: null,
+      });
+      continue;
+    }
 
     const horizonEnd = instants[instants.length - 1];
     const { data: existing } = await supabase
@@ -415,11 +450,28 @@ export async function materializeRecurringGroupLessons(
         recurring_group_lesson_id: s.id,
       }));
 
+    let insertError: string | null = null;
     if (rows.length > 0) {
       const { error } = await supabase.from("group_lessons").insert(rows);
-      if (!error) created += rows.length;
+      if (!error) {
+        created += rows.length;
+      } else {
+        insertError = error.message;
+      }
     }
+
+    debug.push({
+      seriesId: s.id,
+      timeZone,
+      startDate: s.start_date,
+      endDate: s.end_date,
+      effectiveFrom: effectiveFrom.toISOString(),
+      instants: instants.map((i) => i.toISOString()),
+      existingCount: existing?.length ?? 0,
+      rowsAttempted: rows.length,
+      insertError,
+    });
   }
 
-  return { created };
+  return { created, debug };
 }
