@@ -1321,15 +1321,8 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0060 not yet confirmed applied** —
-`supabase/migrations/0060_fix_makeup_credits_rls_recursion.sql` repairs
-"infinite recursion detected in policy for relation makeup_credits"
-(Postgres 42P17), hit live on the new multi-line "Add credit" form's
-insert. Same fix pattern as 0007/0056: rewrites all five makeup_credits
-policies to use the existing SECURITY DEFINER helpers unconditionally,
-closing off whatever raw-subquery drift was live. Until this runs,
-granting a makeup credit as admin (single or multi-line) will keep
-failing with that error.
+**Migration 0060 confirmed applied** (2026-08-28) — fixed the
+makeup_credits RLS recursion. Multi-line "Add credit" grants work now.
 
 **Migrations 0057–0059 confirmed applied** (2026-08-28). Covers: 0057
 `recurring_schedules.cadence` (weekly/biweekly), 0058
