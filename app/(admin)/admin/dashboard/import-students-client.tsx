@@ -79,8 +79,8 @@ export default function ImportStudentsClient() {
   if (!open) {
     return (
       <div className={styles.panel}>
-        <button onClick={() => setOpen(true)} className={styles.linkBtn}>
-          Import students from CSV
+        <button onClick={() => setOpen(true)} className={styles.cta}>
+          Import Students From CSV
         </button>
       </div>
     );

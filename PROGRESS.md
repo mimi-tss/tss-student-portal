@@ -3,6 +3,32 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student dashboard "Next session" ignored group lessons (2026-08-28)
+
+You caught this live-testing student access: a student registered for
+a group lesson bootcamp (8/31) still saw a later 1:1 session (9/9) as
+their "Next session" — the hero card's query
+(`app/(student)/student/dashboard/page.tsx`) only ever looked at the
+`sessions` table, never `group_lesson_registrations`, so a sooner group
+lesson could never win. Now compares both and shows whichever is
+chronologically first. Group lessons had no meet-link concept at all
+before this — [`lib/group-lessons.ts`](lib/group-lessons.ts)'s
+`getStudentUpcomingGroupLessons` now also selects the coach's
+`meet_link` (reusing their same standing room, same as 1:1s — no
+separate per-lesson video link exists anywhere in this app) so the
+Join button can appear for a group lesson too, same 10-minutes-early
+timing as a regular session (confirmed by reading `join-button.tsx`
+directly — `EARLY_JOIN_MINUTES = 10`, unaffected by this bug).
+
+**Known gap, not fixed here**: `/api/student/join-click`'s ownership
+check only queries `sessions`, so a click on a group-lesson Join button
+gets silently rejected by that endpoint (403, swallowed by
+`sendBeacon`'s fire-and-forget nature) — the actual join still works
+fine (the link opens regardless), it just won't show up in the
+Activity Log's audit trail. Would need `activity_events.session_id`'s
+FK loosened or a parallel column to fix properly; scoped out since it's
+audit-log completeness, not user-facing breakage.
+
 ## Students page: collapsed the Add form, simplified the CSV hint text (2026-08-28)
 
 Two readability fixes you asked for on the Students page.
@@ -1989,15 +2015,9 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migrations 0070 and 0071 not yet confirmed applied** —
-`0070_student_contact_and_guardian_info.sql` (11 new `students`
-columns: phone/gender/address/guardian info) and
-`0071_staff_notes_pinned.sql` (the `pinned` column + its missing
-UPDATE RLS policy) are the new student-migration-fields feature. Until
-these run: saving any of the new admin panels (Phone, Gender, Address,
-Guardian) will fail outright (columns don't exist), and pinning a
-staff note will silently no-op under RLS. Run both before relying on
-this feature. See the "Student migration fields" entry above.
+**Migrations 0070 and 0071 confirmed applied** (2026-08-29) — the
+student-migration-fields feature (Phone/Gender/Address/Guardian panels,
+Staff Notes pinning) is live.
 
 **Migration 0072 confirmed applied** (2026-08-28) — retested Delete
 again after this one and it succeeded. `delete_student_permanently()`

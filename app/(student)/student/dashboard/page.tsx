@@ -152,6 +152,16 @@ export default async function StudentDashboardPage() {
   const { renewalDate } = renewalInfo(student.billing_anniversary_date);
   const coachFirstName = coach?.name ? firstName(coach.name) : null;
 
+  // "Next session" previously only ever looked at 1:1 sessions, so a
+  // sooner group lesson (e.g. a bootcamp) the student is registered
+  // for never showed as what's actually coming up next — the hero
+  // card would show a 1:1 over a week later instead. Compare both and
+  // show whichever is chronologically first.
+  const nextGroupLesson = upcomingGroupLessons[0] ?? null;
+  const groupLessonIsNext =
+    nextGroupLesson !== null &&
+    (!nextSession || new Date(nextGroupLesson.scheduledAt).getTime() < new Date(nextSession.scheduled_at).getTime());
+
   return (
     <div className={styles.wrap}>
       <div className={styles.hero}>
@@ -161,14 +171,35 @@ export default async function StudentDashboardPage() {
             Ready to sing smarter today, {firstName(student.name)}?
           </h1>
           <p className={styles.heroText}>
-            {nextSession && coachFirstName
-              ? `Your next session with Coach ${coachFirstName} is coming up.`
-              : "Book your next session whenever you're ready."}
+            {groupLessonIsNext
+              ? `Your next lesson — ${nextGroupLesson!.topic || "Group Lesson"} — is coming up.`
+              : nextSession && coachFirstName
+                ? `Your next session with Coach ${coachFirstName} is coming up.`
+                : "Book your next session whenever you're ready."}
           </p>
         </div>
         <div className={styles.sessionCard}>
           <div className={styles.sessionLabel}>Next session</div>
-          {nextSession ? (
+          {groupLessonIsNext ? (
+            <>
+              <div className={styles.sessionTime}>
+                <FormattedTime value={nextGroupLesson!.scheduledAt} />
+              </div>
+              <div className={styles.sessionCoach}>
+                <FormattedDate value={nextGroupLesson!.scheduledAt} />
+                {` · ${nextGroupLesson!.topic || "Group Lesson"} with Coach ${nextGroupLesson!.coachName}`} ·{" "}
+                {nextGroupLesson!.durationMinutes} min
+              </div>
+              {nextGroupLesson!.meetLink && (
+                <JoinButton
+                  sessionId={nextGroupLesson!.id}
+                  scheduledAt={nextGroupLesson!.scheduledAt}
+                  durationMinutes={nextGroupLesson!.durationMinutes}
+                  meetLink={nextGroupLesson!.meetLink}
+                />
+              )}
+            </>
+          ) : nextSession ? (
             <>
               <div className={styles.sessionTime}>
                 <FormattedTime value={nextSession.scheduled_at} />

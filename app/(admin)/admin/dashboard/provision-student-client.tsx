@@ -104,8 +104,8 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   if (!open) {
     return (
       <div className={styles.panel}>
-        <button onClick={() => setOpen(true)} className={styles.linkBtn}>
-          Add a new student
+        <button onClick={() => setOpen(true)} className={styles.cta}>
+          Add A New Student
         </button>
       </div>
     );

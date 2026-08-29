@@ -81,6 +81,9 @@ export interface StudentGroupLesson {
   scheduledAt: string;
   durationMinutes: number;
   coachName: string;
+  // Reuses the coach's own standing meet room — no separate
+  // per-group-lesson video link exists anywhere in this app.
+  meetLink: string | null;
 }
 
 // Upcoming group lessons a student is registered for — shown on their
@@ -93,7 +96,7 @@ export async function getStudentUpcomingGroupLessons(
 ): Promise<StudentGroupLesson[]> {
   const { data: registrations } = await supabase
     .from("group_lesson_registrations")
-    .select("group_lessons(id, topic, scheduled_at, duration_minutes, cancelled_at, coaches(name))")
+    .select("group_lessons(id, topic, scheduled_at, duration_minutes, cancelled_at, coaches(name, meet_link))")
     .eq("student_id", studentId);
 
   const now = Date.now();
@@ -107,7 +110,7 @@ export async function getStudentUpcomingGroupLessons(
               scheduled_at: string;
               duration_minutes: number;
               cancelled_at: string | null;
-              coaches: { name: string } | { name: string }[] | null;
+              coaches: { name: string; meet_link: string | null } | { name: string; meet_link: string | null }[] | null;
             }
           | {
               id: string;
@@ -115,7 +118,7 @@ export async function getStudentUpcomingGroupLessons(
               scheduled_at: string;
               duration_minutes: number;
               cancelled_at: string | null;
-              coaches: { name: string } | { name: string }[] | null;
+              coaches: { name: string; meet_link: string | null } | { name: string; meet_link: string | null }[] | null;
             }[]
           | null,
       );
@@ -124,12 +127,14 @@ export async function getStudentUpcomingGroupLessons(
       // (unlike getCoachGroupLessons and the admin GET route, which
       // both already excluded cancelled ones).
       if (!lesson || lesson.cancelled_at) return null;
+      const coach = unwrapJoin(lesson.coaches);
       return {
         id: lesson.id,
         topic: lesson.topic,
         scheduledAt: lesson.scheduled_at,
         durationMinutes: lesson.duration_minutes,
-        coachName: unwrapJoin(lesson.coaches)?.name ?? "Coach",
+        coachName: coach?.name ?? "Coach",
+        meetLink: coach?.meet_link ?? null,
       };
     })
     .filter((l): l is StudentGroupLesson => !!l && new Date(l.scheduledAt).getTime() >= now)
