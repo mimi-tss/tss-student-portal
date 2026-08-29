@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group lessons: register a student for a whole recurring series at once (2026-08-28)
+
+You asked to keep the existing per-class Register button (drop-ins) but
+also be able to register a student into an entire bootcamp series in one
+action, instead of clicking Register on every single occurrence.
+
+`registerStudentInRecurringSeries()`
+([lib/group-lessons.ts](lib/group-lessons.ts)) queries every future,
+non-cancelled `group_lessons` row for a series (same
+`recurring_group_lesson_id` + future + not-cancelled filter
+`updateRecurringGroupLessonSeries` already uses to find "this series'
+occurrences" — reused rather than reinvented, and thrown, not swallowed,
+on a read error, for the same reason that function's own comment gives:
+a silently-empty read here previously caused the ~13-duplicate-row bug
+migration 0056 fixed). Loops `registerStudentInGroupLesson` per
+occurrence and buckets each outcome (registered / already-registered /
+full / failed) rather than aborting the whole series over one occurrence
+being full or a duplicate — same partial-success posture as the CSV
+bulk-import route. New route:
+[register-series/route.ts](app/api/admin/group-lessons/register-series/route.ts).
+UI: a "Register for whole series…" link on each card in the Recurring
+Series list ([group-lessons-client.tsx](<app/(admin)/admin/group-lessons/group-lessons-client.tsx>),
+`SeriesRegisterControl`) that expands into the same
+student-picker + Stripe-reference-field + Register shape the existing
+per-occurrence card already uses, then shows a one-line summary ("6 of 6
+registered" / "4 of 6, 2 full"). The existing per-occurrence Register
+button on each individual "Upcoming Group Lessons" card is untouched.
+
+No migration needed — pure application logic on the existing schema.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Multi-line credit grants, editable name/email (2026-08-28)
 
 Replaced "Grant 4-pack" with N free-form lines, each its own

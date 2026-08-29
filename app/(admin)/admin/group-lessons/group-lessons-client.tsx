@@ -383,6 +383,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
                     </button>
                   </div>
                 </div>
+                <SeriesRegisterControl seriesId={s.id} students={students} onRegistered={load} />
               </div>
             ))}
           </div>
@@ -407,6 +408,88 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
           <GroupLessonCard key={lesson.id} lesson={lesson} students={students} onRegistered={load} />
         ))}
       </div>
+    </div>
+  );
+}
+
+// Registers a student into every future occurrence of a recurring series
+// in one action — for a drop-in who wants the whole bootcamp, not one
+// class at a time via GroupLessonCard's per-occurrence Register below.
+function SeriesRegisterControl({
+  seriesId,
+  students,
+  onRegistered,
+}: {
+  seriesId: string;
+  students: Student[];
+  onRegistered: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
+  const [stripeReference, setStripeReference] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+
+  async function handleRegister() {
+    if (!studentId) return;
+    setRegistering(true);
+    setError(null);
+    setSummary(null);
+
+    const res = await fetch("/api/admin/group-lessons/register-series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seriesId, studentId, stripeReference: stripeReference.trim() || null }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setRegistering(false);
+
+    if (!res.ok) {
+      setError(body.error ?? "Couldn't register that student.");
+      return;
+    }
+
+    const parts = [`registered for ${body.registered} of ${body.total} upcoming classes`];
+    if (body.alreadyRegistered) parts.push(`${body.alreadyRegistered} already registered`);
+    if (body.full) parts.push(`${body.full} full`);
+    if (body.failed) parts.push(`${body.failed} failed`);
+    setSummary(parts.join(", "));
+    setStripeReference("");
+    onRegistered();
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className={styles.linkBtnSmall} style={{ marginTop: 8 }}>
+        Register for whole series…
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+      <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className={styles.selectSmall}>
+        {students.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+      <input
+        value={stripeReference}
+        onChange={(e) => setStripeReference(e.target.value)}
+        placeholder="Stripe payment reference (optional)"
+        className={styles.inputSmall}
+      />
+      <button onClick={handleRegister} disabled={registering} className={styles.ctaSmall}>
+        {registering ? "Registering…" : "Register for series"}
+      </button>
+      <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
+        Close
+      </button>
+      {summary && <p className={styles.successText} style={{ width: "100%", margin: 0 }}>{summary}</p>}
+      {error && <p className={styles.errorText} style={{ width: "100%", margin: 0 }}>{error}</p>}
     </div>
   );
 }

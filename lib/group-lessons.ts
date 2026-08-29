@@ -205,6 +205,77 @@ export async function registerStudentInGroupLesson(
   if (error) throw new Error(error.message);
 }
 
+export interface RegisterSeriesResult {
+  total: number;
+  registered: number;
+  alreadyRegistered: number;
+  full: number;
+  failed: number;
+}
+
+// Registers a student into every future, non-cancelled occurrence of a
+// recurring series in one action — for a drop-in who wants the whole
+// bootcamp, not just one class (the per-occurrence Register button on
+// GroupLessonCard stays as-is for that case). Same "future, not
+// cancelled, matching the series FK" query updateRecurringGroupLessonSeries
+// uses to find a series' occurrences, and thrown (not swallowed) on a
+// read error for the same reason that function's comment gives — a
+// silently-empty result here could look like "nothing to register" when
+// it's actually a query failure.
+//
+// Continues past a single occurrence's registration failure rather than
+// aborting the whole series — an occurrence that's already full, or
+// where this student is already registered (the DB's unique
+// (group_lesson_id, student_id) constraint), shouldn't block registering
+// them into the rest, and neither should one occurrence hitting a genuine
+// unexpected error (bucketed as `failed` rather than losing every
+// already-successful registration by throwing partway through). Reuses
+// registerStudentInGroupLesson's own capacity-check-then-insert per
+// occurrence rather than duplicating it; its thrown Error only carries a
+// message (no error code), so outcomes are bucketed by matching that
+// message text rather than a structured code.
+export async function registerStudentInRecurringSeries(
+  supabase: SupabaseClient,
+  params: { seriesId: string; studentId: string; stripeReference?: string | null },
+): Promise<RegisterSeriesResult> {
+  const { data: occurrences, error } = await supabase
+    .from("group_lessons")
+    .select("id")
+    .eq("recurring_group_lesson_id", params.seriesId)
+    .gte("scheduled_at", new Date().toISOString())
+    .is("cancelled_at", null);
+
+  if (error) throw new Error(error.message);
+
+  let registered = 0;
+  let alreadyRegistered = 0;
+  let full = 0;
+  let failed = 0;
+
+  for (const occurrence of occurrences ?? []) {
+    try {
+      await registerStudentInGroupLesson(supabase, {
+        groupLessonId: occurrence.id,
+        studentId: params.studentId,
+        stripeReference: params.stripeReference,
+      });
+      registered++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("full")) {
+        full++;
+      } else if (message.toLowerCase().includes("duplicate key")) {
+        alreadyRegistered++;
+      } else {
+        console.error(`registerStudentInRecurringSeries: occurrence ${occurrence.id} failed`, err);
+        failed++;
+      }
+    }
+  }
+
+  return { total: occurrences?.length ?? 0, registered, alreadyRegistered, full, failed };
+}
+
 export interface RecurringGroupLesson {
   id: string;
   coachId: string;
