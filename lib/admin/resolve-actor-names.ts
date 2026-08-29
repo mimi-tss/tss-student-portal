@@ -15,6 +15,60 @@ export interface ActorInfo {
 // client. Fine at this app's scale (single studio, a handful of admin
 // accounts) — not worth the pagination workaround a larger admin roster
 // would need.
+// Reverse of resolveActorNames: given a typed-in name/email fragment,
+// find every profile.id it could refer to (student or coach by name,
+// admin/admin_finance by email — admin accounts have no name column).
+// Walks every auth.users page rather than just the first, same reason
+// findAuthUserByEmail (lib/auth/resolve-account.ts) does: a single
+// unpaginated call could silently miss an admin created after the
+// first ~50-200 auth users. Fine at this app's tiny staff-account
+// scale — this isn't searching the full user base, just the handful
+// of admin/admin_finance accounts among however many auth.users exist.
+export async function searchActorIdsByName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  query: string,
+): Promise<string[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const ids = new Set<string>();
+
+  const { data: students } = await supabase.from("students").select("profile_id").ilike("name", `%${trimmed}%`);
+  for (const s of students ?? []) {
+    if (s.profile_id) ids.add(s.profile_id);
+  }
+
+  const { data: coaches } = await supabase.from("coaches").select("profile_id").ilike("name", `%${trimmed}%`);
+  for (const c of coaches ?? []) {
+    if (c.profile_id) ids.add(c.profile_id);
+  }
+
+  const { data: adminProfiles } = await supabase
+    .from("profiles")
+    .select("id")
+    .in("role", ["admin", "admin_finance"]);
+  const adminIds = new Set((adminProfiles ?? []).map((p) => p.id));
+
+  if (adminIds.size > 0) {
+    const admin = createAdminClient();
+    const lowerQuery = trimmed.toLowerCase();
+    let page = 1;
+    const perPage = 200;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+      if (error || !data) break;
+      for (const u of data.users) {
+        if (adminIds.has(u.id) && u.email?.toLowerCase().includes(lowerQuery)) ids.add(u.id);
+      }
+      if (data.users.length < perPage) break;
+      page++;
+    }
+  }
+
+  return Array.from(ids);
+}
+
 export async function resolveActorNames(
   supabase: Awaited<ReturnType<typeof createClient>>,
   actorIds: (string | null)[],

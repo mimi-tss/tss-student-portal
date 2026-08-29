@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
-import { resolveActorNames } from "@/lib/admin/resolve-actor-names";
+import { resolveActorNames, searchActorIdsByName } from "@/lib/admin/resolve-actor-names";
 
 const PAGE_SIZE = 50;
 
@@ -28,12 +28,24 @@ export async function GET(req: NextRequest) {
   const start = params.get("start");
   const end = params.get("end");
   const actorId = params.get("actorId");
+  const actorName = params.get("actorName");
   const page = Math.max(1, Number(params.get("page") ?? "1"));
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
   const table = view === "changes" ? "audit_log" : "activity_events";
   const dateColumn = view === "changes" ? "changed_at" : "occurred_at";
+
+  // Resolved before the main query so a name search that matches
+  // nobody short-circuits to an empty result instead of silently
+  // falling through to an unfiltered query.
+  let actorIdsFromName: string[] | null = null;
+  if (actorName) {
+    actorIdsFromName = await searchActorIdsByName(supabase, actorName);
+    if (actorIdsFromName.length === 0) {
+      return NextResponse.json({ rows: [], total: 0, page, pageSize: PAGE_SIZE });
+    }
+  }
 
   let query = supabase.from(table).select("*", { count: "exact" }).order(dateColumn, { ascending: false });
 
@@ -46,7 +58,8 @@ export async function GET(req: NextRequest) {
     const eventType = params.get("eventType");
     if (eventType && eventType !== "all") query = query.eq("event_type", eventType);
   }
-  if (actorId) query = query.eq("actor_id", actorId);
+  if (actorIdsFromName) query = query.in("actor_id", actorIdsFromName);
+  else if (actorId) query = query.eq("actor_id", actorId);
   if (start) query = query.gte(dateColumn, start);
   if (end) query = query.lte(dateColumn, end);
   query = query.range(from, to);

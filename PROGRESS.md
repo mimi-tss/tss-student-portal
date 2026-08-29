@@ -3,6 +3,33 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Activity Log: search by person's name (2026-08-28)
+
+You asked to search the Activity Log by name — student, coach, or
+admin — instead of only being able to filter by an already-known
+`actorId`. Added `searchActorIdsByName()`
+([resolve-actor-names.ts](lib/admin/resolve-actor-names.ts)), the
+reverse of the existing `resolveActorNames()`: an `ilike` search
+across `students.name`/`coaches.name`, plus a paginated walk of
+`auth.users` (same reason `findAuthUserByEmail` in
+`lib/auth/resolve-account.ts` walks every page rather than just the
+first — a single unpaginated call could silently miss an admin account
+past the first page) filtered by email substring, since admin/
+admin_finance accounts have no name column to search.
+
+[activity-log/route.ts](app/api/admin/activity-log/route.ts) resolves
+the name to a set of `actor_id`s *before* building the main query — a
+search matching nobody short-circuits to an empty result instead of
+silently falling through to an unfiltered one. The "Person" search box
+([activity-log-client.tsx](<app/(admin)/admin/activity-log/activity-log-client.tsx>))
+debounces 300ms before firing, since the admin-account lookup walks
+`auth.users` pages server-side and isn't free to re-run on every
+keystroke.
+
+Verified via `tsc`/`next build` (clean) and a standalone debounce mock
+(scratchpad) confirming one fetch fires after typing settles, not one
+per keystroke.
+
 ## One-off "Add time off" had no confirmation, no list, no way to remove one (2026-08-28)
 
 You tested it live — added a Sep 1–3 vacation for Celine Larque, got no

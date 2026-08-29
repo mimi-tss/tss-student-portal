@@ -29,7 +29,14 @@ export async function GET(req: NextRequest) {
     .gte("end_at", new Date().toISOString())
     .order("start_at");
 
-  return NextResponse.json({ blocks: data ?? [] });
+  const blocks = (data ?? []).map((b) => ({
+    id: b.id,
+    startAt: b.start_at,
+    endAt: b.end_at,
+    reason: b.reason,
+  }));
+
+  return NextResponse.json({ blocks });
 }
 
 export async function POST(req: NextRequest) {

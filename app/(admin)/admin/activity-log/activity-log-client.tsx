@@ -50,11 +50,24 @@ export default function ActivityLogClient() {
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [actorNameInput, setActorNameInput] = useState("");
+  const [actorName, setActorName] = useState("");
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<(AuditLogRow | EventRow)[]>([]);
   const [total, setTotal] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Debounced — a name search walks every auth.users page server-side
+  // to catch admin/admin_finance accounts (see searchActorIdsByName),
+  // not worth re-running on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setActorName(actorNameInput.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [actorNameInput]);
 
   useEffect(() => {
     setLoading(true);
@@ -65,6 +78,7 @@ export default function ActivityLogClient() {
     } else {
       if (eventTypeFilter !== "all") params.set("eventType", eventTypeFilter);
     }
+    if (actorName) params.set("actorName", actorName);
     if (start) params.set("start", new Date(`${start}T00:00:00Z`).toISOString());
     if (end) params.set("end", new Date(`${end}T23:59:59.999Z`).toISOString());
 
@@ -75,7 +89,7 @@ export default function ActivityLogClient() {
         setTotal(data.total ?? 0);
       })
       .finally(() => setLoading(false));
-  }, [tab, tableFilter, actionFilter, eventTypeFilter, start, end, page]);
+  }, [tab, tableFilter, actionFilter, eventTypeFilter, actorName, start, end, page]);
 
   function switchTab(next: "changes" | "events") {
     setTab(next);
@@ -135,6 +149,16 @@ export default function ActivityLogClient() {
               </select>
             </div>
           )}
+          <div className={styles.field}>
+            <label>Person</label>
+            <input
+              type="text"
+              value={actorNameInput}
+              onChange={(e) => setActorNameInput(e.target.value)}
+              placeholder="Student, coach, or admin name"
+              className={styles.input}
+            />
+          </div>
           <div className={styles.field}>
             <label>From</label>
             <input type="date" value={start} onChange={(e) => { setStart(e.target.value); setPage(1); }} className={styles.input} />
