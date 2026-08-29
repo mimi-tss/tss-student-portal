@@ -1856,16 +1856,11 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0069 not yet confirmed applied** — fixes a real failure
-the first live Delete hit (`sessions_trial_entitlement_id_fkey`
-violation) plus two more latent ordering bugs a full re-audit turned up
-(`entitlements.used_session_id`, `sessions.recurring_schedule_id`) — see
-the "Fixed delete_student_permanently()" entry above. Redefines the same
-function (`create or replace`), no route/app changes needed. **Please
-retest Delete on a disposable student after applying this** — ideally
-one with a trial entitlement and a recurring schedule, since those are
-exactly what the previous successful test didn't have and what exposed
-these bugs.
+**Migration 0069 confirmed applied** (2026-08-28) — retested Delete on a
+disposable student with a trial entitlement and a recurring schedule
+(the exact two things that exposed the original bugs) and it succeeded.
+`delete_student_permanently()` is now confirmed correct against live
+data for the harder case, not just the simple one from the first test.
 
 **Migrations 0067 and 0068 confirmed applied** (2026-08-28) — the
 archive flag and the delete function itself exist and are callable;
