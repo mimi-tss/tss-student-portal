@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
@@ -69,22 +70,35 @@ export async function POST(req: NextRequest) {
   // app/api/auth/kajabi/login/route.ts uses for students — Kajabi Pages
   // can't merge a token into a link, but that constraint doesn't apply
   // here; reused only for consistency, not because it's required.
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?redirect_to=/coach/dashboard`,
-    },
-  });
+  //
+  // Deferred via waitUntil rather than awaited: the coach record and
+  // login are already real by this point, so there's nothing left for
+  // the response to wait on — generateLink and sendEmail are each their
+  // own external network round-trip (Supabase Auth, then Resend), and
+  // awaiting both here was the actual cause of "Add coach" feeling stuck
+  // for several seconds. waitUntil (@vercel/functions) keeps this
+  // running past the response instead of letting Vercel freeze the
+  // function the instant NextResponse.json returns below.
+  waitUntil(
+    (async () => {
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: {
+          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?redirect_to=/coach/dashboard`,
+        },
+      });
 
-  if (!linkError && linkData) {
-    await sendEmail(
-      email,
-      "Your Tara Simon Studios coach portal link",
-      `<p>Tap below to open your coach portal — no password needed:</p>
-       <p><a href="${linkData.properties.action_link}">Open my portal</a></p>`,
-    ).catch((err) => console.error("Failed to send coach login link", err));
-  }
+      if (!linkError && linkData) {
+        await sendEmail(
+          email,
+          "Your Tara Simon Studios coach portal link",
+          `<p>Tap below to open your coach portal — no password needed:</p>
+           <p><a href="${linkData.properties.action_link}">Open my portal</a></p>`,
+        ).catch((err) => console.error("Failed to send coach login link", err));
+      }
+    })(),
+  );
 
   return NextResponse.json({ success: true });
 }

@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { waitUntil } from "@vercel/functions";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
@@ -149,17 +150,28 @@ export async function provisionStudent(
     }
   }
 
-  await ensureStudentDriveFolder(student.id);
+  // Both of these are their own external network round-trip (Google
+  // Drive, then Supabase Auth + Resend) and neither's result is used by
+  // this function's return value or any caller — awaiting them here was
+  // real, measured latency on "Add student"/each CSV row for no benefit
+  // to the response. Deferred via waitUntil (@vercel/functions) so they
+  // still run to completion instead of Vercel freezing the function the
+  // instant the caller's response goes out.
+  waitUntil(
+    (async () => {
+      await ensureStudentDriveFolder(student.id);
 
-  try {
-    await issueAndSendLoginLink(student.id, email);
-  } catch (err) {
-    // Same posture as ensureStudentDriveFolder: don't undo a real,
-    // already-created student over an email hiccup — the login link can
-    // be resent later. Matters more here than for the single-add route
-    // since a bulk import shouldn't let one flaky send fail the row.
-    console.error(`issueAndSendLoginLink failed for student ${student.id}`, err);
-  }
+      try {
+        await issueAndSendLoginLink(student.id, email);
+      } catch (err) {
+        // Same posture as before: don't undo a real, already-created
+        // student over an email hiccup — the login link can be resent
+        // later. Matters more here than for the single-add route since a
+        // bulk import shouldn't let one flaky send fail the row.
+        console.error(`issueAndSendLoginLink failed for student ${student.id}`, err);
+      }
+    })(),
+  );
 
   return { success: true, studentId: student.id };
 }

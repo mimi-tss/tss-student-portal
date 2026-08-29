@@ -3,6 +3,45 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed "Add coach"/"Add student" feeling stuck: stopped blocking on email send (2026-08-28)
+
+You hit this live — "Add coach" sat on "Adding…" for several seconds
+before the button moved, even though the coach was actually created
+right away. Root cause: both `provision-coach` and the shared
+`provisionStudent()` helper (used by "Add student" and every row of the
+CSV import) awaited 2-3 sequential external network calls — Supabase
+Auth's `generateLink`/`createUser`, then Resend's email API — before
+ever sending the HTTP response back to the browser. None of that work
+is needed for the response itself; it only matters for the login email
+arriving eventually.
+
+Fix: moved the non-essential tail (Drive folder creation +
+`generateLink` + `sendEmail`) into `waitUntil()` from the
+[@vercel/functions](https://www.npmjs.com/package/@vercel/functions)
+package (new dependency — Next.js's own `after()` needs a newer Next
+version than this project's 14.2.35, tried first and reverted when
+`unstable_after` turned out not to exist in that version at all).
+`waitUntil` tells Vercel to keep the serverless function alive until
+that promise finishes, instead of freezing it the instant
+`NextResponse.json(...)` returns — so the response comes back as soon as
+the real coach/student row + auth login exist, and the email send
+finishes in the background afterward rather than blocking the UI.
+Touched: [provision-coach/route.ts](app/api/admin/provision-coach/route.ts),
+[lib/admin/provision-student.ts](lib/admin/provision-student.ts) (so this
+also speeds up "Add student" and every row of the CSV bulk import).
+
+Separately checked the coach-schedule "Loading…" spinner you also
+flagged — [coach-schedule/route.ts](app/api/admin/coach-schedule/route.ts)
+already parallelizes its 4 queries with `Promise.all`, nothing obviously
+slow there; that one's more likely an ordinary Vercel cold-start moment
+(same root cause behind "everything feels slow" generally) than a
+distinct bug — not changed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. `waitUntil` degrades
+safely outside a real Vercel runtime (confirmed by reading its source —
+`getContext().waitUntil?.(promise)`, optional-chained), so local dev
+isn't affected.
+
 ## Recurring coach time-off blocks (2026-08-28)
 
 You asked for standing weekly blocks: Team Huddle every Monday 10:30am
