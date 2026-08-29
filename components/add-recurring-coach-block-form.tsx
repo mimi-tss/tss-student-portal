@@ -16,6 +16,7 @@ interface RecurringBlockRule {
   durationMinutes: number;
   timezone: string;
   reason: string | null;
+  startDate: string | null;
 }
 
 // Standing weekly time-off — Team Huddle for every coach, a specific
@@ -43,6 +44,7 @@ export default function AddRecurringCoachBlockForm({
   const [startTime, setStartTime] = useState("12:00");
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [reason, setReason] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export default function AddRecurringCoachBlockForm({
         durationMinutes,
         timezone: effectiveTimeZone,
         reason: reason.trim() || null,
+        startDate: startDate || null,
       }),
     });
     setSaving(false);
@@ -83,6 +86,7 @@ export default function AddRecurringCoachBlockForm({
 
     setReason("");
     setApplyToAll(false);
+    setStartDate("");
     loadRules();
     onAdded();
   }
@@ -97,35 +101,13 @@ export default function AddRecurringCoachBlockForm({
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
         Recurring time off
       </h2>
-
-      {rules.length > 0 && (
-        <ul className="mb-4 flex flex-col gap-1.5">
-          {rules.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 text-sm">
-              <span>
-                Every {DAY_NAMES[r.dayOfWeek]} at {r.startTime} ({r.timezone.replace(/_/g, " ")}) ·{" "}
-                {r.durationMinutes} min ·{" "}
-                <span className="text-[var(--text-muted)]">
-                  {r.coachId ? r.coachName : "All coaches"}
-                  {r.reason ? ` — ${r.reason}` : ""}
-                </span>
-              </span>
-              <button
-                onClick={() => handleStop(r.id)}
-                disabled={stoppingId === r.id}
-                className="text-xs text-[var(--coral)] underline"
-              >
-                {stoppingId === r.id ? "Stopping…" : "Stop"}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
@@ -182,6 +164,19 @@ export default function AddRecurringCoachBlockForm({
             className={`w-full ${inputCls} placeholder:text-[var(--text-muted)]`}
           />
         </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="rblock-start-date" className={labelCls}>
+            Starts on
+          </label>
+          <input
+            id="rblock-start-date"
+            type="date"
+            value={startDate}
+            min={today}
+            onChange={(e) => setStartDate(e.target.value)}
+            className={inputCls}
+          />
+        </div>
         <label className="flex items-center gap-1.5 pb-2 text-sm">
           <input type="checkbox" checked={applyToAll} onChange={(e) => setApplyToAll(e.target.checked)} />
           All coaches
@@ -197,7 +192,36 @@ export default function AddRecurringCoachBlockForm({
       {!applyToAll && (
         <p className="mt-1 text-xs text-[var(--text-muted)]">Applies only to {coachName} unless "All coaches" is checked.</p>
       )}
+      <p className="mt-1 text-xs text-[var(--text-muted)]">Leave "Starts on" blank to begin right away.</p>
       {error && <p className="mt-2 text-sm text-[var(--coral)]">{error}</p>}
+
+      {rules.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-1.5 border-t border-[var(--border)] pt-4">
+          {rules.map((r) => {
+            const startsInFuture = r.startDate && r.startDate > today;
+            return (
+              <li key={r.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  Every {DAY_NAMES[r.dayOfWeek]} at {r.startTime} ({r.timezone.replace(/_/g, " ")}) ·{" "}
+                  {r.durationMinutes} min ·{" "}
+                  <span className="text-[var(--text-muted)]">
+                    {r.coachId ? r.coachName : "All coaches"}
+                    {r.reason ? ` — ${r.reason}` : ""}
+                    {startsInFuture ? ` (starts ${r.startDate})` : ""}
+                  </span>
+                </span>
+                <button
+                  onClick={() => handleStop(r.id)}
+                  disabled={stoppingId === r.id}
+                  className="text-xs text-[var(--coral)] underline"
+                >
+                  {stoppingId === r.id ? "Stopping…" : "Stop"}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

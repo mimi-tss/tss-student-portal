@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recurring time off: list moved below the form, added a start date (2026-08-28)
+
+Two fixes to the "Recurring time off" panel you just saw get its first
+few rules — you flagged it'd get cluttered fast with the list sitting
+above the add-form, pushing the form further down every time someone
+adds a rule.
+
+**Reordered**: the rules list now renders below the form (with a
+divider), not above it — the form stays in a fixed spot regardless of
+how many rules pile up
+([add-recurring-coach-block-form.tsx](components/add-recurring-coach-block-form.tsx)).
+
+**Added a "Starts on" date**, optional, defaults to right away when left
+blank. New nullable `recurring_coach_blocks.start_date` column (migration
+[0066_recurring_coach_block_start_date.sql](supabase/migrations/0066_recurring_coach_block_start_date.sql)
+— 0064/0065 were already claimed by the concurrent audit-log session).
+`materializeRecurringCoachBlocks()` ([lib/coach-blocks.ts](lib/coach-blocks.ts))
+now computes an `effectiveFrom` from it, same pattern
+`materializeRecurringSessions` already uses for
+`recurring_schedules.start_date` — a future start date just pushes the
+first materialized occurrence out, nothing materializes before it. A
+rule with a future start date shows "(starts YYYY-MM-DD)" in the list;
+one starting today/already-active shows nothing extra, to keep the list
+itself uncluttered.
+
+No data migration needed — every existing rule's `start_date` is null,
+which already means "immediately," so nothing about currently-running
+rules changes. `npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Activity / audit log (2026-08-28)
 
 You asked for a log of "everyone's movement" — logins, data changes
@@ -1655,17 +1684,10 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migrations 0064 and 0065 not yet confirmed applied** —
-`supabase/migrations/0064_audit_log.sql` (the `audit_log` table +
-trigger) and `0065_activity_events.sql` (the `activity_events` table
-for logins/join-clicks) are the new Activity Log feature. Until these
-run: the trigger doesn't exist so no data changes get logged at all
-(existing writes still work fine, they just won't error — the trigger
-simply isn't there yet); login/join-click inserts will fail silently
-(fire-and-forget, errors only hit the server console) since
-`activity_events` doesn't exist; and the new Activity Log admin page
-will show empty/erroring results. Run both, in order, before relying
-on this feature.
+**Migrations 0064, 0065, and 0066 confirmed applied** (2026-08-28) —
+the Activity Log feature (data-change trigger + login/join-click
+logging) and the recurring-coach-block start-date addition are both
+live.
 
 **Migration 0063 confirmed applied** (2026-08-28) — the recurring
 coach time-off feature (Team Huddle, per-coach lunch/dinner breaks) is

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   // the RLS policy itself grants a logged-in coach.
   let query = supabase
     .from("recurring_coach_blocks")
-    .select("id, coach_id, day_of_week, start_time, duration_minutes, timezone, reason, coaches(name)")
+    .select("id, coach_id, day_of_week, start_time, duration_minutes, timezone, reason, start_date, coaches(name)")
     .eq("active", true)
     .order("day_of_week")
     .order("start_time");
@@ -37,13 +37,14 @@ export async function GET(req: NextRequest) {
     durationMinutes: r.duration_minutes,
     timezone: r.timezone,
     reason: r.reason,
+    startDate: r.start_date,
   }));
 
   return NextResponse.json({ rules });
 }
 
 export async function POST(req: NextRequest) {
-  const { coachId, dayOfWeek, startTime, durationMinutes, timezone, reason } = await req.json();
+  const { coachId, dayOfWeek, startTime, durationMinutes, timezone, reason, startDate } = await req.json();
 
   if (dayOfWeek === undefined || dayOfWeek === null || !startTime || !durationMinutes) {
     return NextResponse.json(
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest) {
       duration_minutes: Number(durationMinutes),
       timezone: timezone || DEFAULT_TIMEZONE,
       reason: reason || null,
+      // Blank means "starts immediately" — materializeRecurringCoachBlocks
+      // treats null the same as a past/today date.
+      start_date: startDate || null,
     })
     .select("id")
     .single();

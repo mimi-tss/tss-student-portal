@@ -21,7 +21,7 @@ export async function materializeRecurringCoachBlocks(
 ): Promise<MaterializeCoachBlocksResult> {
   let query = supabase
     .from("recurring_coach_blocks")
-    .select("id, coach_id, day_of_week, start_time, duration_minutes, timezone, reason")
+    .select("id, coach_id, day_of_week, start_time, duration_minutes, timezone, reason, start_date")
     .eq("active", true);
 
   if (opts.ruleId) query = query.eq("id", opts.ruleId);
@@ -39,7 +39,12 @@ export async function materializeRecurringCoachBlocks(
   for (const rule of rules) {
     const targetCoachIds = rule.coach_id ? [rule.coach_id] : activeCoachIds;
     const timeZone = rule.timezone || DEFAULT_TIMEZONE;
-    const instants = occurrencesFor(rule.day_of_week, rule.start_time, timeZone, now, WEEKS_AHEAD, null, holidayDates);
+    // A blank start_date means "starts immediately" (now); a future one
+    // pushes the first occurrence out, same effectiveFrom pattern
+    // materializeRecurringSessions uses for recurring_schedules.start_date.
+    const startDate = rule.start_date ? new Date(`${rule.start_date}T00:00:00Z`) : null;
+    const effectiveFrom = startDate && startDate > now ? startDate : now;
+    const instants = occurrencesFor(rule.day_of_week, rule.start_time, timeZone, effectiveFrom, WEEKS_AHEAD, null, holidayDates);
     if (instants.length === 0) continue;
     const horizonEnd = instants[instants.length - 1];
 
