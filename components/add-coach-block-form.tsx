@@ -1,9 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const inputCls = "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-sm text-[var(--text)]";
 const labelCls = "text-[11px] uppercase tracking-wide text-[var(--text-muted)]";
+
+interface CoachBlock {
+  id: string;
+  startAt: string;
+  endAt: string;
+  reason: string | null;
+}
+
+function formatRange(startAt: string, endAt: string): string {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const dateOpts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) {
+    return `${start.toLocaleDateString(undefined, dateOpts)}, ${start.toLocaleTimeString(undefined, timeOpts)} – ${end.toLocaleTimeString(undefined, timeOpts)}`;
+  }
+  return `${start.toLocaleDateString(undefined, dateOpts)} ${start.toLocaleTimeString(undefined, timeOpts)} – ${end.toLocaleDateString(undefined, dateOpts)} ${end.toLocaleTimeString(undefined, timeOpts)}`;
+}
 
 // Time-off / vacation block form — shared by the admin Scheduler page
 // (one coach at a time) and the Coaches page (day-view across all
@@ -32,6 +51,26 @@ export default function AddCoachBlockForm({
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<CoachBlock[]>([]);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  function loadBlocks() {
+    fetch(`/api/admin/coach-blocks?coachId=${coachId}`)
+      .then((res) => res.json())
+      .then((data) => setBlocks(data.blocks ?? []));
+  }
+
+  useEffect(loadBlocks, [coachId]);
+
+  async function handleRemove(id: string) {
+    setRemovingId(id);
+    const res = await fetch(`/api/admin/coach-blocks?id=${id}`, { method: "DELETE" });
+    setRemovingId(null);
+    if (res.ok) {
+      loadBlocks();
+      onAdded();
+    }
+  }
 
   async function handleAdd() {
     if (!startDate || !endDate) {
@@ -69,6 +108,7 @@ export default function AddCoachBlockForm({
     setStartDate("");
     setEndDate("");
     setReason("");
+    loadBlocks();
     onAdded();
   }
 
@@ -148,6 +188,26 @@ export default function AddCoachBlockForm({
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-[var(--coral)]">{error}</p>}
+
+      {blocks.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-1.5 border-t border-[var(--border)] pt-4">
+          {blocks.map((b) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                {formatRange(b.startAt, b.endAt)}
+                {b.reason ? <span className="text-[var(--text-muted)]"> — {b.reason}</span> : ""}
+              </span>
+              <button
+                onClick={() => handleRemove(b.id)}
+                disabled={removingId === b.id}
+                className="text-xs text-[var(--coral)] underline"
+              >
+                {removingId === b.id ? "Removing…" : "Remove"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

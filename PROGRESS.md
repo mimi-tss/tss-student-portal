@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## One-off "Add time off" had no confirmation, no list, no way to remove one (2026-08-28)
+
+You tested it live — added a Sep 1–3 vacation for Celine Larque, got no
+confirmation it worked, and then had no way to see it again or take it
+back. Two real, separate bugs, both now fixed:
+
+**No confirmation**: the parent panel's `onAdded` callback for this form
+called `setPanel(null)` right after a successful add — closing the
+entire "Time off" modal the instant it succeeded, before anything could
+register as "done." ([all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>))
+Now matches the recurring form beside it, which never closed the panel
+on its own: `onAdded={refetchSchedules}`, panel stays open, "Close" is
+the only thing that dismisses it.
+
+**No way to see/remove one**: `/api/admin/coach-blocks` had a POST and
+nothing else — no GET, no DELETE, ever, for this whole feature. Added
+both. GET excludes anything tied to a `recurring_coach_block_id` (those
+stay managed from the Recurring time off list's own Stop, so they don't
+show up twice in two different places) and includes anything not fully
+past yet, so a currently-in-progress block is still visible/removable.
+DELETE is a real hard delete — unlike a recurring rule's Stop, which
+soft-deactivates the rule that's still there, a one-off block has no
+rule behind it worth preserving.
+[add-coach-block-form.tsx](components/add-coach-block-form.tsx) now
+shows that list below the form (same shape as the recurring list next
+to it — form fixed at top, list underneath) with a "Remove" per block;
+seeing the new entry land in that list on save is now what serves as
+the missing confirmation. Your test Sep 1–3 block for Celine Larque is
+already a real row — it'll show up in this list once this deploys, so
+you can remove it there rather than needing anything done manually.
+
+No migration needed — pure API + UI gap, the table already had
+everything required. `npx tsc --noEmit -p .` and `next build` both
+clean.
+
 ## Recurring time off: list moved below the form, added a start date (2026-08-28)
 
 Two fixes to the "Recurring time off" panel you just saw get its first

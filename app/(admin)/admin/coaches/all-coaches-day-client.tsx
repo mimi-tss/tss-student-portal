@@ -787,10 +787,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             <AddCoachBlockForm
               coachId={panel.coachId}
               coachName={panel.coachName}
-              onAdded={async () => {
-                await refetchSchedules();
-                setPanel(null);
-              }}
+              onAdded={refetchSchedules}
             />
             <AddRecurringCoachBlockForm
               coachId={panel.coachId}
