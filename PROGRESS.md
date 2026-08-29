@@ -3,6 +3,19 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Removed the "Coach time-off blocks" panel from the Students page (2026-08-28)
+
+You didn't want it there — it was a pre-existing panel showing the next
+20 current/upcoming `coach_blocks` rows, but now that recurring time-off
+rules (Team Huddle, standing breaks) materialize real rows every week
+for a year out, that list is mostly repeats of the same few standing
+rules rather than useful signal, and it's redundant with the per-coach
+"Time off" panel on the Coaches page anyway (which now has its own
+list + remove, see the entries above). Removed the panel and its query
+from [app/(admin)/admin/dashboard/page.tsx](app/(admin)/admin/dashboard/page.tsx)
+— nothing else read that query. `npx tsc --noEmit -p .` and `next build`
+both clean.
+
 ## Activity Log: search by person's name (2026-08-28)
 
 You asked to search the Activity Log by name — student, coach, or
