@@ -32,6 +32,7 @@ interface ParsedRow {
   birthDate: string | null;
   billingStartDate: string | null;
   studentSince: string | null;
+  coachSince: string | null;
 }
 
 function parseDayOfWeek(value: string): number | null {
@@ -52,8 +53,8 @@ function parseBoolean(value: string): boolean {
 // "Add ambassador / manual student" form, for onboarding many real
 // students at once. Column schema: name, email, tier,
 // session_duration_minutes, coach, day_of_week, start_time, frequency,
-// ambassador, birth_date, billing_start_date, student_since (see
-// app/(admin)/admin/dashboard/import-students-client.tsx for the
+// ambassador, birth_date, billing_start_date, student_since, coach_since
+// (see app/(admin)/admin/dashboard/import-students-client.tsx for the
 // admin-facing description of each column).
 //
 // Two-phase: every row is validated up front (no writes) and if ANY row
@@ -121,6 +122,7 @@ export async function POST(req: NextRequest) {
     const birthDateRaw = raw.birth_date?.trim() ?? "";
     const billingStartDateRaw = raw.billing_start_date?.trim() ?? "";
     const studentSinceRaw = raw.student_since?.trim() ?? "";
+    const coachSinceRaw = raw.coach_since?.trim() ?? "";
 
     if (!name) {
       validationErrors.push({ row: rowNum, error: "name is required" });
@@ -191,6 +193,12 @@ export async function POST(req: NextRequest) {
     if (studentSinceRaw && !DATE_RE.test(studentSinceRaw)) {
       validationErrors.push({ row: rowNum, error: `student_since "${studentSinceRaw}" must be YYYY-MM-DD` });
     }
+    if (coachSinceRaw && !DATE_RE.test(coachSinceRaw)) {
+      validationErrors.push({ row: rowNum, error: `coach_since "${coachSinceRaw}" must be YYYY-MM-DD` });
+    }
+    if (coachSinceRaw && !coachRaw) {
+      validationErrors.push({ row: rowNum, error: "coach_since requires a coach — set the coach column" });
+    }
 
     parsedRows.push({
       row: rowNum,
@@ -206,6 +214,7 @@ export async function POST(req: NextRequest) {
       birthDate: birthDateRaw || null,
       billingStartDate: billingStartDateRaw || null,
       studentSince: studentSinceRaw || null,
+      coachSince: coachSinceRaw || null,
     });
   });
 
@@ -229,6 +238,7 @@ export async function POST(req: NextRequest) {
           birthDate: parsed.birthDate ?? undefined,
           billingAnniversaryDate: parsed.billingStartDate ?? undefined,
           studentSinceOverride: parsed.studentSince ?? undefined,
+          coachStartDateOverride: parsed.coachSince ?? undefined,
         });
 
         if (!provisionResult.success) {

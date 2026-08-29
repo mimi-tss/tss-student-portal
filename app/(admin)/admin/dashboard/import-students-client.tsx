@@ -17,10 +17,10 @@ interface RowResult {
 }
 
 const COLUMNS =
-  "name,email,tier,session_duration_minutes,coach,day_of_week,start_time,frequency,ambassador,birth_date,billing_start_date,student_since";
+  "name,email,tier,session_duration_minutes,coach,day_of_week,start_time,frequency,ambassador,birth_date,billing_start_date,student_since,coach_since";
 
 const TEMPLATE_CSV = `${COLUMNS}
-Jane Example,jane@example.com,pro,30,celine@studio.test,tuesday,16:30,weekly,no,1998-04-02,2026-01-15,2024-09-01
+Jane Example,jane@example.com,pro,30,celine@studio.test,tuesday,16:30,weekly,no,1998-04-02,2026-01-15,2024-09-01,2024-09-01
 `;
 
 function downloadTemplate() {
@@ -92,7 +92,8 @@ export default function ImportStudentsClient() {
       <p className={styles.mutedText}>
         Only name, email, and tier are required — everything else can be left blank.{" "}
         <code>coach</code> matches by email or exact name; <code>day_of_week</code> and{" "}
-        <code>start_time</code> must be set together or both left blank.
+        <code>start_time</code> must be set together or both left blank.{" "}
+        <code>coach_since</code> requires a coach to be set too.
       </p>
       <div>
         <button type="button" onClick={downloadTemplate} className={styles.linkBtnSmall}>

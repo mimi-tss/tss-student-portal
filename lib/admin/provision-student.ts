@@ -19,6 +19,12 @@ export interface ProvisionStudentInput {
   birthDate?: string;
   billingAnniversaryDate?: string;
   studentSinceOverride?: string;
+  // Also a plain passthrough, but worth calling out separately: without
+  // this, a migrated student's "with coach since" auto-derives from
+  // their first session materialized IN THIS APP (lib/coach/dashboard-
+  // data.ts) — i.e. right after import — making a years-long coach
+  // relationship from the old system look brand new.
+  coachStartDateOverride?: string;
   // Optional one-go lesson setup for the "Add ambassador / manual
   // student" form, so admin doesn't have to open the new student's
   // profile separately to set their weekly/biweekly schedule or grant a
@@ -83,6 +89,7 @@ export async function provisionStudent(
       ambassador: !!ambassador,
       birth_date: input.birthDate || null,
       student_since_override: input.studentSinceOverride || null,
+      coach_start_date_override: input.coachStartDateOverride || null,
     })
     .select("id")
     .single();

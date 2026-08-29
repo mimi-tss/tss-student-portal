@@ -3,6 +3,27 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## CSV import: added coach_since column (2026-08-28)
+
+You asked whether "with coach since" (`coach_start_date_override`) needs
+to be set at import time, same as "with us" (`student_since`, already
+supported). It does: left unset, a migrated student's "with coach since"
+auto-derives from their first session materialized in this app —
+right after import — making a years-long coach relationship from the
+old system look brand new.
+
+Added `coach_since` as a 13th optional CSV column
+([bulk-import-students/route.ts](app/api/admin/bulk-import-students/route.ts)),
+`YYYY-MM-DD`, passed through to the new `coachStartDateOverride` field on
+`provisionStudent()` ([lib/admin/provision-student.ts](lib/admin/provision-student.ts))
+→ `students.coach_start_date_override`. Requires the `coach` column also
+be set on that row (validated — a coach-relationship start date makes no
+sense without a coach). Updated the column list, the downloadable
+template, and the hint text in
+[import-students-client.tsx](app/(admin)/admin/dashboard/import-students-client.tsx).
+No migration needed — the column already existed (0029). `npx tsc
+--noEmit -p .` and `next build` both clean.
+
 ## Wire remaining raw date/time displays to the global timezone selector (2026-08-28)
 
 You reported the Group Lessons "Upcoming group lessons" list didn't
