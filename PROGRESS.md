@@ -1976,23 +1976,20 @@ Guardian) will fail outright (columns don't exist), and pinning a
 staff note will silently no-op under RLS. Run both before relying on
 this feature. See the "Student migration fields" entry above.
 
-**New migration 0072 not yet confirmed applied** (renumbered from an
-initial 0070 — a concurrent session independently claimed that number
-for the contact/guardian-info migration just above) — fixes a third
-real failure (`students_profile_id_fkey` violation) found retesting 0069 —
-see the "a third real failure, same class of bug" entry above. Note:
-that migration's actual file is `0072_fix_delete_student_permanently_profile_order.sql`
-on disk — this note's own "0070" reference is stale, from before a
-migration-number collision with a concurrent session got resolved.
-Redefines the same function again (`create or replace`), no route
-changes. **Please retest Delete once more after applying this one** —
-this is the third fix in a row found only by actually running it, so
-treat each retest as still load-bearing, not a formality.
+**New migration 0072 not yet confirmed applied** (`0072_fix_delete_student_permanently_profile_order.sql`
+— renumbered from an initial 0070, which a concurrent session
+independently claimed for the contact/guardian-info migration above) —
+fixes a third real failure (`students_profile_id_fkey` violation) found
+retesting 0069, see the "a third real failure, same class of bug" entry
+above. Redefines the same function again (`create or replace`), no
+route changes. **Please retest Delete once more after applying this
+one** — this is the third fix in a row found only by actually running
+it, so treat each retest as still load-bearing, not a formality.
 
 **Migration 0069 confirmed applied** (2026-08-28) — retested Delete on a
 disposable student with a trial entitlement and a recurring schedule
 (the exact two things that exposed the original bugs) and it succeeded
-for that case; a further retest then found 0070's bug (above).
+for that case; a further retest then found 0072's bug (above).
 
 **Migrations 0067 and 0068 confirmed applied** (2026-08-28) — the
 archive flag and the delete function itself exist and are callable;
