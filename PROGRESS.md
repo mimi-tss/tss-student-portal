@@ -3,6 +3,60 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Archive and permanently-delete a student (2026-08-28)
+
+There was genuinely no way to remove a student at all before this —
+"Stop" on the detail page only cancels the subscription, the row stays
+in the list forever. You asked for both: a reversible archive, and a
+real permanent delete available for any student (confirmed via a
+warning popup, not restricted to students with no history).
+
+**Archive** — new `students.archived` boolean (migration
+[0067_student_archived.sql](supabase/migrations/0067_student_archived.sql)),
+same no-new-RLS posture as `ambassador`/`referred_by_coach_id`. Every
+row (sessions, credits, payroll history) stays exactly as-is; it only
+hides the student from the default Students list. Toggle + a "Show
+archived" checkbox in
+[student-table.tsx](<app/(admin)/admin/dashboard/student-table.tsx>),
+new [archive-student/route.ts](app/api/admin/archive-student/route.ts).
+
+**Permanent delete** — `window.confirm` warns exactly what's about to
+happen before anything runs. The actual deletion is a single Postgres
+function, not sequential JS deletes, so a failure partway through rolls
+back everything instead of leaving a half-deleted student
+(migration [0068_delete_student_permanently.sql](supabase/migrations/0068_delete_student_permanently.sql)).
+Deletes across every table with a `student_id` (sessions, credits,
+entitlements, notes, chat, group-lesson registrations, recurring
+schedule, magic-link tokens, staff notes, attention items, payroll
+entries tied to those sessions) plus two real gotchas worth knowing if
+this ever needs touching again:
+- `sessions` and `makeup_credits` reference each other
+  (`makeup_credit_id` / `source_session_id` / `used_session_id`) — both
+  directions are nulled before either table's rows are deleted, or
+  neither could go first.
+- `activity_events.actor_id` is NOT NULL and the table has no
+  update/delete policy by design (an event row is meant to be immutable,
+  migration 0065) — so this student's own login/join-click events are
+  deleted outright rather than left dangling, while `audit_log.actor_id`
+  (nullable — "null = system") is just nulled, keeping the audit record
+  itself intact.
+`is_admin()` is checked inside the function itself (security definer
+bypasses RLS entirely, so this isn't optional) — same defense-in-depth
+every RLS policy in this schema already has. Returns the deleted
+student's `profile_id` so
+[delete-student/route.ts](app/api/admin/delete-student/route.ts) can
+also remove the actual Supabase auth user afterward (needs the
+service-role client, which the database function has no access to).
+
+**Not live-tested** — this project's own convention is real login only,
+no direct Supabase testing, and this is genuinely the most destructive
+thing built this session. Verified by re-reading every table/column
+name against the actual migrations one at a time (not from memory) and
+tracing the two cross-reference gotchas above by hand; `npx tsc --noEmit
+-p .` and `next build` both clean, but please treat the very first real
+delete as a live test — try it on an actual disposable test student
+first, not a real one, before trusting it fully.
+
 ## Removed the "Coach time-off blocks" panel from the Students page (2026-08-28)
 
 You didn't want it there — it was a pre-existing panel showing the next
@@ -1758,6 +1812,17 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migrations 0067 and 0068 not yet confirmed applied** —
+`0067_student_archived.sql` adds `students.archived` (Archive/Unarchive
+in the Students list will error without it). `0068_delete_student_permanently.sql`
+adds the `delete_student_permanently()` function the new Delete button
+calls (Delete will error without it too). **0068 is the most destructive
+thing added this session** — read the "Archive and permanently-delete a
+student" entry above before applying it, and test the very first real
+delete on a disposable test student, not a real one — this couldn't be
+tested against live Supabase (real-login-only convention), only verified
+by hand against the actual schema.
 
 **Migrations 0064, 0065, and 0066 confirmed applied** (2026-08-28) —
 the Activity Log feature (data-change trigger + login/join-click

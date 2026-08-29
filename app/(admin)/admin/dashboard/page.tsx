@@ -14,7 +14,7 @@ export default async function AdminDashboardPage() {
   const [{ data: students }, { data: coaches }, { data: unusedTrials }] = await Promise.all([
     supabase
       .from("students")
-      .select("id, name, email, tier, assigned_coach_id, payment_status")
+      .select("id, name, email, tier, assigned_coach_id, payment_status, archived")
       .order("name"),
     supabase.from("coaches").select("id, name, timezone").eq("active", true).order("name"),
     supabase
