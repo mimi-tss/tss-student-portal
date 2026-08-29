@@ -26,6 +26,21 @@ export interface ProvisionStudentInput {
   // data.ts) — i.e. right after import — making a years-long coach
   // relationship from the old system look brand new.
   coachStartDateOverride?: string;
+  // Plain passthroughs for the same migrated-student use case — none
+  // of these existed before this app captured them, so there's no
+  // "override a derived value" concept here like the fields above,
+  // just data to carry straight through if the CSV row has it.
+  phone?: string;
+  gender?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  addressCountry?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianPhone?: string;
+  guardianEmail?: string;
   // Optional one-go lesson setup for the "Add ambassador / manual
   // student" form, so admin doesn't have to open the new student's
   // profile separately to set their weekly/biweekly schedule or grant a
@@ -91,6 +106,17 @@ export async function provisionStudent(
       birth_date: input.birthDate || null,
       student_since_override: input.studentSinceOverride || null,
       coach_start_date_override: input.coachStartDateOverride || null,
+      phone: input.phone || null,
+      gender: input.gender || null,
+      address_street: input.addressStreet || null,
+      address_city: input.addressCity || null,
+      address_state: input.addressState || null,
+      address_zip: input.addressZip || null,
+      address_country: input.addressCountry || null,
+      guardian_name: input.guardianName || null,
+      guardian_relationship: input.guardianRelationship || null,
+      guardian_phone: input.guardianPhone || null,
+      guardian_email: input.guardianEmail || null,
     })
     .select("id")
     .single();
@@ -174,4 +200,76 @@ export async function provisionStudent(
   );
 
   return { success: true, studentId: student.id };
+}
+
+export interface BackfillContactInfoInput {
+  phone?: string;
+  gender?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  addressCountry?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianPhone?: string;
+  guardianEmail?: string;
+}
+
+const BACKFILL_FIELD_MAP: Record<keyof BackfillContactInfoInput, string> = {
+  phone: "phone",
+  gender: "gender",
+  addressStreet: "address_street",
+  addressCity: "address_city",
+  addressState: "address_state",
+  addressZip: "address_zip",
+  addressCountry: "address_country",
+  guardianName: "guardian_name",
+  guardianRelationship: "guardian_relationship",
+  guardianPhone: "guardian_phone",
+  guardianEmail: "guardian_email",
+};
+
+// CSV bulk-import's "backfill" path for a row whose email matches an
+// EXISTING student (see bulk-import-students/route.ts) — fills blanks
+// only, never overwrites. Nothing already typed into the app through
+// the normal admin UI can get silently clobbered by a re-upload of the
+// same migration CSV; only genuinely-missing fields get filled in.
+export async function backfillStudentContactInfo(
+  admin: SupabaseClient,
+  studentId: string,
+  input: BackfillContactInfoInput,
+): Promise<{ updated: boolean; error?: string }> {
+  const columns = Object.values(BACKFILL_FIELD_MAP);
+  const { data: existing, error: fetchError } = await admin
+    .from("students")
+    .select(columns.join(", "))
+    .eq("id", studentId)
+    .single();
+
+  if (fetchError || !existing) {
+    return { updated: false, error: fetchError?.message ?? "student not found" };
+  }
+
+  const existingRow = existing as unknown as Record<string, string | null>;
+  const update: Record<string, string> = {};
+
+  for (const key of Object.keys(BACKFILL_FIELD_MAP) as (keyof BackfillContactInfoInput)[]) {
+    const newValue = input[key];
+    const column = BACKFILL_FIELD_MAP[key];
+    if (newValue && !existingRow[column]) {
+      update[column] = newValue;
+    }
+  }
+
+  if (Object.keys(update).length === 0) {
+    return { updated: false };
+  }
+
+  const { error } = await admin.from("students").update(update).eq("id", studentId);
+  if (error) {
+    return { updated: false, error: error.message };
+  }
+
+  return { updated: true };
 }

@@ -27,6 +27,9 @@ import StudentSinceClient from "./student-since-client";
 import BillingAnniversaryClient from "./billing-anniversary-client";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
+import SimpleTextFieldClient from "./simple-text-field-client";
+import AddressClient from "./address-client";
+import GuardianInfoClient from "./guardian-info-client";
 import styles from "../../../admin.module.css";
 
 // Read-only admin view of what a student sees on their own dashboard —
@@ -47,7 +50,7 @@ export default async function AdminStudentPage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override",
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override, phone, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email",
     )
     .eq("id", studentId)
     .maybeSingle();
@@ -208,6 +211,47 @@ export default async function AdminStudentPage({
             <div className={styles.statKey}>Email</div>
             <div className={styles.statValue}>
               <EmailClient studentId={student.id} initialValue={student.email} />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Phone</div>
+            <div className={styles.statValue}>
+              <SimpleTextFieldClient studentId={student.id} field="phone" initialValue={student.phone} placeholder="Phone" />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Gender</div>
+            <div className={styles.statValue}>
+              <SimpleTextFieldClient studentId={student.id} field="gender" initialValue={student.gender} placeholder="Gender" />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Address</div>
+            <div className={styles.statValue}>
+              <AddressClient
+                studentId={student.id}
+                initialValue={{
+                  street: student.address_street,
+                  city: student.address_city,
+                  state: student.address_state,
+                  zip: student.address_zip,
+                  country: student.address_country,
+                }}
+              />
+            </div>
+          </div>
+          <div className={styles.statRow}>
+            <div className={styles.statKey}>Guardian (if minor)</div>
+            <div className={styles.statValue}>
+              <GuardianInfoClient
+                studentId={student.id}
+                initialValue={{
+                  name: student.guardian_name,
+                  relationship: student.guardian_relationship,
+                  phone: student.guardian_phone,
+                  email: student.guardian_email,
+                }}
+              />
             </div>
           </div>
           <div className={styles.statRow}>

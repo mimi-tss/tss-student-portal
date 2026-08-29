@@ -2,6 +2,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay, zonedTimeToUtc } from "@/lib/timezone";
 import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/scheduling/recurring";
 import { getCoachGroupLessons, type CoachGroupLesson } from "@/lib/group-lessons";
+import { calculateAge } from "@/lib/format-date";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -163,9 +164,16 @@ export interface UpcomingBirthday {
   studentName: string;
   month: number;
   day: number;
+  birthDate: string;
+  // The age they're turning ON that upcoming birthday, not their
+  // current age today — calculateAge(birth_date) would give the
+  // latter, which is off by one for a birthday that hasn't happened
+  // yet this cycle.
+  age: number;
 }
 
-// Month/day only — the stored year is never surfaced to a coach.
+// Full birth_date + derived age now surfaced to the coach (was
+// month/day only) — an explicit policy reversal, see PROGRESS.md.
 export async function getBirthdaysThisWeek(
   supabase: SupabaseClient,
   studentIds: string[],
@@ -186,7 +194,14 @@ export async function getBirthdaysThisWeek(
     for (let offset = 0; offset < 7; offset++) {
       const check = new Date(today.getTime() + offset * 24 * 60 * 60 * 1000);
       if (bd.getUTCMonth() === check.getUTCMonth() && bd.getUTCDate() === check.getUTCDate()) {
-        results.push({ studentId: s.id, studentName: s.name, month: bd.getUTCMonth() + 1, day: bd.getUTCDate() });
+        results.push({
+          studentId: s.id,
+          studentName: s.name,
+          month: bd.getUTCMonth() + 1,
+          day: bd.getUTCDate(),
+          birthDate: s.birth_date,
+          age: check.getUTCFullYear() - bd.getUTCFullYear(),
+        });
         break;
       }
     }
@@ -210,11 +225,20 @@ export interface StudentSnapshot {
   // too, not just admin, so they have a chance to try to save the
   // student before the studio loses them (spec: "coaches should know").
   cancellationFlag: { reason: string | null; effectiveDate: string } | null;
+  gender: string | null;
+  birthDate: string | null;
+  age: number | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
 }
 
 // The right-side "student detail panel" — deliberately never selects
 // email or phone (spec: "student email addresses and phone numbers are
-// never shown to coaches — that stays with Studio Admin").
+// never shown to coaches — that stays with Studio Admin"). Same rule
+// extends to address_street/address_zip/guardian_* — coach gets
+// city/state/country only, never the precise street/zip, and never
+// the guardian's contact info at all.
 export async function getStudentSnapshot(
   supabase: SupabaseClient,
   coachId: string,
@@ -222,7 +246,9 @@ export async function getStudentSnapshot(
 ): Promise<StudentSnapshot | null> {
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, tier, subscription_status, billing_anniversary_date, coach_start_date_override")
+    .select(
+      "id, name, tier, subscription_status, billing_anniversary_date, coach_start_date_override, gender, birth_date, address_city, address_state, address_country",
+    )
     .eq("id", studentId)
     .maybeSingle();
 
@@ -296,5 +322,11 @@ export async function getStudentSnapshot(
     cancellationFlag: cancelRequest
       ? { reason: cancelRequest.reason, effectiveDate: cancelRequest.effective_date }
       : null,
+    gender: student.gender,
+    birthDate: student.birth_date,
+    age: student.birth_date ? calculateAge(student.birth_date) : null,
+    city: student.address_city,
+    state: student.address_state,
+    country: student.address_country,
   };
 }

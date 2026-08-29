@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
 import { parseCsvWithHeader } from "@/lib/admin/parse-csv";
-import { provisionStudent } from "@/lib/admin/provision-student";
+import { provisionStudent, backfillStudentContactInfo } from "@/lib/admin/provision-student";
 import { createRecurringSchedule } from "@/lib/admin/create-recurring-schedule";
 import { DAY_NAMES } from "@/lib/scheduling/recurring";
 
@@ -17,8 +17,10 @@ const VALID_TIERS = ["lite", "suite", "pro", "elite"];
 const VALID_DURATIONS = [30, 60];
 const VALID_FREQUENCIES = ["weekly", "biweekly"];
 const CONCURRENCY = 5;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-interface ParsedRow {
+interface NewStudentRow {
+  kind: "new";
   row: number;
   name: string;
   email: string;
@@ -33,7 +35,32 @@ interface ParsedRow {
   billingStartDate: string | null;
   studentSince: string | null;
   coachSince: string | null;
+  contactInfo: ContactInfoFields;
 }
+
+interface ExistingStudentRow {
+  kind: "existing";
+  row: number;
+  email: string;
+  studentId: string;
+  contactInfo: ContactInfoFields;
+}
+
+interface ContactInfoFields {
+  phone?: string;
+  gender?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  addressCountry?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianPhone?: string;
+  guardianEmail?: string;
+}
+
+type ParsedRow = NewStudentRow | ExistingStudentRow;
 
 function parseDayOfWeek(value: string): number | null {
   if (value === "") return null;
@@ -48,24 +75,56 @@ function parseBoolean(value: string): boolean {
   return ["yes", "true", "1"].includes(value.toLowerCase());
 }
 
+function parseContactInfo(raw: Record<string, string>): ContactInfoFields {
+  const trimmedOrUndefined = (v?: string) => (v?.trim() ? v.trim() : undefined);
+  return {
+    phone: trimmedOrUndefined(raw.phone),
+    gender: trimmedOrUndefined(raw.gender),
+    addressStreet: trimmedOrUndefined(raw.address_street),
+    addressCity: trimmedOrUndefined(raw.address_city),
+    addressState: trimmedOrUndefined(raw.address_state),
+    addressZip: trimmedOrUndefined(raw.address_zip),
+    addressCountry: trimmedOrUndefined(raw.address_country),
+    guardianName: trimmedOrUndefined(raw.guardian_name),
+    guardianRelationship: trimmedOrUndefined(raw.guardian_relationship),
+    guardianPhone: trimmedOrUndefined(raw.guardian_phone),
+    guardianEmail: trimmedOrUndefined(raw.guardian_email),
+  };
+}
+
 // Admin-only bulk creation of students (+ optional recurring schedule)
 // from an uploaded CSV — the batch counterpart to the single-student
 // "Add ambassador / manual student" form, for onboarding many real
-// students at once. Column schema: name, email, tier,
-// session_duration_minutes, coach, day_of_week, start_time, frequency,
-// ambassador, birth_date, billing_start_date, student_since, coach_since
-// (see app/(admin)/admin/dashboard/import-students-client.tsx for the
-// admin-facing description of each column).
+// students at once, AND (since the migration from the old system
+// surfaced students who already exist here) backfilling contact/
+// guardian info onto already-active students in the same upload. See
+// app/(admin)/admin/dashboard/import-students-client.tsx for the full
+// column list.
 //
-// Two-phase: every row is validated up front (no writes) and if ANY row
-// fails, nothing is created — cheap to fix the whole sheet and re-upload.
-// Once every row passes validation, creation proceeds per-row and does
+// Two-phase, same as before: every row is validated up front (no
+// writes) and if ANY row fails, nothing is created/updated — cheap to
+// fix the whole sheet and re-upload. The validation itself now
+// branches on whether the row's email matches an existing student:
+//
+//   - New row (email not found): full validation, unchanged from
+//     before — name/tier/duration/coach/schedule/etc. all required as
+//     before, now also carrying the new contact/guardian columns
+//     through to provisionStudent.
+//   - Existing row (email matches a real student): tier/coach/
+//     schedule/session-duration/ambassador/birth_date/etc. are NOT
+//     validated or touched at all — this path only ever backfills
+//     phone/gender/address/guardian fields, and only where the
+//     student's existing value is currently blank (never overwrites
+//     something already entered through the admin UI). This is what
+//     lets the same CSV serve both "onboard new students" and
+//     "backfill everyone we're migrating in" without the admin having
+//     to blank out unrelated columns for rows that are just backfills.
+//
+// Creation/update proceeds per-row after validation passes and does
 // NOT abort on a single row's failure (a Drive-API hiccup or transient
-// auth error on row 23 of 50 shouldn't discard 22 already-good rows, and
-// Supabase gives no real cross-row transaction here anyway) — the
-// response reports created/failed per row instead. Re-uploading the same
-// CSV afterward cleanly skips already-created rows at the duplicate-email
-// check below.
+// auth error on row 23 of 50 shouldn't discard 22 already-good rows,
+// and Supabase gives no real cross-row transaction here anyway) — the
+// response reports created/updated/failed per row instead.
 export async function POST(req: NextRequest) {
   const { csv } = await req.json();
 
@@ -100,8 +159,8 @@ export async function POST(req: NextRequest) {
     .select("id, name, email")
     .eq("active", true);
 
-  const { data: existingStudents } = await admin.from("students").select("email");
-  const existingEmails = new Set((existingStudents ?? []).map((s) => s.email.toLowerCase()));
+  const { data: existingStudents } = await admin.from("students").select("id, email");
+  const existingByEmail = new Map((existingStudents ?? []).map((s) => [s.email.toLowerCase(), s.id]));
 
   const validationErrors: { row: number; error: string }[] = [];
   const parsedRows: ParsedRow[] = [];
@@ -109,8 +168,31 @@ export async function POST(req: NextRequest) {
 
   rawRows.forEach((raw, i) => {
     const rowNum = i + 2; // +1 for 0-index, +1 for the header row
-    const name = raw.name ?? "";
     const email = (raw.email ?? "").toLowerCase();
+    const contactInfo = parseContactInfo(raw);
+
+    if (!email || !EMAIL_RE.test(email)) {
+      validationErrors.push({ row: rowNum, error: `invalid email "${raw.email ?? ""}"` });
+      return;
+    }
+    if (seenEmails.has(email)) {
+      validationErrors.push({ row: rowNum, error: `email "${email}" appears more than once in this CSV` });
+      return;
+    }
+    seenEmails.add(email);
+
+    if (contactInfo.guardianEmail && !EMAIL_RE.test(contactInfo.guardianEmail)) {
+      validationErrors.push({ row: rowNum, error: `guardian_email "${contactInfo.guardianEmail}" is not a valid email` });
+    }
+
+    const existingStudentId = existingByEmail.get(email);
+    if (existingStudentId) {
+      // Backfill-only path — no other column on this row is touched.
+      parsedRows.push({ kind: "existing", row: rowNum, email, studentId: existingStudentId, contactInfo });
+      return;
+    }
+
+    const name = raw.name ?? "";
     const tier = (raw.tier ?? "").toLowerCase();
     const durationRaw = raw.session_duration_minutes?.trim();
     const sessionDurationMinutes = durationRaw ? Number(durationRaw) : 30;
@@ -127,15 +209,6 @@ export async function POST(req: NextRequest) {
     if (!name) {
       validationErrors.push({ row: rowNum, error: "name is required" });
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      validationErrors.push({ row: rowNum, error: `invalid email "${raw.email ?? ""}"` });
-    } else if (existingEmails.has(email)) {
-      validationErrors.push({ row: rowNum, error: `email "${email}" already belongs to an existing student` });
-    } else if (seenEmails.has(email)) {
-      validationErrors.push({ row: rowNum, error: `email "${email}" appears more than once in this CSV` });
-    }
-    seenEmails.add(email);
-
     if (!VALID_TIERS.includes(tier)) {
       validationErrors.push({ row: rowNum, error: `tier must be one of ${VALID_TIERS.join("/")}, got "${raw.tier ?? ""}"` });
     }
@@ -201,6 +274,7 @@ export async function POST(req: NextRequest) {
     }
 
     parsedRows.push({
+      kind: "new",
       row: rowNum,
       name,
       email,
@@ -215,6 +289,7 @@ export async function POST(req: NextRequest) {
       billingStartDate: billingStartDateRaw || null,
       studentSince: studentSinceRaw || null,
       coachSince: coachSinceRaw || null,
+      contactInfo,
     });
   });
 
@@ -222,12 +297,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ validationErrors }, { status: 400 });
   }
 
-  const results: { row: number; email: string; status: "created" | "failed"; error?: string }[] = [];
+  const results: { row: number; email: string; status: "created" | "updated" | "failed"; error?: string }[] = [];
 
   for (let i = 0; i < parsedRows.length; i += CONCURRENCY) {
     const batch = parsedRows.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (parsed) => {
+        if (parsed.kind === "existing") {
+          const backfillResult = await backfillStudentContactInfo(admin, parsed.studentId, parsed.contactInfo);
+          if (backfillResult.error) {
+            return { row: parsed.row, email: parsed.email, status: "failed" as const, error: backfillResult.error };
+          }
+          return { row: parsed.row, email: parsed.email, status: "updated" as const };
+        }
+
         const provisionResult = await provisionStudent(admin, {
           email: parsed.email,
           name: parsed.name,
@@ -239,6 +322,7 @@ export async function POST(req: NextRequest) {
           billingAnniversaryDate: parsed.billingStartDate ?? undefined,
           studentSinceOverride: parsed.studentSince ?? undefined,
           coachStartDateOverride: parsed.coachSince ?? undefined,
+          ...parsed.contactInfo,
         });
 
         if (!provisionResult.success) {

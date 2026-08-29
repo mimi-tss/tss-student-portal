@@ -7,6 +7,7 @@ import styles from "../../../admin.module.css";
 interface StaffNote {
   id: string;
   note: string;
+  pinned: boolean;
   created_at: string;
 }
 
@@ -19,6 +20,7 @@ export default function StaffNotesClient({ studentId }: { studentId: string }) {
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch(`/api/admin/staff-notes?studentId=${studentId}`);
@@ -54,6 +56,17 @@ export default function StaffNotesClient({ studentId }: { studentId: string }) {
     await load();
   }
 
+  async function handleTogglePin(note: StaffNote) {
+    setPinningId(note.id);
+    const res = await fetch("/api/admin/staff-notes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: note.id, pinned: !note.pinned }),
+    });
+    setPinningId(null);
+    if (res.ok) await load();
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 12 }}>
@@ -79,7 +92,20 @@ export default function StaffNotesClient({ studentId }: { studentId: string }) {
         <ul className={styles.list}>
           {notes.map((n) => (
             <li key={n.id} className={styles.listItem}>
-              <p style={{ whiteSpace: "pre-wrap" }}>{n.note}</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                  {n.pinned && <span className={styles.badge} style={{ marginRight: 6 }}>Pinned</span>}
+                  {n.note}
+                </p>
+                <button
+                  onClick={() => handleTogglePin(n)}
+                  disabled={pinningId === n.id}
+                  className={styles.linkBtnSmall}
+                  style={{ flexShrink: 0 }}
+                >
+                  {pinningId === n.id ? "…" : n.pinned ? "Unpin" : "Pin"}
+                </button>
+              </div>
               <p className={styles.mutedText} style={{ fontSize: 11, marginTop: 4 }}>
                 <FormattedDateTime value={n.created_at} />
               </p>

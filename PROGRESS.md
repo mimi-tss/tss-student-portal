@@ -3,6 +3,116 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student migration fields: address, phone, gender, guardian info (2026-08-28)
+
+Migrating students in from the old system (Opus1/Kajabi export) surfaced
+that this app never captured phone, gender, or address. Added 11 new
+nullable columns on `students`
+([0070_student_contact_and_guardian_info.sql](supabase/migrations/0070_student_contact_and_guardian_info.sql)):
+`phone`, `gender`, `address_street/city/state/zip/country`,
+`guardian_name/relationship/phone/email`. `gender` is free text, not an
+enum — the source data itself is wildly inconsistent ("Female", "Girl",
+"F", "she/her", "rather not say"...) and a fixed set would be lossy.
+One guardian per student, plain columns on `students` (not a second
+login account, not Opus1's old accounts-and-dependents system) — same
+protection model email/phone already use (RLS on `students` is
+row-level only; privacy is enforced by which columns each query
+selects, confirmed by grep: `phone`/`address_street`/`address_zip`/
+`guardian_*` appear nowhere outside `app/(admin)`).
+
+**Coach visibility** — confirmed with you directly: coach sees
+city/state/country + gender + age + full birthday, never street/zip/
+phone/email/guardian info. `getStudentSnapshot` and
+`getBirthdaysThisWeek` ([lib/coach/dashboard-data.ts](lib/coach/dashboard-data.ts))
+updated accordingly. Worth flagging: this reverses an existing
+*intentional* choice — `getBirthdaysThisWeek` used to strip the birth
+year specifically so a coach couldn't infer age ("the stored year is
+never surfaced to a coach"). Caught a real off-by-one while building
+this: the "turning N" age on an upcoming birthday needs the age as of
+*that* birthday, not `calculateAge()`'s "age as of today" (which is
+one less until the birthday actually happens) —
+[dashboard-data.ts](lib/coach/dashboard-data.ts) computes it directly
+from the matched calendar date instead of reusing the generic helper.
+
+**Admin UI** — new click-to-edit panels on the student detail page:
+Phone/Gender (extended
+[set-student-info/route.ts](app/api/admin/set-student-info/route.ts),
+reusing name/email's existing grouped-route pattern, via a new generic
+[simple-text-field-client.tsx](<app/(admin)/admin/students/[studentId]/simple-text-field-client.tsx>)),
+Address (5 fields, one Save —
+[address-client.tsx](<app/(admin)/admin/students/[studentId]/address-client.tsx>)
+→ [set-address](app/api/admin/set-address/route.ts)), and Guardian
+info (4 fields, one Save —
+[guardian-info-client.tsx](<app/(admin)/admin/students/[studentId]/guardian-info-client.tsx>)
+→ [set-guardian-info](app/api/admin/set-guardian-info/route.ts)).
+
+**Staff Notes: pinning** — sibling/family info goes here as free text
+per your own suggestion, rather than new schema.
+[0071_staff_notes_pinned.sql](supabase/migrations/0071_staff_notes_pinned.sql)
+adds `pinned` + (critically) the UPDATE RLS policy `staff_notes` never
+had — without it, toggling pinned would've silently no-op'd under RLS,
+the exact "0-row filtered update" gotcha this codebase has hit before.
+Same double-order pattern `homework_notes` already uses.
+
+**CSV import — confirmed with you directly**: re-uploading should
+backfill these fields onto *existing* matching students too (most of
+the ~93 rows in the Opus1 export are already active students), not
+just apply to new imports — but you don't want the real file uploaded
+yet, just the template ready. Changed
+[bulk-import-students/route.ts](app/api/admin/bulk-import-students/route.ts):
+previously, a row whose email matched an existing student was a **hard
+validation error that failed the entire upload**. Now it's a second
+code path — tier/coach/schedule/session-duration/ambassador are not
+validated or touched at all for that row; only the 11 new fields are
+considered, and only backfilled where the existing value is currently
+blank (**fill blanks, never overwrite** — nothing typed into the admin
+UI can get silently clobbered by a re-upload). Verified this exact
+logic (new/existing classification, blank-only merge, no-overwrite) via
+a standalone trace script against 3 cases before considering it done.
+Template ([import-students-client.tsx](<app/(admin)/admin/dashboard/import-students-client.tsx>))
+extended with the 11 new columns; results now report
+created/backfilled/failed instead of just created/failed.
+
+Verified via `tsc`/`next build` (clean), a grep confirming no sensitive
+column leaks into coach/student-facing code, an interactive mock
+(scratchpad, no live login in this environment) click-testing the
+Address/Guardian editors and the Staff Notes pin toggle, and the CSV
+backfill trace above.
+
+## delete_student_permanently(): a third real failure, same class of bug (2026-08-28)
+
+0069's retest hit a new one: `update or delete on table "profiles"
+violates foreign key constraint "students_profile_id_fkey" on table
+"students"` — `students.profile_id -> profiles.id` (migration 0001, the
+literal link between a student and their own login) was deleted
+backwards: 0069 deleted `profiles` before deleting the `students` row
+that still pointed to it. Same class of mistake as 0069's own fixes,
+just for arguably the single most obvious FK of all of them — missed
+specifically because every earlier fix this session was about a table
+pointing to sessions/entitlements, and this pattern-matching blind spot
+meant not re-checking students' own outgoing reference.
+
+Fixed in [0072_fix_delete_student_permanently_profile_order.sql](supabase/migrations/0072_fix_delete_student_permanently_profile_order.sql)
+(renumbered from an initial 0070 — a concurrent session independently
+claimed that number for the contact/guardian-info migration above)
+— pure reorder, no new nulling needed: delete the `students` row at the
+end of Phase 2 (everything that could reference it is already gone by
+then), and only touch `profiles` in a new Phase 3 afterward. Also
+re-verified by hand that no other table referencing `profiles(id)`
+(`coaches.profile_id`, `admin_overrides.admin_profile_id`,
+`chat_messages.sender_profile_id`, `student_requests.resolved_by`,
+`attention_items.resolved_by`) can still hold this student's own
+profile_id by the time Phase 3 runs — all of them are either a
+different person's profile entirely (an admin/coach, never the
+student), or already deleted as part of Phase 2.
+
+Given this is now the third real bug found only by actually running it
+against live data, **please retest again after applying 0072** — same
+test student shape as last time (trial entitlement + recurring
+schedule) plus, ideally, one with at least one chat message and one
+homework note this time, since those weren't confirmed exercised by the
+previous test either.
+
 ## Fixed delete_student_permanently(): a real delete failed, and a full re-audit found two more latent bugs (2026-08-28)
 
 The first real Delete against a live student hit: `update or delete on
@@ -1856,11 +1966,33 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
+**New migrations 0070 and 0071 not yet confirmed applied** —
+`0070_student_contact_and_guardian_info.sql` (11 new `students`
+columns: phone/gender/address/guardian info) and
+`0071_staff_notes_pinned.sql` (the `pinned` column + its missing
+UPDATE RLS policy) are the new student-migration-fields feature. Until
+these run: saving any of the new admin panels (Phone, Gender, Address,
+Guardian) will fail outright (columns don't exist), and pinning a
+staff note will silently no-op under RLS. Run both before relying on
+this feature. See the "Student migration fields" entry above.
+
+**New migration 0072 not yet confirmed applied** (renumbered from an
+initial 0070 — a concurrent session independently claimed that number
+for the contact/guardian-info migration just above) — fixes a third
+real failure (`students_profile_id_fkey` violation) found retesting 0069 —
+see the "a third real failure, same class of bug" entry above. Note:
+that migration's actual file is `0072_fix_delete_student_permanently_profile_order.sql`
+on disk — this note's own "0070" reference is stale, from before a
+migration-number collision with a concurrent session got resolved.
+Redefines the same function again (`create or replace`), no route
+changes. **Please retest Delete once more after applying this one** —
+this is the third fix in a row found only by actually running it, so
+treat each retest as still load-bearing, not a formality.
+
 **Migration 0069 confirmed applied** (2026-08-28) — retested Delete on a
 disposable student with a trial entitlement and a recurring schedule
-(the exact two things that exposed the original bugs) and it succeeded.
-`delete_student_permanently()` is now confirmed correct against live
-data for the harder case, not just the simple one from the first test.
+(the exact two things that exposed the original bugs) and it succeeded
+for that case; a further retest then found 0070's bug (above).
 
 **Migrations 0067 and 0068 confirmed applied** (2026-08-28) — the
 archive flag and the delete function itself exist and are callable;

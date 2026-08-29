@@ -14,6 +14,24 @@ export function formatPlainDate(value: string): string {
   }).format(new Date(year, month - 1, day));
 }
 
+// Whole-years age from a plain "YYYY-MM-DD" birth_date — parsed as
+// local calendar-date components for the same reason formatPlainDate
+// is (no time-of-day to convert, so no UTC-instant timezone shift).
+// Computed on read, never stored, so it's never stale.
+export function calculateAge(birthDate: string): number {
+  const [year, month, day] = birthDate.split("-").map(Number);
+  const birth = new Date(year, month - 1, day);
+  const now = new Date();
+
+  let age = now.getFullYear() - birth.getFullYear();
+  const hasHadBirthdayThisYear =
+    now.getMonth() > birth.getMonth() ||
+    (now.getMonth() === birth.getMonth() && now.getDate() >= birth.getDate());
+  if (!hasHadBirthdayThisYear) age -= 1;
+
+  return age;
+}
+
 // "4 years 2 months" style tenure — whole months only (day-of-month
 // differences round down), which is precise enough for "how long has
 // this student been with us" and avoids an awkward "...and 12 days".

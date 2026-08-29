@@ -7,6 +7,7 @@ import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import { useTimeZone } from "@/components/timezone-context";
+import { formatPlainDate } from "@/lib/format-date";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import styles from "../../coach.module.css";
@@ -383,7 +384,7 @@ export default function DashboardClient({
                     <div key={b.studentId} className={styles.reminderItem}>
                       <span className={styles.reminderIcon}>🎂</span>
                       <span>
-                        <b>{b.studentName}</b> — {b.month}/{b.day}
+                        <b>{b.studentName}</b> — {b.month}/{b.day} (turning {b.age})
                       </span>
                     </div>
                   ))}
@@ -508,6 +509,26 @@ export default function DashboardClient({
                   <div className={styles.snapshotStatLabel}>With you since</div>
                   <div className={styles.snapshotStatValue}>
                     {snapshot.withYouSince ? monthYear(snapshot.withYouSince, displayTimeZone) : "—"}
+                  </div>
+                </div>
+                <div className={styles.snapshotStat}>
+                  <div className={styles.snapshotStatLabel}>Age</div>
+                  <div className={styles.snapshotStatValue}>{snapshot.age ?? "—"}</div>
+                </div>
+                <div className={styles.snapshotStat}>
+                  <div className={styles.snapshotStatLabel}>Birthday</div>
+                  <div className={styles.snapshotStatValue}>
+                    {snapshot.birthDate ? formatPlainDate(snapshot.birthDate) : "—"}
+                  </div>
+                </div>
+                <div className={styles.snapshotStat}>
+                  <div className={styles.snapshotStatLabel}>Gender</div>
+                  <div className={styles.snapshotStatValue}>{snapshot.gender ?? "—"}</div>
+                </div>
+                <div className={styles.snapshotStat}>
+                  <div className={styles.snapshotStatLabel}>Location</div>
+                  <div className={styles.snapshotStatValue}>
+                    {[snapshot.city, snapshot.state, snapshot.country].filter(Boolean).join(", ") || "—"}
                   </div>
                 </div>
               </div>

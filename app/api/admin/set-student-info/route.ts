@@ -14,13 +14,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // updates it there too; that's on the admin making the call, not
 // something this route can prevent.
 export async function POST(req: NextRequest) {
-  const { studentId, name, email } = await req.json();
+  const { studentId, name, email, phone, gender } = await req.json();
 
-  if (!studentId || (name === undefined && email === undefined)) {
-    return NextResponse.json({ error: "studentId and name or email required" }, { status: 400 });
+  if (!studentId || [name, email, phone, gender].every((v) => v === undefined)) {
+    return NextResponse.json({ error: "studentId and at least one field required" }, { status: 400 });
   }
 
-  const update: Record<string, string> = {};
+  const update: Record<string, string | null> = {};
   if (name !== undefined) {
     const trimmed = String(name).trim();
     if (!trimmed) {
@@ -34,6 +34,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "enter a valid email address" }, { status: 400 });
     }
     update.email = trimmed;
+  }
+  if (phone !== undefined) {
+    update.phone = String(phone).trim() || null;
+  }
+  if (gender !== undefined) {
+    update.gender = String(gender).trim() || null;
   }
 
   const supabase = await createClient();

@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: notes, error } = await supabase
     .from("staff_notes")
-    .select("id, note, created_at")
+    .select("id, note, pinned, created_at")
     .eq("student_id", studentId)
+    .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -23,6 +24,26 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ notes: notes ?? [] });
+}
+
+// Toggles pinned on a single note — e.g. sibling/family info worth
+// keeping visible above newer notes. Relies on the admin-update RLS
+// policy added alongside the pinned column (migration 0071).
+export async function PATCH(req: NextRequest) {
+  const { id, pinned } = await req.json();
+
+  if (!id || typeof pinned !== "boolean") {
+    return NextResponse.json({ error: "id and pinned required" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("staff_notes").update({ pinned }).eq("id", id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }
 
 export async function POST(req: NextRequest) {
