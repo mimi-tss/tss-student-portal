@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed delete_student_permanently(): a real delete failed, and a full re-audit found two more latent bugs (2026-08-28)
+
+The first real Delete against a live student hit: `update or delete on
+table "entitlements" violates foreign key constraint
+"sessions_trial_entitlement_id_fkey" on table "sessions"` —
+`sessions.trial_entitlement_id` (added migration 0005, for trial-lesson
+booking) was never nulled before deleting `entitlements` in 0068.
+Confirms the earlier "tested successfully" note from a few hours ago
+was real but incomplete — that test student apparently had no trial
+entitlement/session link, so this exact path never ran.
+
+Rather than patching just the one column that broke, re-audited every
+`references sessions/entitlements/makeup_credits/recurring_schedules/
+student_requests` in the whole migrations folder by hand (grepped every
+`alter table ... add column` for these tables too, not just the base
+`create table`s) and found two more gaps that hadn't triggered yet
+purely because Postgres stops a transaction at its first violation —
+the entitlements failure was masking these:
+- `entitlements.used_session_id -> sessions.id` (0005) — the *other*
+  half of a second circular reference, separate from the
+  sessions/makeup_credits one 0068 already handled correctly.
+- `sessions.recurring_schedule_id -> recurring_schedules.id` (0020) —
+  0068 deleted `recurring_schedules` before `sessions`, backwards; would
+  have hit almost any real student (anyone with a regular weekly slot).
+- `attention_items.request_id -> student_requests.id` (0035) — same
+  backwards-order bug, smaller blast radius.
+
+Fixed in [0069_fix_delete_student_permanently.sql](supabase/migrations/0069_fix_delete_student_permanently.sql)
+(`create or replace function`, same function name/signature — no route
+changes needed). Restructured into two explicit phases instead of
+threading more fixes into the middle of one delete sequence: Phase 1
+nulls every nullable cross-reference scoped to the student first
+(breaks every circular/backwards dependency in one pass), Phase 2
+deletes everything, with ordering only still mattering for the
+remaining one-directional NOT NULL references (`payroll_entries` before
+`sessions`, `chat_messages` before `chat_threads`).
+
+Still not live-tested — same caveat as 0068's own entry: please retest
+the very first delete after this migration on a disposable student
+before trusting it again, ideally one WITH a trial entitlement and a
+recurring schedule this time, since those are exactly the two things
+that would have caught both new bugs.
+
 ## Archive and permanently-delete a student (2026-08-28)
 
 There was genuinely no way to remove a student at all before this —
@@ -1813,11 +1856,20 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migrations 0067 and 0068 confirmed applied** (2026-08-28) — you ran a
-real delete against a test student and it succeeded, so
-`delete_student_permanently()`'s table order and the sessions/
-makeup_credits circular-reference handling are now confirmed correct
-against live data, not just verified by hand against the schema.
+**New migration 0069 not yet confirmed applied** — fixes a real failure
+the first live Delete hit (`sessions_trial_entitlement_id_fkey`
+violation) plus two more latent ordering bugs a full re-audit turned up
+(`entitlements.used_session_id`, `sessions.recurring_schedule_id`) — see
+the "Fixed delete_student_permanently()" entry above. Redefines the same
+function (`create or replace`), no route/app changes needed. **Please
+retest Delete on a disposable student after applying this** — ideally
+one with a trial entitlement and a recurring schedule, since those are
+exactly what the previous successful test didn't have and what exposed
+these bugs.
+
+**Migrations 0067 and 0068 confirmed applied** (2026-08-28) — the
+archive flag and the delete function itself exist and are callable;
+0069 fixes real bugs found on first use, not a gap in these two.
 
 **Migrations 0064, 0065, and 0066 confirmed applied** (2026-08-28) —
 the Activity Log feature (data-change trigger + login/join-click
