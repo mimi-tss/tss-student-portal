@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Join meet link always used the student's assigned coach, not the actual one (2026-08-28)
+
+You flagged this directly: the meet link should follow whoever is
+*actually* teaching a given session — weekly with Coach Celine vs. a
+one-off with Coach Nikki, or whenever admin reassigns a session's
+coach — not the student's general assigned coach. Confirmed this was a
+real bug: `sessions` already has an `actual_coach_id` column
+specifically for this ("may differ from assigned_coach_id
+(substitute)", per its own migration-0001 comment), and both
+`app/api/admin/reassign-session-coach/route.ts` and
+`materializeRecurringSessions` (`lib/scheduling/recurring.ts`, sets
+`actual_coach_id: schedule.coach_id` — a recurring schedule's own
+coach, which can already differ from the student's overall assigned
+one) write to it correctly — but the student dashboard
+([page.tsx](<app/(student)/student/dashboard/page.tsx>)) never read
+it, and instead always used `student.assigned_coach_id`'s meet link
+for the "Next session" card regardless of who was really teaching.
+Fixed: the `nextSession` query now joins the session's own
+`actual_coach_id` → coach, and that's what drives both the coach name
+shown and the Join button's link. The student's overall assigned coach
+(`student.assigned_coach_id`) is untouched everywhere else it's used
+(the "Your plan" panel, the chat header) — this was specifically about
+the per-session Join link being wrong, not the relationship-level
+"who's your coach" fact.
+
+**Also closed the group-lesson audit gap flagged in the previous
+entry**: `activity_events` gets a new nullable `group_lesson_id`
+column ([0073_activity_events_group_lesson.sql](supabase/migrations/0073_activity_events_group_lesson.sql),
+with a check constraint so a row never has both `session_id` and
+`group_lesson_id` set). `join-button.tsx` now takes a `kind: "session"
+| "group_lesson"` prop and sends it in the beacon;
+[join-click/route.ts](app/api/student/join-click/route.ts) branches
+its ownership check accordingly (`sessions.student_id` for a session,
+`group_lesson_registrations` for a group lesson) instead of only ever
+checking `sessions` and silently 403'ing any group-lesson click. The
+Activity Log's Logins & Joins tab now labels which kind was clicked.
+
 ## Students page: made the two collapsed buttons look like real buttons (2026-08-28)
 
 "Add a new student" and "Import students from CSV" were styled as plain
@@ -2026,6 +2063,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0073 not yet confirmed applied** —
+`0073_activity_events_group_lesson.sql` adds `group_lesson_id` to
+`activity_events` for the group-lesson join-click audit trail. Until
+this runs, a click on a group-lesson Join button will fail to log at
+all (the insert has nowhere valid to put the reference) — the actual
+join still works fine either way, this only affects the Activity Log.
 
 **Migrations 0070 and 0071 confirmed applied** (2026-08-29) — the
 student-migration-fields feature (Phone/Gender/Address/Guardian panels,

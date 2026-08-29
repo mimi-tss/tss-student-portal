@@ -78,9 +78,14 @@ export default async function StudentDashboardPage() {
           .eq("id", student.assigned_coach_id)
           .single()
       : Promise.resolve({ data: null }),
+    // actual_coach_id, not assigned_coach_id — a session's real teaching
+    // coach can differ from the student's overall assigned one (a
+    // substitute, or a reassigned session), and the Join button/meet
+    // link below must match whoever is actually teaching THIS session,
+    // not who the student is generally assigned to.
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes")
+      .select("id, scheduled_at, duration_minutes, coaches(name, meet_link)")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
@@ -152,6 +157,18 @@ export default async function StudentDashboardPage() {
   const { renewalDate } = renewalInfo(student.billing_anniversary_date);
   const coachFirstName = coach?.name ? firstName(coach.name) : null;
 
+  // The session's own actual teaching coach (may be a substitute,
+  // differs from student.assigned_coach_id) — the Join button/meet
+  // link for a specific upcoming session must always match whoever is
+  // really teaching it, not the student's general assigned coach.
+  const nextSessionCoach = nextSession
+    ? ((Array.isArray(nextSession.coaches) ? nextSession.coaches[0] : nextSession.coaches) as {
+        name: string;
+        meet_link: string | null;
+      } | null)
+    : null;
+  const nextSessionCoachFirstName = nextSessionCoach?.name ? firstName(nextSessionCoach.name) : null;
+
   // "Next session" previously only ever looked at 1:1 sessions, so a
   // sooner group lesson (e.g. a bootcamp) the student is registered
   // for never showed as what's actually coming up next — the hero
@@ -173,8 +190,8 @@ export default async function StudentDashboardPage() {
           <p className={styles.heroText}>
             {groupLessonIsNext
               ? `Your next lesson — ${nextGroupLesson!.topic || "Group Lesson"} — is coming up.`
-              : nextSession && coachFirstName
-                ? `Your next session with Coach ${coachFirstName} is coming up.`
+              : nextSession && nextSessionCoachFirstName
+                ? `Your next session with Coach ${nextSessionCoachFirstName} is coming up.`
                 : "Book your next session whenever you're ready."}
           </p>
         </div>
@@ -192,6 +209,7 @@ export default async function StudentDashboardPage() {
               </div>
               {nextGroupLesson!.meetLink && (
                 <JoinButton
+                  kind="group_lesson"
                   sessionId={nextGroupLesson!.id}
                   scheduledAt={nextGroupLesson!.scheduledAt}
                   durationMinutes={nextGroupLesson!.durationMinutes}
@@ -206,15 +224,16 @@ export default async function StudentDashboardPage() {
               </div>
               <div className={styles.sessionCoach}>
                 <FormattedDate value={nextSession.scheduled_at} />
-                {coachFirstName ? ` · with Coach ${coachFirstName}` : ""} ·{" "}
+                {nextSessionCoachFirstName ? ` · with Coach ${nextSessionCoachFirstName}` : ""} ·{" "}
                 {nextSession.duration_minutes} min
               </div>
-              {coach?.meet_link && (
+              {nextSessionCoach?.meet_link && (
                 <JoinButton
+                  kind="session"
                   sessionId={nextSession.id}
                   scheduledAt={nextSession.scheduled_at}
                   durationMinutes={nextSession.duration_minutes}
-                  meetLink={coach.meet_link}
+                  meetLink={nextSessionCoach.meet_link}
                 />
               )}
             </>

@@ -23,6 +23,7 @@ interface EventRow {
   actorName: string;
   method: string | null;
   session_id: string | null;
+  group_lesson_id: string | null;
   occurred_at: string;
 }
 
@@ -217,7 +218,9 @@ export default function ActivityLogClient() {
           {(rows as EventRow[]).map((r) => (
             <li key={r.id} className={styles.listItem} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>
-                <span className={styles.badge}>{r.event_type === "login" ? "Login" : "Join click"}</span>{" "}
+                <span className={styles.badge}>
+                  {r.event_type === "login" ? "Login" : r.group_lesson_id ? "Join click — Group lesson" : "Join click — Session"}
+                </span>{" "}
                 <strong>{r.actorName}</strong>
                 {r.method && <span className={styles.mutedText}> · {r.method.replace("_", " ")}</span>}
               </span>

@@ -34,6 +34,18 @@ export async function POST(req: NextRequest) {
     birthDate,
     billingAnniversaryDate,
     studentSinceOverride,
+    coachStartDateOverride,
+    phone,
+    gender,
+    addressStreet,
+    addressCity,
+    addressState,
+    addressZip,
+    addressCountry,
+    guardianName,
+    guardianRelationship,
+    guardianPhone,
+    guardianEmail,
   } = await req.json();
 
   if (!email || !name || !tier) {
@@ -71,6 +83,18 @@ export async function POST(req: NextRequest) {
     birthDate,
     billingAnniversaryDate,
     studentSinceOverride,
+    coachStartDateOverride,
+    phone,
+    gender,
+    addressStreet,
+    addressCity,
+    addressState,
+    addressZip,
+    addressCountry,
+    guardianName,
+    guardianRelationship,
+    guardianPhone,
+    guardianEmail,
   });
 
   if (!result.success) {

@@ -45,6 +45,21 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   const [startTime, setStartTime] = useState("16:00");
   const [startDate, setStartDate] = useState(todayLocal());
   const [creditExpiresAt, setCreditExpiresAt] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [billingStartDate, setBillingStartDate] = useState("");
+  const [studentSince, setStudentSince] = useState("");
+  const [coachSince, setCoachSince] = useState("");
+  const [phone, setPhone] = useState("");
+  const [gender, setGender] = useState("");
+  const [addressStreet, setAddressStreet] = useState("");
+  const [addressCity, setAddressCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [addressZip, setAddressZip] = useState("");
+  const [addressCountry, setAddressCountry] = useState("");
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianRelationship, setGuardianRelationship] = useState("");
+  const [guardianPhone, setGuardianPhone] = useState("");
+  const [guardianEmail, setGuardianEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -82,6 +97,21 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
         startTime: needsSchedule ? startTime : undefined,
         startDate: needsSchedule ? startDate : undefined,
         creditExpiresAt: needsCredit ? new Date(`${creditExpiresAt}T23:59:59`).toISOString() : undefined,
+        birthDate: birthDate || undefined,
+        billingAnniversaryDate: billingStartDate || undefined,
+        studentSinceOverride: studentSince || undefined,
+        coachStartDateOverride: coachSince || undefined,
+        phone: phone.trim() || undefined,
+        gender: gender.trim() || undefined,
+        addressStreet: addressStreet.trim() || undefined,
+        addressCity: addressCity.trim() || undefined,
+        addressState: addressState.trim() || undefined,
+        addressZip: addressZip.trim() || undefined,
+        addressCountry: addressCountry.trim() || undefined,
+        guardianName: guardianName.trim() || undefined,
+        guardianRelationship: guardianRelationship.trim() || undefined,
+        guardianPhone: guardianPhone.trim() || undefined,
+        guardianEmail: guardianEmail.trim() || undefined,
       }),
     });
 

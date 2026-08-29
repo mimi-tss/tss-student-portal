@@ -8,11 +8,16 @@ import styles from "../../student.module.css";
 const EARLY_JOIN_MINUTES = 10;
 
 export default function JoinButton({
+  kind,
   sessionId,
   scheduledAt,
   durationMinutes,
   meetLink,
 }: {
+  // Which table sessionId refers to — the join-click endpoint checks
+  // ownership against a different table for each, and the resulting
+  // activity_events row is tagged accordingly.
+  kind: "session" | "group_lesson";
   sessionId: string;
   scheduledAt: string;
   durationMinutes: number;
@@ -39,7 +44,7 @@ export default function JoinButton({
     // sendBeacon fires without waiting for a response, so it can't
     // delay the tab opening below it.
     try {
-      const payload = new Blob([JSON.stringify({ sessionId })], { type: "application/json" });
+      const payload = new Blob([JSON.stringify({ sessionId, kind })], { type: "application/json" });
       navigator.sendBeacon("/api/student/join-click", payload);
     } catch {
       // never block the actual join action over a logging failure
