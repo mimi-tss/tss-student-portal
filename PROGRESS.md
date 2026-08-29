@@ -1528,12 +1528,9 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0063 not yet confirmed applied** —
-`supabase/migrations/0063_recurring_coach_blocks.sql` adds the
-`recurring_coach_blocks` table and a `recurring_coach_block_id` column
-on `coach_blocks`, for the new recurring time-off feature (Team
-Huddle, per-coach lunch/dinner breaks). Until this runs, adding a
-recurring block will error outright (table doesn't exist).
+**Migration 0063 confirmed applied** (2026-08-28) — the recurring
+coach time-off feature (Team Huddle, per-coach lunch/dinner breaks) is
+live.
 
 **New migration 0062 not yet confirmed applied** —
 `supabase/migrations/0062_fix_attention_items_duplication.sql` cleans
