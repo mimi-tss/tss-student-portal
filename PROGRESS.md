@@ -3,6 +3,65 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recurring coach time-off blocks (2026-08-28)
+
+You asked for standing weekly blocks: Team Huddle every Monday 10:30am
+ET for every coach, plus per-coach ones like Celine's lunch or Nikki's
+dinner. New `recurring_coach_blocks` table (migration
+[0063_recurring_coach_blocks.sql](supabase/migrations/0063_recurring_coach_blocks.sql)) —
+`coach_id` nullable means "every currently-active coach," re-expanded
+on every materialize run so a newly added coach picks up Team Huddle
+automatically. `timezone` is explicit per rule rather than derived,
+since the two cases genuinely differ: a coach's own lunch break is
+wall-clock in *their* zone, but "10:30am ET" is one fixed time the
+whole team shares regardless of each coach's own zone.
+
+[lib/coach-blocks.ts](lib/coach-blocks.ts)'s `materializeRecurringCoachBlocks`
+reuses the exact materialize-forward pattern `materializeRecurringSessions`/
+`materializeRecurringGroupLessons` already use — critically, it writes
+into the *existing* `coach_blocks` table, so every consumer that
+already reads it (booking slot generation, coach/admin calendars, the
+dashboard's upcoming-blocks list, coach utilization metrics) respects
+recurring blocks with zero changes. Wired into the daily cron
+([materialize-recurring/route.ts](app/api/cron/materialize-recurring/route.ts)),
+ordered before session/group-lesson materialization. Stopping a rule
+(`deactivateRecurringCoachBlockRule`) deletes its future,
+not-yet-started materialized blocks — deliberately different from how
+stopping a recurring group-lesson series leaves future occurrences
+alone (students have registered there; nothing analogous is true of a
+block, which only ever removes availability, so leaving stale ones
+around after the rule is stopped would just waste coach time).
+
+UI: new [add-recurring-coach-block-form.tsx](components/add-recurring-coach-block-form.tsx),
+rendered alongside the existing one-off `AddCoachBlockForm` in the
+same "Time off" modal (`all-coaches-day-client.tsx`) rather than a
+mode toggle on that form — its own comment already states a
+deliberate "always visible, nothing structurally different" simplicity
+for one-off blocks that a recurring rule's different shape (day/time/
+duration, no end date, an "all coaches" checkbox) didn't fit cleanly
+into.
+
+Also closed a real gap this surfaced: nothing previously stopped an
+admin from setting a student's recurring 1:1 schedule directly on top
+of a block — `/api/admin/recurring-schedule/route.ts` only ever
+checked working hours. Added a check there (next occurrence overlaps
+any `coach_blocks` row → 409) right next to the existing working-hours
+gate. **Known remaining gap, deliberately not fixed here** — scope
+call, not an oversight: `materializeRecurringSessions` itself still
+doesn't check `coach_blocks` when generating future weeks for an
+*already-existing* recurring schedule, so if a block is added after a
+student's schedule already exists, sessions could keep generating
+into it going forward. Fixing that touches the core session-generation
+engine for every student, not just the new-block-at-set-time path —
+worth a dedicated look, not a bolt-on to this feature.
+
+Verified via `tsc`/`next build` (clean) and an interactive mock
+(scratchpad) since no live login exists in this environment: the
+add/all-coaches-toggle/stop interactions produce the exact right
+request payloads, and the materialize math (re-implementing
+`nextWeeklySlotInstant`) checked out for "Monday 10:30 ET" converted
+correctly across ET/CT/MT/PT coaches.
+
 ## CSV import: added coach_since column (2026-08-28)
 
 You asked whether "with coach since" (`coach_start_date_override`) needs
@@ -1468,6 +1527,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0063 not yet confirmed applied** —
+`supabase/migrations/0063_recurring_coach_blocks.sql` adds the
+`recurring_coach_blocks` table and a `recurring_coach_block_id` column
+on `coach_blocks`, for the new recurring time-off feature (Team
+Huddle, per-coach lunch/dinner breaks). Until this runs, adding a
+recurring block will error outright (table doesn't exist).
 
 **New migration 0062 not yet confirmed applied** —
 `supabase/migrations/0062_fix_attention_items_duplication.sql` cleans

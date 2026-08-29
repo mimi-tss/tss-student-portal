@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import {
+  materializeRecurringSessions,
+  slotFitsWorkingHours,
+  nextWeeklySlotInstant,
+} from "@/lib/scheduling/recurring";
 
 // Admin sets a student's recurring weekly lesson slot (spec sections 4/5)
 // — the only way a student's regular sessions get scheduled; students
@@ -71,7 +75,7 @@ export async function POST(req: NextRequest) {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("working_hours")
+    .select("working_hours, timezone")
     .eq("id", effectiveCoachId)
     .single();
 
@@ -80,6 +84,34 @@ export async function POST(req: NextRequest) {
   ) {
     return NextResponse.json(
       { error: "that time falls outside the coach's working hours" },
+      { status: 409 },
+    );
+  }
+
+  // Catches the common case — a standing Team Huddle or a coach's own
+  // recurring lunch break (both just coach_blocks rows once
+  // materialized, see lib/coach-blocks.ts) — by checking whether the
+  // very NEXT occurrence of this new slot overlaps one. Since both the
+  // new schedule and a recurring block repeat the same weekly pattern,
+  // a conflict on the next occurrence means every future one conflicts
+  // too, so one check is enough without walking the full horizon. A
+  // one-time vacation block that only happens to land on the very next
+  // occurrence would also (correctly) get caught here, and would just
+  // as correctly stop conflicting once that block passes — a false
+  // negative for weeks 2+ in that narrow case, not a false positive.
+  const nextInstant = nextWeeklySlotInstant(dayOfWeek, startTime, coach?.timezone ?? "America/New_York");
+  const nextInstantEnd = new Date(nextInstant.getTime() + durationMinutes * 60000);
+  const { data: conflictingBlock } = await supabase
+    .from("coach_blocks")
+    .select("id")
+    .eq("coach_id", effectiveCoachId)
+    .lt("start_at", nextInstantEnd.toISOString())
+    .gt("end_at", nextInstant.toISOString())
+    .maybeSingle();
+
+  if (conflictingBlock) {
+    return NextResponse.json(
+      { error: "that time is blocked off on the coach's calendar (e.g. a standing meeting or break)" },
       { status: 409 },
     );
   }

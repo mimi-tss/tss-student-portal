@@ -3,11 +3,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { autoResumeExpiredPauses, materializeRecurringSessions } from "@/lib/scheduling/recurring";
 import { materializeRecurringGroupLessons } from "@/lib/group-lessons";
 import { forfeitHolidaySessions } from "@/lib/scheduling/holidays";
+import { materializeRecurringCoachBlocks } from "@/lib/coach-blocks";
 
 // Daily top-up: ensures every active recurring schedule has real
-// `sessions` rows out to the horizon (lib/scheduling/recurring.ts), and
+// `sessions` rows out to the horizon (lib/scheduling/recurring.ts),
 // every active recurring group lesson series has real `group_lessons`
-// rows out to the same horizon (lib/group-lessons.ts). Folded into one
+// rows out to the same horizon (lib/group-lessons.ts), and every
+// active recurring coach-block rule (Team Huddle, a coach's standing
+// lunch break) has real `coach_blocks` rows out to the same horizon
+// (lib/coach-blocks.ts) — run before session/group-lesson
+// materialization so a newly-added or newly-changed block exists
+// before anything else gets generated in the same pass. Folded into one
 // cron run rather than standing up a second scheduled workflow — runs
 // via GitHub Actions, same pattern as kajabi-sync (see that route's
 // comment for why: Vercel Hobby only allows a daily cron per job, and
@@ -33,12 +39,14 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const resumed = await autoResumeExpiredPauses(admin);
   const holidayForfeit = await forfeitHolidaySessions(admin);
+  const coachBlockResult = await materializeRecurringCoachBlocks(admin);
   const result = await materializeRecurringSessions(admin);
   const groupLessonResult = await materializeRecurringGroupLessons(admin);
 
   return NextResponse.json({
     resumed,
     ...holidayForfeit,
+    coachBlocksCreated: coachBlockResult.created,
     ...result,
     groupLessonsCreated: groupLessonResult.created,
   });

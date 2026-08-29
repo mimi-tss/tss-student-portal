@@ -16,6 +16,7 @@ import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { useTimeZone } from "@/components/timezone-context";
 import { FormattedDateTime } from "@/components/formatted-time";
 import AddCoachBlockForm from "@/components/add-coach-block-form";
+import AddRecurringCoachBlockForm from "@/components/add-recurring-coach-block-form";
 import CoachCalendar from "@/components/coach-calendar";
 import AdminCancelButtons from "../students/[studentId]/admin-cancel-buttons";
 import { formatPlainDate } from "@/lib/format-date";
@@ -790,6 +791,12 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                 await refetchSchedules();
                 setPanel(null);
               }}
+            />
+            <AddRecurringCoachBlockForm
+              coachId={panel.coachId}
+              coachName={panel.coachName}
+              coachTimeZone={coaches.find((c) => c.id === panel.coachId)?.timezone ?? null}
+              onAdded={refetchSchedules}
             />
           </div>
         </ModalOverlay>
