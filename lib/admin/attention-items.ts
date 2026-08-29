@@ -87,28 +87,22 @@ export async function createAttentionItem(
   });
 }
 
-// Condition-driven kinds: only creates one if no unresolved item of the
-// same kind+student already exists — resolving one lets a fresh instance
-// of the same condition be tracked again later (e.g. a different credit
-// expiring), but doesn't spam a duplicate for the exact same still-open one.
+// Condition-driven kinds: creates one only the first time this
+// kind+student is ever seen, in ANY status — resolving (or moving to
+// in_progress) sticks even if the underlying condition is still true,
+// per 0035's own header comment. Relies on the partial unique index
+// from migration 0062 (student_id, kind) scoped to just these 6 kinds;
+// upsert+ignoreDuplicates makes this atomic under concurrent reads
+// instead of the old check-then-insert, which had a race window that
+// let concurrent page loads each create their own duplicate.
 async function createIfNew(
   supabase: SupabaseClient,
   input: { kind: AttentionKind; studentId: string; summary: string },
 ) {
-  const { data: existing } = await supabase
-    .from("attention_items")
-    .select("id")
-    .eq("kind", input.kind)
-    .eq("student_id", input.studentId)
-    .in("status", ["needs_action", "in_progress"])
-    .maybeSingle();
-  if (existing) return;
-
-  await supabase.from("attention_items").insert({
-    kind: input.kind,
-    student_id: input.studentId,
-    summary: input.summary,
-  });
+  await supabase.from("attention_items").upsert(
+    { kind: input.kind, student_id: input.studentId, summary: input.summary },
+    { onConflict: "student_id,kind", ignoreDuplicates: true },
+  );
 }
 
 const EXPIRING_WITHIN_DAYS = 5;

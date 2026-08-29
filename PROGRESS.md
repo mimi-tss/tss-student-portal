@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fix Needs Review duplicating condition-driven items (2026-08-28)
+
+You reported marking "Test Customer"/"Ambassador Test" resolved or
+in-progress didn't remove them from Needs Action — instead the count
+climbed to 42 duplicates of the same two students. Root cause:
+`createIfNew()` in [attention-items.ts](lib/admin/attention-items.ts)
+only checked `needs_action`/`in_progress` for an existing row, so
+resolving a condition-driven item (like "inactive 10+ days") whose
+condition is still true — true forever for a permanently-inactive test
+account — let the very next page read recreate it, contradicting
+migration 0035's own stated intent ("resolving it sticks... never
+re-creates a duplicate"). The up-to-4 concurrent reads this page fires
+per interaction compounded it, since the old check-then-insert had a
+race window each of those could independently slip through.
+
+[0062_fix_attention_items_duplication.sql](supabase/migrations/0062_fix_attention_items_duplication.sql)
+collapses existing duplicates (keeping the most-progressed status per
+student+kind, not a fresh dupe) and adds a partial unique index over
+just the 6 condition-driven kinds — event-driven kinds like
+`no_show_1/2/3` still legitimately recur, untouched. `createIfNew` now
+upserts against that index with `ignoreDuplicates: true`, atomic under
+concurrent reads instead of racy check-then-insert.
+
 ## Group lessons: register a student for a whole recurring series at once (2026-08-28)
 
 You asked to keep the existing per-class Register button (drop-ins) but
@@ -1351,6 +1374,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0062 not yet confirmed applied** —
+`supabase/migrations/0062_fix_attention_items_duplication.sql` cleans
+up the "Needs Action (42)" duplication bug and adds a unique index
+that prevents it recurring. Until this runs, the dedup fix in
+`lib/admin/attention-items.ts` will hit the old data (still 42 rows)
+and the app-side `upsert(..., { onConflict: "student_id,kind" })` call
+will actually ERROR — there's no matching unique constraint on the
+live DB yet for Postgres to conflict against. Run 0062 before using
+Needs Review again.
 
 **New migration 0061 not yet confirmed applied** — 0060 didn't
 actually fix the makeup_credits recursion; it hit a *different*,
