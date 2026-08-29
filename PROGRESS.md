@@ -1976,15 +1976,11 @@ Guardian) will fail outright (columns don't exist), and pinning a
 staff note will silently no-op under RLS. Run both before relying on
 this feature. See the "Student migration fields" entry above.
 
-**New migration 0072 not yet confirmed applied** (`0072_fix_delete_student_permanently_profile_order.sql`
-— renumbered from an initial 0070, which a concurrent session
-independently claimed for the contact/guardian-info migration above) —
-fixes a third real failure (`students_profile_id_fkey` violation) found
-retesting 0069, see the "a third real failure, same class of bug" entry
-above. Redefines the same function again (`create or replace`), no
-route changes. **Please retest Delete once more after applying this
-one** — this is the third fix in a row found only by actually running
-it, so treat each retest as still load-bearing, not a formality.
+**Migration 0072 confirmed applied** (2026-08-28) — retested Delete
+again after this one and it succeeded. `delete_student_permanently()`
+has now been exercised live across three rounds of real bugs
+(entitlements/recurring-schedule ordering in 0069, profiles ordering in
+0072) with no further failures reported.
 
 **Migration 0069 confirmed applied** (2026-08-28) — retested Delete on a
 disposable student with a trial entitlement and a recurring schedule
