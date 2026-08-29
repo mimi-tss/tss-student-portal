@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Students page: collapsed the Add form, simplified the CSV hint text (2026-08-28)
+
+Two readability fixes you asked for on the Students page.
+
+**"Add ambassador / manual student" now starts collapsed** behind an
+"Add a new student" button, same pattern as "Import students from CSV"
+right below it — was always fully expanded before, taking up the whole
+top of the page regardless of whether anyone was using it.
+([provision-student-client.tsx](app/(admin)/admin/dashboard/provision-student-client.tsx))
+
+**CSV import hint text rewritten** — the old version was one dense
+paragraph mixing plain English with raw column names
+(`day_of_week`/`coach_since`/`address_*`/`guardian_*`) and buried the
+most important behavior (re-uploading an existing student's email
+backfills their contact info instead of creating a duplicate) at the
+end of a run-on sentence. Now a short bulleted list in plain language;
+still names the handful of columns someone actually has to think about
+(coach, day/time pairing, coach-since needing a coach), but drops the
+column-name-as-prose style everywhere else.
+([import-students-client.tsx](app/(admin)/admin/dashboard/import-students-client.tsx))
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Student migration fields: address, phone, gender, guardian info (2026-08-28)
 
 Migrating students in from the old system (Opus1/Kajabi export) surfaced

@@ -33,6 +33,7 @@ function todayLocal() {
 // row itself is created, same as before this existed.
 export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [tier, setTier] = useState("suite");
@@ -92,6 +93,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       setAmbassador(false);
       setLessonType("none");
       setCreditExpiresAt("");
+      setOpen(false);
       router.refresh();
     } else {
       const body = await res.json().catch(() => ({}));
@@ -99,9 +101,24 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
     }
   }
 
+  if (!open) {
+    return (
+      <div className={styles.panel}>
+        <button onClick={() => setOpen(true)} className={styles.linkBtn}>
+          Add a new student
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className={styles.panel}>
-      <h2>Add ambassador / manual student</h2>
+      <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>Add ambassador / manual student</h2>
+        <button type="button" className={styles.linkBtnSmall} onClick={() => setOpen(false)}>
+          Close
+        </button>
+      </div>
       <div className={styles.rowForm}>
         <div className={styles.field}>
           <label>Name</label>

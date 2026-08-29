@@ -89,16 +89,18 @@ export default function ImportStudentsClient() {
   return (
     <div className={styles.panel}>
       <h2>Import students from CSV</h2>
-      <p className={styles.mutedText}>
-        Only name, email, and tier are required — everything else can be left blank.{" "}
-        <code>coach</code> matches by email or exact name; <code>day_of_week</code> and{" "}
-        <code>start_time</code> must be set together or both left blank.{" "}
-        <code>coach_since</code> requires a coach to be set too. If a row&apos;s email already
-        belongs to an existing student, that row backfills <code>phone</code>/<code>gender</code>/
-        the <code>address_*</code>/<code>guardian_*</code> columns onto them instead of creating a
-        new student — only fields currently blank get filled in, nothing already entered gets
-        overwritten, and every other column on that row (tier, coach, schedule, etc.) is ignored.
-      </p>
+      <ul className={styles.mutedText} style={{ margin: "0 0 8px", paddingLeft: 20 }}>
+        <li>Name, email, and tier are the only required columns — leave the rest blank if you don't have them.</li>
+        <li>For coach, use their email (safest) or their exact name.</li>
+        <li>To set a weekly lesson time, fill in both day and start time — not just one.</li>
+        <li>If you fill in a coach-since date, also fill in the coach column.</li>
+        <li>
+          If a row's email matches a student who's already in the system, nothing new is
+          created — instead, any blank contact info (phone, address, guardian, etc.) on their
+          existing record gets filled in from that row. Anything they already have stays as-is,
+          and the rest of that row (tier, coach, schedule) is ignored.
+        </li>
+      </ul>
       <div>
         <button type="button" onClick={downloadTemplate} className={styles.linkBtnSmall}>
           Download CSV template
