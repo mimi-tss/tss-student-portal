@@ -3,6 +3,25 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## "Add a new student" form was missing every field the CSV importer already has (2026-08-28)
+
+You noticed the manual single-student form didn't match what CSV
+import collects — `provisionStudent()` ([lib/admin/provision-student.ts](lib/admin/provision-student.ts))
+already accepted all of it (birth date, billing start date, student
+since, coach since, phone, gender, full address, guardian name/
+relationship/phone/email — added earlier this session for the CSV
+path), but neither
+[provision-student/route.ts](app/api/admin/provision-student/route.ts)
+passed most of them through, nor did
+[provision-student-client.tsx](app/(admin)/admin/dashboard/provision-student-client.tsx)
+have inputs for them at all. Added both — two new grouped, optional
+sections ("Dates" and "Contact & guardian info") below the existing
+fields, same 15 fields the CSV template has. No new backend work needed
+since the plumbing already existed for the CSV path; this was purely
+wiring the same capability into the other entry point.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Join meet link always used the student's assigned coach, not the actual one (2026-08-28)
 
 You flagged this directly: the meet link should follow whoever is

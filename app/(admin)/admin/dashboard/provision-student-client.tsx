@@ -123,6 +123,21 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       setAmbassador(false);
       setLessonType("none");
       setCreditExpiresAt("");
+      setBirthDate("");
+      setBillingStartDate("");
+      setStudentSince("");
+      setCoachSince("");
+      setPhone("");
+      setGender("");
+      setAddressStreet("");
+      setAddressCity("");
+      setAddressState("");
+      setAddressZip("");
+      setAddressCountry("");
+      setGuardianName("");
+      setGuardianRelationship("");
+      setGuardianPhone("");
+      setGuardianEmail("");
       setOpen(false);
       router.refresh();
     } else {
@@ -269,6 +284,95 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
           </div>
         </div>
       )}
+
+      <h3 style={{ margin: "16px 0 0", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Dates (optional)
+      </h3>
+      <div className={styles.rowForm} style={{ marginTop: 10 }}>
+        <div className={styles.field}>
+          <label>Birthday</label>
+          <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Billing start date</label>
+          <input
+            type="date"
+            value={billingStartDate}
+            onChange={(e) => setBillingStartDate(e.target.value)}
+            className={styles.input}
+          />
+        </div>
+        <div className={styles.field}>
+          <label>Student since</label>
+          <input type="date" value={studentSince} onChange={(e) => setStudentSince(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Coach since</label>
+          <input type="date" value={coachSince} onChange={(e) => setCoachSince(e.target.value)} className={styles.input} />
+        </div>
+      </div>
+
+      <h3 style={{ margin: "16px 0 0", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Contact &amp; guardian info (optional)
+      </h3>
+      <div className={styles.rowForm} style={{ marginTop: 10 }}>
+        <div className={styles.field}>
+          <label>Phone</label>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Gender</label>
+          <input value={gender} onChange={(e) => setGender(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Street</label>
+          <input value={addressStreet} onChange={(e) => setAddressStreet(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>City</label>
+          <input value={addressCity} onChange={(e) => setAddressCity(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>State</label>
+          <input value={addressState} onChange={(e) => setAddressState(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Zip</label>
+          <input value={addressZip} onChange={(e) => setAddressZip(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Country</label>
+          <input value={addressCountry} onChange={(e) => setAddressCountry(e.target.value)} className={styles.input} />
+        </div>
+      </div>
+      <div className={styles.rowForm} style={{ marginTop: 10 }}>
+        <div className={styles.field}>
+          <label>Guardian name</label>
+          <input value={guardianName} onChange={(e) => setGuardianName(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Guardian relationship</label>
+          <input
+            value={guardianRelationship}
+            onChange={(e) => setGuardianRelationship(e.target.value)}
+            placeholder="e.g. Mother, Father"
+            className={styles.input}
+          />
+        </div>
+        <div className={styles.field}>
+          <label>Guardian phone</label>
+          <input value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>Guardian email</label>
+          <input
+            type="email"
+            value={guardianEmail}
+            onChange={(e) => setGuardianEmail(e.target.value)}
+            className={styles.input}
+          />
+        </div>
+      </div>
 
       <button type="submit" disabled={saving} className={styles.cta} style={{ marginTop: 12 }}>
         {saving ? "Adding…" : "Add"}
