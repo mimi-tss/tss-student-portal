@@ -180,6 +180,7 @@ export default async function StudentDashboardPage() {
               </div>
               {coach?.meet_link && (
                 <JoinButton
+                  sessionId={nextSession.id}
                   scheduledAt={nextSession.scheduled_at}
                   durationMinutes={nextSession.duration_minutes}
                   meetLink={coach.meet_link}

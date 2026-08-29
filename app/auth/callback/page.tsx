@@ -32,7 +32,18 @@ function CallbackHandler() {
     }
 
     const supabase = createClient();
-    supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+    supabase.auth.setSession({ access_token, refresh_token }).then(({ data, error }) => {
+      // Fire-and-forget, not awaited before the redirect — same detached
+      // pattern as issueAndSendLoginLink in the Kajabi login route. A
+      // failed log write shouldn't block or delay signing the user in.
+      if (!error && data.session?.user) {
+        supabase
+          .from("activity_events")
+          .insert({ event_type: "login", actor_id: data.session.user.id, method: "magic_link" })
+          .then(({ error: logError }) => {
+            if (logError) console.error("login event log failed", logError);
+          });
+      }
       router.replace(error ? "/login?error=session_failed" : redirectTo);
     });
   }, [router, searchParams]);

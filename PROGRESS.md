@@ -3,6 +3,94 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Activity / audit log (2026-08-28)
+
+You asked for a log of "everyone's movement" — logins, data changes
+(email/tier being the examples you gave), and specifically whether a
+student actually clicked Join, to settle "I was waiting and no one
+showed" disputes. You also asked whether it'd slow the app down and
+floated hosting it externally instead.
+
+**Data changes** — [0064_audit_log.sql](supabase/migrations/0064_audit_log.sql)
+adds a generic `audit_log` table plus a `security definer` trigger
+function attached to 8 disputable tables (`students`, `coaches`,
+`recurring_schedules`, `coach_blocks`, `recurring_coach_blocks`,
+`makeup_credits`, `sessions`, `student_requests`). Chose a Postgres
+trigger over instrumenting routes individually because there are 46
+write-site API routes with no centralized data-access layer — a
+per-route approach would be fragile and already misses a real case:
+the Kajabi webhook silently overwrites `students.email`/`tier` via
+upsert, which a route-by-route audit would need to remember to cover
+separately. The trigger captures every write regardless of which code
+path made it. Actor is `auth.uid()`, called directly inside the
+trigger — verified this resolves correctly by confirming this exact
+codebase already relies on the identical mechanism
+(`auth_student_id()`/`is_admin()` in migration 0007, both `security
+definer` + `auth.uid()`, called from ordinary `supabase-js` requests
+throughout existing RLS policies). No extra plumbing needed in any of
+the 46 routes. Service-role writes (webhook, cron) correctly log a
+null actor, rendered as "System" in the UI. No-op UPDATEs (a save that
+re-writes identical values, or only bumps `updated_at`) are skipped so
+the log stays signal, not noise.
+
+**Logins + join-clicks** — [0065_activity_events.sql](supabase/migrations/0065_activity_events.sql)
+adds a separate `activity_events` table (different shape — app-logged
+events, not row diffs). Login capture added at both places a login
+actually completes: `app/auth/callback/page.tsx` (magic-link flow,
+after `setSession()`) and
+[verify-login-code/route.ts](app/api/auth/verify-login-code/route.ts)
+(the 6-digit-code flow, after `verifyOtp`) — both fire-and-forget,
+matching the existing detached `.catch()` pattern already used by
+`issueAndSendLoginLink` in the Kajabi login route, not Slack's
+awaited-but-caught pattern (which still costs latency). Join-click
+tracking is genuinely new — [join-button.tsx](<app/(student)/student/dashboard/join-button.tsx>)
+was a bare `<a>` with zero tracking before this; it now fires
+`navigator.sendBeacon` to a new
+[join-click](app/api/student/join-click/route.ts) route on click,
+non-blocking so it can't delay the tab opening. Evidence-strength
+caveat worth remembering: **absence** of a join-click row is strong
+evidence ("no record they ever attempted to join"); **presence** is
+good but not cryptographic (a determined student could POST directly)
+— fine for the dispute case this was built for, just not unconditional
+proof.
+
+**Performance/hosting** — confirmed with you directly: kept this
+in-app rather than a separate tool. The write cost (trigger firing per
+change) happens inside Postgres in the same transaction as the write
+regardless of which frontend issued it, so a separate viewer wouldn't
+reduce that cost at all — it would only add a second Supabase
+credential exposure surface and a second deployment to maintain, for
+no offsetting benefit at this app's scale (single studio,
+dozens-to-low-hundreds of students).
+
+**Viewing UI** — new admin-only [Activity Log](app/(admin)/admin/activity-log)
+page (`requireRole` already covers it via the `(admin)` layout, no
+page-level re-check needed — confirmed other non-Finance admin pages
+don't self-check either), linked in the nav. Two tabs backed by
+independently-paginated API views (`?view=changes|events`) rather than
+one merged feed — `audit_log` and `activity_events` are differently
+shaped, and cross-table keyset pagination wasn't worth it for the UX
+gain at this scale. Data Changes tab shows an expandable field-level
+diff (`tier: "suite" → "pro"`) via
+[diff-summary.ts](lib/admin/diff-summary.ts) rather than raw JSON
+blobs. Actor names resolved via
+[resolve-actor-names.ts](lib/admin/resolve-actor-names.ts) — `profiles`
+itself has no name/email, so students/coaches resolve through their
+own tables and admin/admin_finance falls back to `auth.users` email.
+
+No retention/pruning added — at this studio's real scale even years of
+accumulation is trivial against Supabase's free-tier cap, and Vercel
+Hobby's one daily cron slot stays reserved for `materialize-recurring`.
+A manual prune button is the right fallback if this is ever actually
+needed.
+
+Verified via `tsc`/`next build` (clean) and an interactive mock
+(scratchpad, no live login in this environment) — confirmed tab
+switching, filters, the "System" actor rendering for a null-actor row,
+and the diff view correctly showing only the field that changed
+(`tier`) while excluding the unchanged one (`email`) from the same
+fixture row.
+
 ## Fixed "Add coach"/"Add student" feeling stuck: stopped blocking on email send (2026-08-28)
 
 You hit this live — "Add coach" sat on "Adding…" for several seconds
@@ -1566,6 +1654,18 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migrations 0064 and 0065 not yet confirmed applied** —
+`supabase/migrations/0064_audit_log.sql` (the `audit_log` table +
+trigger) and `0065_activity_events.sql` (the `activity_events` table
+for logins/join-clicks) are the new Activity Log feature. Until these
+run: the trigger doesn't exist so no data changes get logged at all
+(existing writes still work fine, they just won't error — the trigger
+simply isn't there yet); login/join-click inserts will fail silently
+(fire-and-forget, errors only hit the server console) since
+`activity_events` doesn't exist; and the new Activity Log admin page
+will show empty/erroring results. Run both, in order, before relying
+on this feature.
 
 **Migration 0063 confirmed applied** (2026-08-28) — the recurring
 coach time-off feature (Team Huddle, per-coach lunch/dinner breaks) is

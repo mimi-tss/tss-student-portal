@@ -29,6 +29,7 @@ const LINKS = [
 const MORE_LINKS = [
   { href: "/admin/exercises", label: "Exercises", icon: "♪", financeOnly: false },
   { href: "/admin/group-lessons", label: "Group Lessons", icon: "◫", financeOnly: false },
+  { href: "/admin/activity-log", label: "Activity Log", icon: "▤", financeOnly: false },
   { href: "/admin/finance", label: "Finance", icon: "$", financeOnly: true },
   { href: "/admin/reports", label: "Reports", icon: "◧", financeOnly: true },
 ];

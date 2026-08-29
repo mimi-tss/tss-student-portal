@@ -52,13 +52,24 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { error: verifyError } = await supabase.auth.verifyOtp({
+  const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
     token_hash: linkData.properties.hashed_token,
     type: "magiclink",
   });
 
   if (verifyError) {
     return NextResponse.json({ error: "Something went wrong creating your session — try again." }, { status: 500 });
+  }
+
+  // Fire-and-forget, not awaited — a failed log write shouldn't hold up
+  // the response or fail an otherwise-successful login.
+  if (verifyData.user) {
+    supabase
+      .from("activity_events")
+      .insert({ event_type: "login", actor_id: verifyData.user.id, method: "login_code" })
+      .then(({ error: logError }) => {
+        if (logError) console.error("login event log failed", logError);
+      });
   }
 
   return NextResponse.json({ redirectUrl: account.redirectPath });

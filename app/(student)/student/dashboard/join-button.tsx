@@ -8,10 +8,12 @@ import styles from "../../student.module.css";
 const EARLY_JOIN_MINUTES = 10;
 
 export default function JoinButton({
+  sessionId,
   scheduledAt,
   durationMinutes,
   meetLink,
 }: {
+  sessionId: string;
   scheduledAt: string;
   durationMinutes: number;
   meetLink: string;
@@ -32,8 +34,20 @@ export default function JoinButton({
 
   if (!visible) return null;
 
+  function handleClick() {
+    // Best-effort dispute evidence ("did they actually click Join") —
+    // sendBeacon fires without waiting for a response, so it can't
+    // delay the tab opening below it.
+    try {
+      const payload = new Blob([JSON.stringify({ sessionId })], { type: "application/json" });
+      navigator.sendBeacon("/api/student/join-click", payload);
+    } catch {
+      // never block the actual join action over a logging failure
+    }
+  }
+
   return (
-    <a href={meetLink} target="_blank" rel="noopener noreferrer" className={styles.joinBtn}>
+    <a href={meetLink} target="_blank" rel="noopener noreferrer" className={styles.joinBtn} onClick={handleClick}>
       Join session
     </a>
   );
