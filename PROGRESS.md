@@ -3,6 +3,79 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Wire remaining raw date/time displays to the global timezone selector (2026-08-28)
+
+You reported the Group Lessons "Upcoming group lessons" list didn't
+follow the global timezone switch, even though the calendar did.
+Root cause: it used raw `new Date(x).toLocaleString()`, which reads
+the *browser's* local zone, not the app's shared `useTimeZone()`
+context ([components/formatted-time.tsx](components/formatted-time.tsx),
+the intended drop-in for this everywhere). Audited the whole repo for
+the same pattern (`grep -rln "toLocaleString\|toLocaleDateString"`) and
+fixed every other genuine offender, not just the one reported:
+[group-lessons-client.tsx](<app/(admin)/admin/group-lessons/group-lessons-client.tsx>)
+(the reported one), 4 spots in
+[all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+(Cancel/Book/Block modal headers + a credit-expiry `<option>`, which
+can't hold a component so it uses `formatDateInZone` directly instead
+of `<FormattedDateTime>`), 2 in
+[finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>),
+and the coach dashboard's "with you since" month/year label in
+[dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>).
+
+Left three call sites alone, deliberately:
+- `components/coach-calendar.tsx` — already correct; it round-trips a
+  timezone-already-resolved date *key* through the browser's own local
+  zone symmetrically (construct-local, read-local), not a genuine
+  instant, so it's zone-neutral by construction.
+- `app/(student)/student/book/booking-client.tsx` — already passes
+  `timeZone: timezone` from `useTimeZone()`, a false positive in the grep.
+- `app/(admin)/admin/overview/page.tsx`'s "next session" time — already
+  intentionally pinned to `DEFAULT_TIMEZONE` (Eastern) per its own
+  header comment, citing TSS_App_Spec_1.md section 8's "admin's
+  coach-schedule view is always normalized to Eastern" convention. Its
+  *`todayLabel`* was an unintentional gap in that same convention (no
+  timeZone at all, so it fell back to raw browser-local) — fixed that
+  one to match the page's own stated Eastern-anchor rule, not switched
+  to the global selector, so the page stays internally consistent with
+  itself.
+
+## Group lessons: series roster + remove registrations (2026-08-28)
+
+Follow-up to the same-day "register for whole series" feature — you
+pointed out there was no way to see who's registered across a series
+(only per individual class), and no way to remove a registration at all.
+
+`getRecurringSeriesRoster()` ([lib/group-lessons.ts](lib/group-lessons.ts))
+collapses every future, non-cancelled occurrence's registrations to one
+row per student (name + how many upcoming classes they're in) — same
+occurrence-finding query as `registerStudentInRecurringSeries`, reused
+rather than reinvented. New GET
+[roster/route.ts](app/api/admin/group-lessons/roster/route.ts). Shown
+directly under each Recurring Series card (`SeriesRegisterControl`,
+[group-lessons-client.tsx](<app/(admin)/admin/group-lessons/group-lessons-client.tsx>))
+— no click needed to see it, per your "it doesn't list the registrants"
+note — with a "Remove from series" button per student.
+
+Two removal paths, matching the two registration paths from earlier:
+- **Whole series**: `unregisterStudentFromRecurringSeries()` deletes
+  that student's `registered`-status rows across every future occurrence
+  in one call. New DELETE on
+  [register-series/route.ts](app/api/admin/group-lessons/register-series/route.ts).
+- **Single class**: `unregisterStudentFromGroupLesson()` deletes one
+  registration row. New DELETE on the existing
+  [register/route.ts](app/api/admin/group-lessons/register/route.ts).
+  A "Remove" link now sits next to each attendee on the individual
+  "Upcoming Group Lessons" cards too.
+
+Both are scoped to `status: "registered"` rows only — an `attended` or
+`no-show` row is real history, and there's deliberately no UI path to
+delete one (matches the existing soft-cancel posture from migration
+0043, not a hard-delete-everything button). No migration needed — pure
+application logic on the existing schema, admin's existing "for all"
+policy on `group_lesson_registrations` already covers the deletes.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Fix Needs Review duplicating condition-driven items (2026-08-28)
 
 You reported marking "Test Customer"/"Ambassador Test" resolved or

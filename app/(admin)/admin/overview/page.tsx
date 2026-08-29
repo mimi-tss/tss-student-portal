@@ -99,6 +99,7 @@ export default async function AdminOverviewPage() {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: DEFAULT_TIMEZONE,
   });
 
   const total = stats.activeStudents || 1;

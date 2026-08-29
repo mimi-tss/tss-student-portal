@@ -9,10 +9,12 @@ import {
   zonedDayKey,
   zonedYearMonthDay,
   timezoneAbbreviation,
+  formatDateInZone,
 } from "@/lib/timezone";
 import { allTimezones, timezoneLabel, DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { useTimeZone } from "@/components/timezone-context";
+import { FormattedDateTime } from "@/components/formatted-time";
 import AddCoachBlockForm from "@/components/add-coach-block-form";
 import CoachCalendar from "@/components/coach-calendar";
 import AdminCancelButtons from "../students/[studentId]/admin-cancel-buttons";
@@ -1644,8 +1646,7 @@ function CancelGroupLessonPanel({
     <div className={styles.panel}>
       <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>
-          Cancel {topic || "group lesson"} —{" "}
-          {new Date(scheduledAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          Cancel {topic || "group lesson"} — <FormattedDateTime value={scheduledAt} />
         </h2>
         <button className={styles.linkBtnSmall} onClick={onClose}>Close</button>
       </div>
@@ -1684,6 +1685,7 @@ function BookWithCreditPanel({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { timeZone: displayTimeZone } = useTimeZone();
   const [students, setStudents] = useState<StudentWithCredits[] | null>(null);
   const [query, setQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<StudentWithCredits | null>(null);
@@ -1726,8 +1728,7 @@ function BookWithCreditPanel({
     <div className={styles.panel} style={{ marginTop: 16 }}>
       <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>
-          Book with {coachName} —{" "}
-          {slotStart.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          Book with {coachName} — <FormattedDateTime value={slotStart.toISOString()} />
         </h2>
         <div style={{ display: "flex", gap: 12 }}>
           <button className={styles.linkBtnSmall} onClick={onSwitchToBlock}>Block this time instead</button>
@@ -1775,7 +1776,7 @@ function BookWithCreditPanel({
               {selectedStudent.credits.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.durationMinutes ?? 30}-minute — {c.type}
-                  {c.expiresAt ? ` — expires ${new Date(c.expiresAt).toLocaleDateString()}` : " — no expiration"}
+                  {c.expiresAt ? ` — expires ${formatDateInZone(c.expiresAt, displayTimeZone)}` : " — no expiration"}
                 </option>
               ))}
             </select>
@@ -1836,8 +1837,7 @@ function QuickBlockPanel({
     <div className={styles.panel} style={{ marginTop: 16 }}>
       <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>
-          Block {coachName} —{" "}
-          {slotStart.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          Block {coachName} — <FormattedDateTime value={slotStart.toISOString()} />
         </h2>
         <button className={styles.linkBtnSmall} onClick={onClose}>Close</button>
       </div>

@@ -6,6 +6,7 @@ import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import { useTimeZone } from "@/components/timezone-context";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import styles from "../../coach.module.css";
@@ -33,8 +34,8 @@ interface AssignedExercise {
   audioUrl: string | null;
 }
 
-function monthYear(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+function monthYear(iso: string, timeZone: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone });
 }
 
 function money(n: number) {
@@ -109,6 +110,7 @@ export default function DashboardClient({
   newPayroll: { total: number; count: number; periodStart: string; periodEnd: string } | null;
 }) {
   const router = useRouter();
+  const { timeZone: displayTimeZone } = useTimeZone();
   const [collapsed, setCollapsed] = useState(false);
   const [sessions, setSessions] = useState(today);
   const [groupLessons, setGroupLessons] = useState(todayGroupLessons);
@@ -505,7 +507,7 @@ export default function DashboardClient({
                 <div className={styles.snapshotStat}>
                   <div className={styles.snapshotStatLabel}>With you since</div>
                   <div className={styles.snapshotStatValue}>
-                    {snapshot.withYouSince ? monthYear(snapshot.withYouSince) : "—"}
+                    {snapshot.withYouSince ? monthYear(snapshot.withYouSince, displayTimeZone) : "—"}
                   </div>
                 </div>
               </div>

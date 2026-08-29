@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DAY_NAMES } from "@/lib/scheduling/recurring";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../admin.module.css";
 
 interface Coach {
@@ -412,9 +413,17 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
   );
 }
 
-// Registers a student into every future occurrence of a recurring series
-// in one action — for a drop-in who wants the whole bootcamp, not one
-// class at a time via GroupLessonCard's per-occurrence Register below.
+interface SeriesRosterEntry {
+  studentId: string;
+  studentName: string;
+  registeredCount: number;
+}
+
+// Shows who's registered across a series' future occurrences (collapsed
+// to one row per student, with a Remove that unregisters them from every
+// occurrence at once) and, below that, the same "register for the whole
+// series" action as before — for a drop-in who wants the whole bootcamp,
+// not one class at a time via GroupLessonCard's per-occurrence Register.
 function SeriesRegisterControl({
   seriesId,
   students,
@@ -424,12 +433,44 @@ function SeriesRegisterControl({
   students: Student[];
   onRegistered: () => void;
 }) {
+  const [roster, setRoster] = useState<SeriesRosterEntry[]>([]);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const [stripeReference, setStripeReference] = useState("");
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+
+  function loadRoster() {
+    fetch(`/api/admin/group-lessons/roster?seriesId=${seriesId}`)
+      .then((res) => res.json())
+      .then((data) => setRoster(data.roster ?? []));
+  }
+
+  useEffect(loadRoster, [seriesId]);
+
+  async function handleRemove(targetStudentId: string) {
+    setRemovingId(targetStudentId);
+    setRosterError(null);
+
+    const res = await fetch("/api/admin/group-lessons/register-series", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seriesId, studentId: targetStudentId }),
+    });
+    setRemovingId(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setRosterError(body.error ?? "Couldn't remove that student.");
+      return;
+    }
+
+    loadRoster();
+    onRegistered();
+  }
 
   async function handleRegister() {
     if (!studentId) return;
@@ -456,40 +497,66 @@ function SeriesRegisterControl({
     if (body.failed) parts.push(`${body.failed} failed`);
     setSummary(parts.join(", "));
     setStripeReference("");
+    loadRoster();
     onRegistered();
   }
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className={styles.linkBtnSmall} style={{ marginTop: 8 }}>
-        Register for whole series…
-      </button>
-    );
-  }
-
   return (
-    <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-      <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className={styles.selectSmall}>
-        {students.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
-      <input
-        value={stripeReference}
-        onChange={(e) => setStripeReference(e.target.value)}
-        placeholder="Stripe payment reference (optional)"
-        className={styles.inputSmall}
-      />
-      <button onClick={handleRegister} disabled={registering} className={styles.ctaSmall}>
-        {registering ? "Registering…" : "Register for series"}
-      </button>
-      <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
-        Close
-      </button>
-      {summary && <p className={styles.successText} style={{ width: "100%", margin: 0 }}>{summary}</p>}
-      {error && <p className={styles.errorText} style={{ width: "100%", margin: 0 }}>{error}</p>}
+    <div style={{ marginTop: 8 }}>
+      {roster.length > 0 && (
+        <ul className={styles.list} style={{ marginBottom: 8 }}>
+          {roster.map((r) => (
+            <li
+              key={r.studentId}
+              className={styles.listItem}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
+            >
+              <span>
+                {r.studentName}{" "}
+                <span className={styles.mutedText}>({r.registeredCount} upcoming)</span>
+              </span>
+              <button
+                onClick={() => handleRemove(r.studentId)}
+                disabled={removingId === r.studentId}
+                className={styles.linkBtnSmall}
+              >
+                {removingId === r.studentId ? "Removing…" : "Remove from series"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rosterError && <p className={styles.errorText} style={{ margin: "0 0 8px" }}>{rosterError}</p>}
+
+      {!open ? (
+        <button onClick={() => setOpen(true)} className={styles.linkBtnSmall}>
+          Register for whole series…
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className={styles.selectSmall}>
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={stripeReference}
+            onChange={(e) => setStripeReference(e.target.value)}
+            placeholder="Stripe payment reference (optional)"
+            className={styles.inputSmall}
+          />
+          <button onClick={handleRegister} disabled={registering} className={styles.ctaSmall}>
+            {registering ? "Registering…" : "Register for series"}
+          </button>
+          <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
+            Close
+          </button>
+          {summary && <p className={styles.successText} style={{ width: "100%", margin: 0 }}>{summary}</p>}
+          {error && <p className={styles.errorText} style={{ width: "100%", margin: 0 }}>{error}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -507,8 +574,29 @@ function GroupLessonCard({
   const [stripeReference, setStripeReference] = useState("");
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
+
+  async function handleRemove(registrationId: string) {
+    setRemovingId(registrationId);
+    setError(null);
+
+    const res = await fetch("/api/admin/group-lessons/register", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationId }),
+    });
+    setRemovingId(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Couldn't remove that registration.");
+      return;
+    }
+
+    onRegistered();
+  }
 
   async function handleRegister() {
     if (!studentId) return;
@@ -537,7 +625,7 @@ function GroupLessonCard({
       <div style={{ marginBottom: 8 }}>
         <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
         <p className={styles.mutedText}>
-          {new Date(lesson.scheduledAt).toLocaleString()} · {lesson.durationMinutes} min · Coach {lesson.coachName}
+          <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach {lesson.coachName}
           {" · "}
           {lesson.attendees.length}
           {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
@@ -547,9 +635,24 @@ function GroupLessonCard({
       {lesson.attendees.length > 0 && (
         <ul className={styles.list} style={{ marginBottom: 12 }}>
           {lesson.attendees.map((a) => (
-            <li key={a.registrationId} className={styles.listItem} style={{ display: "flex", justifyContent: "space-between" }}>
+            <li
+              key={a.registrationId}
+              className={styles.listItem}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
+            >
               <span>{a.studentName}</span>
-              <span className={styles.mutedText}>{a.status}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className={styles.mutedText}>{a.status}</span>
+                {a.status === "registered" && (
+                  <button
+                    onClick={() => handleRemove(a.registrationId)}
+                    disabled={removingId === a.registrationId}
+                    className={styles.linkBtnSmall}
+                  >
+                    {removingId === a.registrationId ? "Removing…" : "Remove"}
+                  </button>
+                )}
+              </span>
             </li>
           ))}
         </ul>

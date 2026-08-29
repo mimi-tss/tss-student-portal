@@ -276,6 +276,115 @@ export async function registerStudentInRecurringSeries(
   return { total: occurrences?.length ?? 0, registered, alreadyRegistered, full, failed };
 }
 
+// Removes a single occurrence's registration — the per-class counterpart
+// to registerStudentInGroupLesson. Deliberately a hard delete of one
+// `group_lesson_registrations` row (not a status flip): the row carries
+// no other history worth keeping once removed, unlike a session's
+// cancelled-status pattern. Only ever called on a `status: "registered"`
+// row from the UI side — an admin has no "remove" control on an
+// attended/no-show row, so real attendance history is never at risk here.
+export async function unregisterStudentFromGroupLesson(
+  supabase: SupabaseClient,
+  registrationId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("group_lesson_registrations")
+    .delete()
+    .eq("id", registrationId);
+  if (error) throw new Error(error.message);
+}
+
+export interface SeriesRosterEntry {
+  studentId: string;
+  studentName: string;
+  registeredCount: number;
+}
+
+// Everyone currently registered across a series' future, non-cancelled
+// occurrences, collapsed to one row per student with how many of those
+// occurrences they're in — the roster view for "who's in this bootcamp,"
+// not a per-class list (GroupLessonCard already shows that). Same
+// occurrence-finding query as registerStudentInRecurringSeries, reused
+// rather than reinvented for the same "future, not cancelled, this
+// series" definition. Only counts `status: "registered"` rows — a
+// student marked attended/no-show on a past-dated occurrence wouldn't
+// show up here anyway (excluded by the future-dated filter), but this
+// also protects against a same-day occurrence already marked attended.
+export async function getRecurringSeriesRoster(
+  supabase: SupabaseClient,
+  seriesId: string,
+): Promise<SeriesRosterEntry[]> {
+  const { data: occurrences, error } = await supabase
+    .from("group_lessons")
+    .select("id")
+    .eq("recurring_group_lesson_id", seriesId)
+    .gte("scheduled_at", new Date().toISOString())
+    .is("cancelled_at", null);
+  if (error) throw new Error(error.message);
+
+  const occurrenceIds = (occurrences ?? []).map((o) => o.id);
+  if (occurrenceIds.length === 0) return [];
+
+  const { data: registrations, error: regError } = await supabase
+    .from("group_lesson_registrations")
+    .select("student_id, status, students(name)")
+    .in("group_lesson_id", occurrenceIds)
+    .eq("status", "registered");
+  if (regError) throw new Error(regError.message);
+
+  const byStudent = new Map<string, SeriesRosterEntry>();
+  for (const r of (registrations ?? []) as unknown as {
+    student_id: string;
+    students: { name: string } | { name: string }[] | null;
+  }[]) {
+    const existing = byStudent.get(r.student_id);
+    if (existing) {
+      existing.registeredCount++;
+    } else {
+      byStudent.set(r.student_id, {
+        studentId: r.student_id,
+        studentName: unwrapJoin(r.students)?.name ?? "Student",
+        registeredCount: 1,
+      });
+    }
+  }
+
+  return Array.from(byStudent.values()).sort((a, b) => a.studentName.localeCompare(b.studentName));
+}
+
+// Removes a student from every future, non-cancelled occurrence of a
+// series in one action — the bulk counterpart to
+// unregisterStudentFromGroupLesson, same occurrence-finding query as
+// registerStudentInRecurringSeries/getRecurringSeriesRoster. Only
+// `status: "registered"` rows are deleted, for the same reason
+// getRecurringSeriesRoster only counts them.
+export async function unregisterStudentFromRecurringSeries(
+  supabase: SupabaseClient,
+  params: { seriesId: string; studentId: string },
+): Promise<{ removed: number }> {
+  const { data: occurrences, error } = await supabase
+    .from("group_lessons")
+    .select("id")
+    .eq("recurring_group_lesson_id", params.seriesId)
+    .gte("scheduled_at", new Date().toISOString())
+    .is("cancelled_at", null);
+  if (error) throw new Error(error.message);
+
+  const occurrenceIds = (occurrences ?? []).map((o) => o.id);
+  if (occurrenceIds.length === 0) return { removed: 0 };
+
+  const { data, error: delError } = await supabase
+    .from("group_lesson_registrations")
+    .delete()
+    .in("group_lesson_id", occurrenceIds)
+    .eq("student_id", params.studentId)
+    .eq("status", "registered")
+    .select("id");
+  if (delError) throw new Error(delError.message);
+
+  return { removed: (data ?? []).length };
+}
+
 export interface RecurringGroupLesson {
   id: string;
   coachId: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../admin.module.css";
 
 interface Coach {
@@ -475,7 +476,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                     s.sessions.map((sess) => (
                       <tr key={sess.id}>
                         <td colSpan={2} className={styles.mutedText} style={{ paddingLeft: 24 }}>
-                          {new Date(sess.scheduledAt).toLocaleString()} — {sess.studentName}
+                          <FormattedDateTime value={sess.scheduledAt} /> — {sess.studentName}
                           {sess.isReferralBonus && (
                             <span className={styles.badge} style={{ marginLeft: 8, fontSize: 10 }}>
                               referral +$10/hr
@@ -669,7 +670,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
               {history.map((e) => (
                 <tr key={e.id}>
                   <td className={styles.rowName}>{e.coachName}</td>
-                  <td className={styles.mutedText}>{e.scheduledAt ? new Date(e.scheduledAt).toLocaleString() : "—"}</td>
+                  <td className={styles.mutedText}>{e.scheduledAt ? <FormattedDateTime value={e.scheduledAt} /> : "—"}</td>
                   <td className={styles.mutedText}>
                     {e.label}
                     {e.isManual && (

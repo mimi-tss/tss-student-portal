@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { registerStudentInGroupLesson } from "@/lib/group-lessons";
+import { registerStudentInGroupLesson, unregisterStudentFromGroupLesson } from "@/lib/group-lessons";
 
 // Admin manually confirms the Stripe payment came through, then
 // registers the student — same posture as purchased-addon session
@@ -20,6 +20,28 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "couldn't register student" },
+      { status: 500 },
+    );
+  }
+}
+
+// Removes one occurrence's registration — the per-class counterpart to
+// SeriesRegisterControl's bulk unregister (register-series/route.ts).
+export async function DELETE(req: NextRequest) {
+  const { registrationId } = await req.json();
+
+  if (!registrationId) {
+    return NextResponse.json({ error: "registrationId required" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+
+  try {
+    await unregisterStudentFromGroupLesson(supabase, registrationId);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "couldn't remove that registration" },
       { status: 500 },
     );
   }
