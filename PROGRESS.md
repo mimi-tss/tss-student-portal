@@ -3,6 +3,18 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Students page: made the two collapsed buttons look like real buttons (2026-08-28)
+
+"Add a new student" and "Import students from CSV" were styled as plain
+underlined text links (`styles.linkBtn`) — you wanted them to read as
+actual purple buttons, same weight as "Save" elsewhere on the page.
+Both now use `styles.cta` (the same class the forms' own submit buttons
+already use) and title-case labels: "Add A New Student", "Import
+Students From CSV".
+([provision-student-client.tsx](app/(admin)/admin/dashboard/provision-student-client.tsx),
+[import-students-client.tsx](app/(admin)/admin/dashboard/import-students-client.tsx))
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Student dashboard "Next session" ignored group lessons (2026-08-28)
 
 You caught this live-testing student access: a student registered for
