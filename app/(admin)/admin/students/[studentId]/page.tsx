@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
-import { formatTenure } from "@/lib/format-date";
+import { formatTenure, formatPlainDate } from "@/lib/format-date";
 import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
@@ -16,21 +16,36 @@ import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
 import ReassignSessionCoach from "./reassign-session-coach";
-import NameClient from "./name-client";
-import EmailClient from "./email-client";
-import BirthDateClient from "./birth-date-client";
-import MembershipTierClient from "./membership-tier-client";
-import ReferralClient from "./referral-client";
-import AmbassadorClient from "./ambassador-client";
-import CoachStartDateClient from "./coach-start-date-client";
-import StudentSinceClient from "./student-since-client";
-import BillingAnniversaryClient from "./billing-anniversary-client";
+import StudentHeaderActions from "./student-header-actions";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
-import SimpleTextFieldClient from "./simple-text-field-client";
-import AddressClient from "./address-client";
-import GuardianInfoClient from "./guardian-info-client";
 import styles from "../../../admin.module.css";
+
+const TIER_LABEL: Record<string, string> = { lite: "Lite", suite: "Suite", pro: "Pro", elite: "Elite" };
+
+function formatAddress(a: {
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  country: string | null;
+}): string | null {
+  const cityStateZip = [a.city, a.state, a.zip].filter(Boolean).join(", ");
+  const parts = [a.street, cityStateZip, a.country].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function formatGuardian(g: {
+  name: string | null;
+  relationship: string | null;
+  phone: string | null;
+  email: string | null;
+}): string | null {
+  if (!g.name) return null;
+  const parts = [g.name, g.relationship].filter(Boolean).join(" — ");
+  const contact = [g.phone, g.email].filter(Boolean).join(" · ");
+  return contact ? `${parts} (${contact})` : parts;
+}
 
 // Read-only admin view of what a student sees on their own dashboard —
 // next session, credit balance, recordings — without impersonating their
@@ -50,7 +65,7 @@ export default async function AdminStudentPage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override, phone, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email",
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override, phone, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, archived",
     )
     .eq("id", studentId)
     .maybeSingle();
@@ -202,66 +217,83 @@ export default async function AdminStudentPage({
       </Link>
 
       <div style={{ marginBottom: 16 }}>
-        <NameClient studentId={student.id} initialValue={student.name} />
+        <StudentHeaderActions
+          studentId={student.id}
+          name={student.name}
+          archived={student.archived}
+          coaches={coaches ?? []}
+          initial={{
+            name: student.name,
+            email: student.email,
+            phone: student.phone,
+            gender: student.gender,
+            addressStreet: student.address_street,
+            addressCity: student.address_city,
+            addressState: student.address_state,
+            addressZip: student.address_zip,
+            addressCountry: student.address_country,
+            guardianName: student.guardian_name,
+            guardianRelationship: student.guardian_relationship,
+            guardianPhone: student.guardian_phone,
+            guardianEmail: student.guardian_email,
+            tier: student.tier,
+            cadence: recurringSchedule?.cadence ?? "weekly",
+            ambassador: student.ambassador,
+            referredByCoachId: student.referred_by_coach_id,
+            birthDate: student.birth_date,
+            coachStartDateOverride: student.coach_start_date_override,
+            derivedCoachStartValue: firstSessionWithCoach?.scheduled_at?.slice(0, 10) ?? null,
+            studentSinceOverride: student.student_since_override,
+            createdAt: student.created_at,
+            billingAnniversaryDate: student.billing_anniversary_date,
+          }}
+        />
       </div>
 
       <div className={styles.overviewGrid} style={{ marginTop: 0, marginBottom: 20 }}>
         <div className={styles.panel} style={{ marginBottom: 0 }}>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Email</div>
-            <div className={styles.statValue}>
-              <EmailClient studentId={student.id} initialValue={student.email} />
-            </div>
+            <div className={styles.statValue}>{student.email}</div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Phone</div>
-            <div className={styles.statValue}>
-              <SimpleTextFieldClient studentId={student.id} field="phone" initialValue={student.phone} placeholder="Phone" />
-            </div>
+            <div className={styles.statValue}>{student.phone || <span className={styles.mutedText}>not set</span>}</div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Gender</div>
-            <div className={styles.statValue}>
-              <SimpleTextFieldClient studentId={student.id} field="gender" initialValue={student.gender} placeholder="Gender" />
-            </div>
+            <div className={styles.statValue}>{student.gender || <span className={styles.mutedText}>not set</span>}</div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Address</div>
             <div className={styles.statValue}>
-              <AddressClient
-                studentId={student.id}
-                initialValue={{
-                  street: student.address_street,
-                  city: student.address_city,
-                  state: student.address_state,
-                  zip: student.address_zip,
-                  country: student.address_country,
-                }}
-              />
+              {formatAddress({
+                street: student.address_street,
+                city: student.address_city,
+                state: student.address_state,
+                zip: student.address_zip,
+                country: student.address_country,
+              }) ?? <span className={styles.mutedText}>not set</span>}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Guardian (if minor)</div>
             <div className={styles.statValue}>
-              <GuardianInfoClient
-                studentId={student.id}
-                initialValue={{
-                  name: student.guardian_name,
-                  relationship: student.guardian_relationship,
-                  phone: student.guardian_phone,
-                  email: student.guardian_email,
-                }}
-              />
+              {formatGuardian({
+                name: student.guardian_name,
+                relationship: student.guardian_relationship,
+                phone: student.guardian_phone,
+                email: student.guardian_email,
+              }) ?? <span className={styles.mutedText}>not set</span>}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Membership</div>
             <div className={styles.statValue}>
-              <MembershipTierClient
-                studentId={student.id}
-                initialTier={student.tier}
-                cadence={recurringSchedule?.cadence ?? "weekly"}
-              />
+              <span className={styles.badge}>
+                {TIER_LABEL[student.tier] ?? student.tier}
+                {(recurringSchedule?.cadence ?? "weekly") === "biweekly" ? " (Biweekly)" : ""}
+              </span>
             </div>
           </div>
           <div className={styles.statRow}>
@@ -270,46 +302,49 @@ export default async function AdminStudentPage({
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Ambassador</div>
-            <div className={styles.statValue}>
-              <AmbassadorClient studentId={student.id} initialAmbassador={student.ambassador} />
-            </div>
+            <div className={styles.statValue}>{student.ambassador ? "Yes" : "No"}</div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Referred by</div>
             <div className={styles.statValue}>
-              <ReferralClient studentId={student.id} initialCoachId={student.referred_by_coach_id} coaches={coaches ?? []} />
+              {coaches?.find((c) => c.id === student.referred_by_coach_id)?.name ?? (
+                <span className={styles.mutedText}>Not referred</span>
+              )}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Birthday</div>
             <div className={styles.statValue}>
-              <BirthDateClient studentId={student.id} initialValue={student.birth_date} />
+              {student.birth_date ? formatPlainDate(student.birth_date) : <span className={styles.mutedText}>not set</span>}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>With coach since</div>
             <div className={styles.statValue}>
-              <CoachStartDateClient
-                studentId={student.id}
-                initialValue={student.coach_start_date_override}
-                derivedValue={firstSessionWithCoach?.scheduled_at?.slice(0, 10) ?? null}
-              />
+              {student.coach_start_date_override ? (
+                `${formatPlainDate(student.coach_start_date_override)} (admin-set)`
+              ) : firstSessionWithCoach?.scheduled_at ? (
+                `${formatPlainDate(firstSessionWithCoach.scheduled_at.slice(0, 10))} (auto — first session)`
+              ) : (
+                <span className={styles.mutedText}>not set</span>
+              )}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>With us</div>
             <div className={styles.statValue}>
-              <StudentSinceClient
-                studentId={student.id}
-                initialValue={student.student_since_override}
-                createdAt={student.created_at}
-              />
+              {formatTenure(student.student_since_override ?? student.created_at)}{" "}
+              {student.student_since_override ? "(admin-set)" : "(auto — account created)"}
             </div>
           </div>
           <div className={styles.statRow}>
             <div className={styles.statKey}>Billing cycle anchor</div>
             <div className={styles.statValue}>
-              <BillingAnniversaryClient studentId={student.id} initialValue={student.billing_anniversary_date} />
+              {student.billing_anniversary_date ? (
+                formatPlainDate(student.billing_anniversary_date)
+              ) : (
+                <span className={styles.mutedText}>not set</span>
+              )}
             </div>
           </div>
 

@@ -3,6 +3,53 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student detail page: one Edit modal instead of a dozen inline edits, plus Archive (2026-08-28)
+
+You flagged the student detail page as cluttered — every field (email,
+phone, gender, address, guardian, membership, ambassador, referred by,
+birthday, with-coach-since, with-us, billing anchor) had its own
+click-to-edit control and its own "Edit"/"Save"/"Cancel" links. Asked
+for one "Edit" button next to the name that opens a single popup
+editing everything at once, with a confirmation on Save, plus an
+Archive button next to Edit.
+
+**[edit-student-modal.tsx](<app/(admin)/admin/students/[studentId]/edit-student-modal.tsx>)**
+is the new consolidated form — all 20 fields in one modal, grouped into
+Basic info / Address / Guardian / Membership / Dates. Deliberately
+doesn't introduce one new mega-update endpoint: Save fires each field's
+own already-existing route (set-student-info, set-address,
+set-guardian-info, set-referral, set-ambassador, set-birth-date,
+set-coach-start-date, set-student-since) in parallel via `Promise.all`,
+so none of their existing validation or side effects needed touching.
+Two fields are handled specially rather than always-resent: **tier**
+only posts to `set-tier` if it actually changed, and keeps the existing
+"this overwrites what Kajabi has on file" `window.confirm` — declining
+it reverts just the tier field and still saves everything else that
+changed. **Billing cycle anchor** only posts to `set-billing-anniversary`
+if changed and non-blank, since that route has a real side effect
+(regenerates recurring sessions under the corrected anchor) not worth
+re-triggering on every unrelated save. On success: `window.alert("Saved.")`
+as the confirmation, then the modal closes and the page refreshes.
+
+**[student-header-actions.tsx](<app/(admin)/admin/students/[studentId]/student-header-actions.tsx>)**
+replaces the old click-to-edit name — now a plain heading plus one
+"Edit" link (opens the modal above) and one "Archive"/"Unarchive" link
+(same reversible hide as the Students list's own Archive button,
+migration 0067, now reachable from the student's own page too).
+
+Deleted 12 now-dead per-field components this replaced entirely
+(name/email/birth-date/membership-tier/referral/ambassador/coach-start-date/
+student-since/billing-anniversary/simple-text-field/address/guardian-info
+-client.tsx) — confirmed via grep that nothing else imported any of them
+before removing. Their API routes are untouched and still do the real
+work; only the one-row-per-field UI wrapper went away.
+
+Verified the new interaction logic (tier-confirm-then-revert-on-decline,
+skip-unchanged-billing-date, empty-name validation blocking save,
+archive toggle) in a click-tested mock — a faithful port of the actual
+`handleSave` logic — since this can't be exercised against real
+Supabase. `npx tsc --noEmit -p .` and `next build` both clean.
+
 ## "Add a new student" form was missing every field the CSV importer already has (2026-08-28)
 
 You noticed the manual single-student form didn't match what CSV
