@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DAY_NAMES } from "@/lib/scheduling/recurring";
+import { DAY_NAMES, nextWeeklySlotInstant } from "@/lib/scheduling/recurring";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { formatTimeInZone } from "@/lib/timezone";
+import { useTimeZone } from "@/components/timezone-context";
 import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../admin.module.css";
 
@@ -53,6 +55,7 @@ function todayInZone(timeZone: string) {
 }
 
 export default function GroupLessonsClient({ coaches, students }: { coaches: Coach[]; students: Student[] }) {
+  const { timeZone: displayTimeZone } = useTimeZone();
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [series, setSeries] = useState<RecurringSeries[]>([]);
   const [mode, setMode] = useState<"one-time" | "recurring">("one-time");
@@ -354,7 +357,19 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
             Recurring series
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {series.map((s) => (
+            {series.map((s) => {
+              // startTime is wall-clock in the COACH's own zone — resolve
+              // to a real instant off that, then reformat (weekday
+              // included, since crossing into the viewer's zone can shift
+              // it) in whatever zone the viewer has selected. Same
+              // approach as recurring-schedule-client.tsx.
+              const coachTimeZone = coaches.find((c) => c.id === s.coachId)?.timezone ?? DEFAULT_TIMEZONE;
+              const instant = nextWeeklySlotInstant(s.dayOfWeek, s.startTime, coachTimeZone);
+              const weekday = new Intl.DateTimeFormat("en-US", {
+                timeZone: displayTimeZone,
+                weekday: "long",
+              }).format(instant);
+              return (
               <div
                 key={s.id}
                 className={styles.panel}
@@ -367,7 +382,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
                   <div>
                     <p className={styles.rowName}>{s.topic || "Group Lesson"}</p>
                     <p className={styles.mutedText}>
-                      Every {DAY_NAMES[s.dayOfWeek]} at {s.startTime} · {s.durationMinutes} min · Coach{" "}
+                      Every {weekday} at {formatTimeInZone(instant, displayTimeZone)} · {s.durationMinutes} min · Coach{" "}
                       {s.coachName}
                       {s.maxStudents ? ` · cap ${s.maxStudents}` : ""}
                       {" · "}
@@ -386,7 +401,8 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
                 </div>
                 <SeriesRegisterControl seriesId={s.id} students={students} onRegistered={load} />
               </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
