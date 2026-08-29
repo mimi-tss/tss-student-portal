@@ -1813,16 +1813,11 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migrations 0067 and 0068 not yet confirmed applied** —
-`0067_student_archived.sql` adds `students.archived` (Archive/Unarchive
-in the Students list will error without it). `0068_delete_student_permanently.sql`
-adds the `delete_student_permanently()` function the new Delete button
-calls (Delete will error without it too). **0068 is the most destructive
-thing added this session** — read the "Archive and permanently-delete a
-student" entry above before applying it, and test the very first real
-delete on a disposable test student, not a real one — this couldn't be
-tested against live Supabase (real-login-only convention), only verified
-by hand against the actual schema.
+**Migrations 0067 and 0068 confirmed applied** (2026-08-28) — you ran a
+real delete against a test student and it succeeded, so
+`delete_student_permanently()`'s table order and the sessions/
+makeup_credits circular-reference handling are now confirmed correct
+against live data, not just verified by hand against the schema.
 
 **Migrations 0064, 0065, and 0066 confirmed applied** (2026-08-28) —
 the Activity Log feature (data-change trigger + login/join-click
