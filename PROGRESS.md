@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach dashboard: made "My Students" searchable (2026-08-31)
+
+You asked whether the coach dashboard's "My Students" list could be
+searched. It's a simple, coach-scoped list (never crosses into another
+coach's students — same privacy constraint the page's own comment
+already states), so this is a plain client-side name filter, not a new
+API — no server round-trip needed at this app's per-coach scale.
+
+Split the list rendering out of the server component into a new
+[students-list-client.tsx](<app/(coach)/coach/students/students-list-client.tsx>),
+which owns a search input (`.input` class, reused from the coach
+module's existing styles) plus a `useMemo` filter on `name` (case-
+insensitive substring). [page.tsx](<app/(coach)/coach/students/page.tsx>)
+still does the server-side `getCoachStudents` fetch and passes the
+already-scoped list down as a prop — no change to what data a coach can
+see, only how they find it in the list.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Logic is a
+two-line `Array.filter(...includes(...))`, same pattern as other
+verified filters in this codebase; not click-tested against a live
+login (none available in this environment) but confirmed correct by
+inspection.
+
 ## Student detail page: one Edit modal instead of a dozen inline edits, plus Archive (2026-08-28)
 
 You flagged the student detail page as cluttered — every field (email,
