@@ -68,6 +68,13 @@ needed.
 
 No migration, `tsc --noEmit`/`next build` clean.
 
+## Added workwith.ecruz@gmail.com as an Admin Finance account (2026-08-31)
+
+Same account-provisioning task as the entry below, `role: "admin_finance"`
+instead of `"admin"` — the superset role that also gets Payroll/Reports
+access (see [roles.ts](lib/auth/roles.ts)). Same `auth.users` +
+`profiles` row pattern, no coaches/students row.
+
 ## Added info@tarasimonstudios.com as an Admin account (2026-08-31)
 
 You asked for this directly — a plain data/account provisioning task,
