@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student dashboard: merged group lessons into "Upcoming lessons this cycle" (2026-08-31)
+
+You flagged the separate "Upcoming group lessons" card as redundant —
+wanted everything (1:1 sessions, makeups, group lessons) in the one
+"Upcoming lessons this cycle" panel next to "Your plan" instead of a
+second card above it.
+[page.tsx](<app/(student)/student/dashboard/page.tsx>): removed the
+standalone group-lesson note block; the cycle-panel list now merges
+`upcomingCycleSessions` (already includes any makeup-credit-booked
+session — a makeup is just a plain `sessions` row with `is_makeup`/
+`makeup_credit_id` set, not a separate table, so no new query was
+needed for that part) with `upcomingGroupLessons` filtered to the same
+`cycleEnd` cutoff, sorted chronologically into one list. Group-lesson
+rows now show topic + coach inline so they're still distinguishable
+from a 1:1 row in the merged list. The hero "Next session" card's own
+group-lesson-vs-1:1 comparison is untouched — it intentionally still
+looks past the current cycle boundary for "what's truly next."
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested
+(no login in this environment) — please check a student with both a
+group-lesson registration and a makeup-credit session booked this
+cycle shows all of them together, in order.
+
 ## A student can now have more than one weekly recurring slot (2026-08-31)
 
 You have a student on a twice-a-week schedule who pays for 2 — there
