@@ -2365,15 +2365,8 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0076 not yet confirmed applied** —
-`0076_recurring_schedules_multiple_per_student.sql` drops the
-one-schedule-per-student constraint on `recurring_schedules` (needed to
-give a student two weekly slots — see the entry above). Until this
-runs, trying to add a second weekly slot for any student will fail with
-a duplicate-key error on `recurring_schedules_student_id_key`, and
-every regular single-schedule save keeps working exactly as before
-(this migration only removes a restriction, it doesn't change any
-existing data).
+**Migration 0076 confirmed applied** (2026-08-31) — a student can now
+be given more than one weekly recurring slot from their admin page.
 
 **Migration 0075 confirmed applied** (2026-08-31) — the `meet_recordings`
 table exists; the Recordings queue is live.
