@@ -285,6 +285,29 @@
   text-decoration: underline;
 }
 
+/* red callout: a makeup credit is about to expire unscheduled. Links
+   straight to the scheduler since "schedule it now" is the only action
+   this box exists to prompt. */
+.expiringWarning {
+  display: block;
+  margin: 28px 0;
+  padding: 16px 26px;
+  border-radius: 16px;
+  background: rgba(232, 92, 134, 0.14);
+  border: 1px solid var(--coral);
+  color: var(--coral);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.expiringWarning:hover {
+  background: rgba(232, 92, 134, 0.22);
+}
+.expiringWarning div + div {
+  margin-top: 6px;
+}
+
 /* handwritten note callout */
 .note {
   margin: 28px 0;

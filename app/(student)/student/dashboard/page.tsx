@@ -208,6 +208,16 @@ export default async function StudentDashboardPage() {
       })),
   ].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 
+  // Unused makeup credits (availableCredits above is already scoped to
+  // used=false and not-yet-expired) that expire within 14 days — a
+  // credit sitting unscheduled that close to expiry is easy to lose
+  // track of, so it gets its own loud callout rather than only showing
+  // up quietly in the "Your plan" panel below.
+  const fourteenDaysFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const expiringSoonCredits = (availableCredits ?? []).filter(
+    (c) => c.expires_at && new Date(c.expires_at).getTime() <= fourteenDaysFromNow.getTime(),
+  );
+
   return (
     <div className={styles.wrap}>
       <div className={styles.hero}>
@@ -276,6 +286,16 @@ export default async function StudentDashboardPage() {
           )}
         </div>
       </div>
+
+      {expiringSoonCredits.length > 0 && (
+        <Link href="/student/book" className={styles.expiringWarning}>
+          {expiringSoonCredits.map((c) => (
+            <div key={c.id}>
+              MAKEUP EXPIRING SOON ON <FormattedDate value={c.expires_at as string} />, SCHEDULE IT NOW.
+            </div>
+          ))}
+        </Link>
+      )}
 
       {spotlightNote && (
         <div className={styles.note}>
