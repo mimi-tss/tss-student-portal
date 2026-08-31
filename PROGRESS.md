@@ -356,6 +356,44 @@ different students on the same coach at an overlapping day/time and
 confirm the second one is rejected with the "already has X booked"
 message, not silently accepted.
 
+## CSV import: fixed a real failed upload — "bi-weekly" and email-less rows (2026-08-31)
+
+You tried uploading a real 82-row student sheet and it silently didn't
+work. Downloaded your actual file and ran the app's own validation
+logic against it directly (script against the real Supabase coaches/
+students tables, not guesswork) — found exactly why: 27 of the 82 rows
+failed validation, and since [bulk-import-students/route.ts](app/api/admin/bulk-import-students/route.ts)
+validates the whole sheet up front and rejects the entire batch if
+*any* row fails, all 82 bounced, including the ~55 already-clean ones.
+
+Two distinct causes, both real bugs:
+- **8 rows used `bi-weekly`** (hyphenated) — the validator only ever
+  recognized `biweekly`, no hyphen. `bi-weekly` is the natural way
+  almost anyone would write it. Fixed: whitespace/hyphens are stripped
+  before comparing, so both spellings work.
+- **19 rows had no email at all** — younger students where only a
+  parent's email was on file, no email column of their own. Every row
+  previously required its own valid `email` unconditionally (that's
+  what becomes the login). Asked you directly how to handle this;
+  you chose: fall back to `guardian_email` as the login address when
+  a student has none of their own — `guardian_email` is still stored
+  on its own column regardless, so this only changes which address
+  becomes `students.email`. Only a row with *neither* email nor
+  guardian_email is still a hard error. Two siblings sharing one
+  guardian_email with neither having their own would collide on that
+  shared address — caught by the existing "appears more than once in
+  this CSV" duplicate check, same as any other repeated email, not a
+  new failure mode. Each affected row now also carries a visible
+  per-row warning ("no email on file — logs in as their guardian")
+  rather than silently substituting it.
+
+Re-ran the exact same validation script against your real file after
+the fix: 0 errors, 81 new students (19 via the guardian-email
+fallback), 1 existing-student backfill (Mimi Orac, already in the
+system). `npx tsc --noEmit -p .` clean on the touched file. Not run
+through the actual upload UI end-to-end in this environment (no
+login) — please re-upload your file now that this is live.
+
 ## "Your exercises" list: same 5-row cap as the Shared Folder panel (2026-08-31)
 
 Same request as the Shared Folder panel above — a student with many
