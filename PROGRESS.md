@@ -106,6 +106,19 @@ different students on the same coach at an overlapping day/time and
 confirm the second one is rejected with the "already has X booked"
 message, not silently accepted.
 
+## Shared folder panel: capped to 5 visible rows, scrolls for the rest (2026-08-31)
+
+You wanted the Shared Folder box on the student dashboard shorter — it
+was growing to match however many files/shortcuts a student had,
+pushing everything below it further down the page.
+[shared-folder-panel.tsx](components/shared-folder-panel.tsx): the file
+list container is now `max-h-[270px] overflow-y-auto` (~5 rows before
+it scrolls); everything else about the panel (upload, add-shortcut,
+remove) is unchanged. Verified the cutoff visually with a throwaway
+static mock (same Tailwind classes + theme tokens, temporarily served
+from `public/` then deleted) rather than through real login — this
+project has no login available in this environment.
+
 ## Student dashboard: merged group lessons into "Upcoming lessons this cycle" (2026-08-31)
 
 You flagged the separate "Upcoming group lessons" card as redundant —
