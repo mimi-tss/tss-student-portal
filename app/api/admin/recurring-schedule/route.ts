@@ -6,15 +6,22 @@ import {
   nextWeeklySlotInstant,
 } from "@/lib/scheduling/recurring";
 
-// Admin sets a student's recurring weekly lesson slot (spec sections 4/5)
-// — the only way a student's regular sessions get scheduled; students
-// can't self-book them (see app/api/booking/book/route.ts) or change the
-// time themselves, only contact the studio. Creating/updating
+// Admin sets a student's recurring weekly lesson slot(s) (spec sections
+// 4/5) — the only way a student's regular sessions get scheduled;
+// students can't self-book them (see app/api/booking/book/route.ts) or
+// change the time themselves, only contact the studio. Creating/updating
 // immediately materializes real `sessions` rows via the same logic the
 // daily cron top-up uses, so the change shows up on the coach calendar
 // right away rather than waiting for tomorrow's run.
+//
+// A student can have more than one schedule row now (migration 0076 —
+// e.g. paying for 2x/week). `scheduleId` distinguishes the two cases: if
+// given, this changes THAT existing slot (day/time/coach/etc, replacing
+// its own future occurrences); if omitted, this ADDS a new slot
+// alongside whatever the student already has, leaving every other
+// schedule (and its already-materialized sessions) untouched.
 export async function POST(req: NextRequest) {
-  const { studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId, cadence } =
+  const { studentId, scheduleId, dayOfWeek, startTime, durationMinutes, startDate, coachId, cadence } =
     await req.json();
 
   if (
@@ -116,21 +123,61 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Replacing an existing schedule (new day/time, or reassigned coach):
-  // drop its own not-yet-happened, untouched occurrences from the new
-  // start date onward, so the old slot doesn't linger alongside the new
-  // one. Occurrences BEFORE the new start date belong to the old pattern
-  // and are deliberately left in place — that's how "Fridays 3:30pm
-  // starting now, Fridays 6pm starting Oct 1" keeps the September
-  // Friday-3:30pm sessions intact. Anything already cancelled or
-  // attended is real history and stays untouched regardless.
-  const { data: existingSchedule } = await supabase
+  // A student can have more than one schedule row now (migration 0076)
+  // — the (student_id, day_of_week, start_time) unique constraint only
+  // catches an exact duplicate, not two slots on the same day whose
+  // time ranges overlap (e.g. existing Mon 4:00-4:30, new Mon 4:15-4:45)
+  // — the student can't actually be in both at once, so check for that
+  // here rather than letting it silently double-book them.
+  const { data: otherSchedules } = await supabase
     .from("recurring_schedules")
-    .select("id")
+    .select("id, start_time, duration_minutes")
     .eq("student_id", studentId)
-    .maybeSingle();
+    .eq("day_of_week", dayOfWeek);
 
-  if (existingSchedule) {
+  const [newHH, newMM] = startTime.split(":").map(Number);
+  const newStartMin = newHH * 60 + newMM;
+  const newEndMin = newStartMin + durationMinutes;
+  const overlapsExisting = (otherSchedules ?? []).some((other) => {
+    if (scheduleId && other.id === scheduleId) return false;
+    const [oh, om] = other.start_time.split(":").map(Number);
+    const otherStartMin = oh * 60 + om;
+    const otherEndMin = otherStartMin + other.duration_minutes;
+    return newStartMin < otherEndMin && newEndMin > otherStartMin;
+  });
+
+  if (overlapsExisting) {
+    return NextResponse.json(
+      { error: "this overlaps with another weekly slot this student already has that day" },
+      { status: 409 },
+    );
+  }
+
+  // Editing an existing schedule (scheduleId given): drop its own
+  // not-yet-happened, untouched occurrences from the new start date
+  // onward, so the old pattern doesn't linger alongside the new one.
+  // Occurrences BEFORE the new start date belong to the old pattern and
+  // are deliberately left in place — that's how "Fridays 3:30pm starting
+  // now, Fridays 6pm starting Oct 1" keeps the September Friday-3:30pm
+  // sessions intact. Anything already cancelled or attended is real
+  // history and stays untouched regardless. Adding a new slot
+  // (scheduleId omitted) skips all of this — there's no prior pattern to
+  // clear, and every other schedule this student already has is left
+  // completely alone.
+  let existingSchedule: { id: string } | null = null;
+  if (scheduleId) {
+    const { data } = await supabase
+      .from("recurring_schedules")
+      .select("id")
+      .eq("id", scheduleId)
+      .eq("student_id", studentId)
+      .maybeSingle();
+
+    if (!data) {
+      return NextResponse.json({ error: "schedule not found" }, { status: 404 });
+    }
+    existingSchedule = data;
+
     const { error: deleteError } = await supabase
       .from("sessions")
       .delete()
@@ -148,26 +195,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { data: schedule, error } = await supabase
-    .from("recurring_schedules")
-    .upsert(
-      {
-        student_id: studentId,
-        coach_id: effectiveCoachId,
-        day_of_week: dayOfWeek,
-        start_time: startTime,
-        duration_minutes: durationMinutes,
-        start_date: effectiveStartDate,
-        cadence: cadence === "biweekly" ? "biweekly" : "weekly",
-        active: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "student_id" },
-    )
-    .select("id")
-    .single();
+  const scheduleRow = {
+    student_id: studentId,
+    coach_id: effectiveCoachId,
+    day_of_week: dayOfWeek,
+    start_time: startTime,
+    duration_minutes: durationMinutes,
+    start_date: effectiveStartDate,
+    cadence: cadence === "biweekly" ? "biweekly" : "weekly",
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: schedule, error } = existingSchedule
+    ? await supabase
+        .from("recurring_schedules")
+        .update(scheduleRow)
+        .eq("id", existingSchedule.id)
+        .select("id")
+        .single()
+    : await supabase.from("recurring_schedules").insert(scheduleRow).select("id").single();
 
   if (error) {
+    // 23505 = unique_violation — recurring_schedules_student_day_time_key
+    // (migration 0076) rejects a second slot at the exact same day/time
+    // this student already has (adding, not editing, hits this; editing
+    // can't since it's excluded by its own eq("id", ...) above).
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "this student already has a weekly slot at that day/time" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -177,9 +236,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { studentId } = await req.json();
-  if (!studentId) {
-    return NextResponse.json({ error: "studentId required" }, { status: 400 });
+  const { scheduleId } = await req.json();
+  if (!scheduleId) {
+    return NextResponse.json({ error: "scheduleId required" }, { status: 400 });
   }
 
   const supabase = await createClient();
@@ -187,7 +246,7 @@ export async function DELETE(req: NextRequest) {
   const { data: schedule } = await supabase
     .from("recurring_schedules")
     .select("id")
-    .eq("student_id", studentId)
+    .eq("id", scheduleId)
     .maybeSingle();
 
   if (!schedule) {

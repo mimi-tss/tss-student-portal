@@ -83,7 +83,7 @@ export default async function AdminStudentPage({
     { data: coach },
     { data: nextSession },
     { data: credits },
-    { data: recurringSchedule },
+    { data: recurringSchedules },
     { data: coaches },
     { count: monthlyCreditsUsed },
     { count: yearlyCreditsUsed },
@@ -115,10 +115,10 @@ export default async function AdminStudentPage({
       .order("expires_at", { ascending: true, nullsFirst: false }),
     supabase
       .from("recurring_schedules")
-      .select("day_of_week, start_time, duration_minutes, start_date, coach_id, cadence")
+      .select("id, day_of_week, start_time, duration_minutes, start_date, coach_id, cadence")
       .eq("student_id", student.id)
-      .maybeSingle(),
-    supabase.from("coaches").select("id, name").eq("active", true).order("name"),
+      .order("day_of_week"),
+    supabase.from("coaches").select("id, name, timezone").eq("active", true).order("name"),
     supabase
       .from("makeup_credits")
       .select("id", { count: "exact", head: true })
@@ -158,18 +158,6 @@ export default async function AdminStudentPage({
       .limit(1)
       .maybeSingle(),
   ]);
-
-  // The recurring schedule's coach can now differ from the student's
-  // overall assigned_coach_id (admin can set them independently — see
-  // recurring-schedule-client.tsx) — fetch its own timezone for the
-  // display conversion rather than assuming it matches `coach` above.
-  const { data: scheduleCoach } = recurringSchedule?.coach_id
-    ? await supabase
-        .from("coaches")
-        .select("timezone")
-        .eq("id", recurringSchedule.coach_id)
-        .maybeSingle()
-    : { data: null };
 
   const [recordings, exerciseCatalog, assignedExercises, cancelRequestExtras] = await Promise.all([
     student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
@@ -237,7 +225,7 @@ export default async function AdminStudentPage({
             guardianPhone: student.guardian_phone,
             guardianEmail: student.guardian_email,
             tier: student.tier,
-            cadence: recurringSchedule?.cadence ?? "weekly",
+            cadence: recurringSchedules?.[0]?.cadence ?? "weekly",
             ambassador: student.ambassador,
             referredByCoachId: student.referred_by_coach_id,
             birthDate: student.birth_date,
@@ -292,7 +280,7 @@ export default async function AdminStudentPage({
             <div className={styles.statValue}>
               <span className={styles.badge}>
                 {TIER_LABEL[student.tier] ?? student.tier}
-                {(recurringSchedule?.cadence ?? "weekly") === "biweekly" ? " (Biweekly)" : ""}
+                {(recurringSchedules?.[0]?.cadence ?? "weekly") === "biweekly" ? " (Biweekly)" : ""}
               </span>
             </div>
           </div>
@@ -352,7 +340,7 @@ export default async function AdminStudentPage({
             studentId={student.id}
             subscriptionStatus={student.subscription_status}
             hasCoach={!!student.assigned_coach_id}
-            hasRecurringSchedule={!!recurringSchedule}
+            hasRecurringSchedule={(recurringSchedules?.length ?? 0) > 0}
             defaultCoachId={student.assigned_coach_id}
             coachTimeZone={coach?.timezone ?? null}
             coaches={coaches ?? []}
@@ -382,21 +370,17 @@ export default async function AdminStudentPage({
           studentId={student.id}
           hasCoach={!!student.assigned_coach_id}
           defaultCoachId={student.assigned_coach_id}
-          coachTimeZone={scheduleCoach?.timezone ?? coach?.timezone ?? null}
           coaches={coaches ?? []}
           hideStartPrompt={student.subscription_status === "active"}
-          schedule={
-            recurringSchedule
-              ? {
-                  dayOfWeek: recurringSchedule.day_of_week,
-                  startTime: recurringSchedule.start_time,
-                  durationMinutes: recurringSchedule.duration_minutes,
-                  startDate: recurringSchedule.start_date,
-                  coachId: recurringSchedule.coach_id,
-                  cadence: recurringSchedule.cadence ?? "weekly",
-                }
-              : null
-          }
+          schedules={(recurringSchedules ?? []).map((s) => ({
+            id: s.id,
+            dayOfWeek: s.day_of_week,
+            startTime: s.start_time,
+            durationMinutes: s.duration_minutes,
+            startDate: s.start_date,
+            coachId: s.coach_id,
+            cadence: s.cadence ?? "weekly",
+          }))}
         />
       </div>
 

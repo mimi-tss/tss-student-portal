@@ -3,6 +3,79 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## A student can now have more than one weekly recurring slot (2026-08-31)
+
+You have a student on a twice-a-week schedule who pays for 2 — there
+was no way to set that up at all. `recurring_schedules.student_id` had
+been `unique` since the very first migration (0020) — every student was
+hard-capped at exactly one weekly slot, admin-wide, since day one.
+
+**Schema**: [0076_recurring_schedules_multiple_per_student.sql](supabase/migrations/0076_recurring_schedules_multiple_per_student.sql)
+(renumbered from an initial 0075 — a concurrent session independently
+claimed that number for the meet-recordings-queue feature below)
+drops that constraint and replaces it with a narrower one —
+`unique (student_id, day_of_week, start_time)` — so a real duplicate
+slot is still rejected, but two different day/times for the same
+student aren't. Turned out the materialization engine
+([lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)) already
+looped over "every active schedule," never assumed a singular one —
+`materializeRecurringSessions`, `getHeldRecurringSlots`, and the
+attention-items "has a schedule" check all needed zero changes. Each
+slot's own 4-per-billing-cycle cap (`occurrencesFor`'s cycle-anchor
+logic) already applies independently per row, so two weekly slots
+correctly produce ~8 sessions/cycle without any change there either.
+
+**What did need fixing** — every `.maybeSingle()` written against
+`recurring_schedules.eq("student_id", …)` back when one-per-student was
+a database guarantee. Three of these would have hard-errored (Postgrest
+"multiple rows returned") the moment a second schedule existed for a
+student, not just shown stale data:
+[lib/coach/dashboard-data.ts](lib/coach/dashboard-data.ts) (coach
+snapshot panel), [student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>)
+(the student's own dashboard), and
+[set-billing-anniversary/route.ts](app/api/admin/set-billing-anniversary/route.ts)
+(re-materialize-on-anchor-change). All three now fetch the array and,
+for the session-cap display,
+`effectiveSessionCycleCap` ([recurring.ts](lib/scheduling/recurring.ts))
+now sums a per-schedule contribution (4/cycle weekly, 2/cycle biweekly)
+across every active schedule instead of assuming there's only one to
+ask about.
+
+**Admin UI**: [recurring-schedule-client.tsx](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>)
+was rebuilt from "one schedule, Change/Remove" into a list — each
+existing slot gets its own Change/Remove, plus an "+ Add another weekly
+slot" link that's always available once at least one slot exists (the
+"Start" button in the lifecycle bar above stays the one entry point for
+a student's *first* slot — unchanged). Only one row is ever in edit
+mode at a time. [recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts)'s
+POST now takes an optional `scheduleId` — given, it edits that slot
+(replacing its own future occurrences, exactly like before); omitted,
+it adds a new one alongside whatever the student already has, touching
+nothing else. Its DELETE now takes `scheduleId` instead of `studentId`
+for the same reason. Also added a same-day overlap check (existing Mon
+4:00-4:30 vs. a new Mon 4:15-4:45) — the unique constraint alone only
+catches an exact duplicate, not two slots that'd double-book the
+student — 409s with a clear message rather than silently creating two
+overlapping "next sessions."
+
+Both the admin single-add route and the shared upsert helper CSV import
+uses ([create-recurring-schedule.ts](lib/admin/create-recurring-schedule.ts))
+used `upsert(..., { onConflict: "student_id" })` — with that constraint
+gone, both would have hard-errored on every save (Postgres requires the
+ON CONFLICT target constraint to actually exist, whether or not a
+conflict occurs). Admin's route now branches explicit insert vs. update
+based on `scheduleId`; the CSV helper (only ever called for a brand-new
+student, so there's never a real existing row to replace) is now a
+plain insert.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **Not live-tested**
+— no login in this environment, and this specifically needs it: please
+retest after confirming migration 0076, giving one real student two
+weekly slots on different days and confirming both this
+week's cycle count on their dashboard, the coach snapshot panel not
+erroring, and the admin student page showing both with independent
+Change/Remove.
+
 ## Recording-to-student matching: the "unmatched recordings" queue (2026-08-31)
 
 Section 7 of the spec ("Recordings") describes matching a Meet
@@ -2291,6 +2364,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0076 not yet confirmed applied** —
+`0076_recurring_schedules_multiple_per_student.sql` drops the
+one-schedule-per-student constraint on `recurring_schedules` (needed to
+give a student two weekly slots — see the entry above). Until this
+runs, trying to add a second weekly slot for any student will fail with
+a duplicate-key error on `recurring_schedules_student_id_key`, and
+every regular single-schedule save keeps working exactly as before
+(this migration only removes a restriction, it doesn't change any
+existing data).
 
 **Migration 0075 confirmed applied** (2026-08-31) — the `meet_recordings`
 table exists; the Recordings queue is live.

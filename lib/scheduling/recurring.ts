@@ -86,16 +86,20 @@ export type ScheduleCadence = "weekly" | "biweekly";
 
 // The effective "sessions per cycle" cap shown on the coach/student
 // dashboards. Suite tier stays unlimited (null) regardless of cadence;
-// everyone else is CYCLE_SESSION_CAP (4) unless their recurring_schedules
-// row is biweekly, in which case it's 2 — otherwise the dashboard would
-// show a misleading "2 of 4 used" for an exception student whose
-// schedule only ever produces 2 sessions in the first place.
+// everyone else sums a per-schedule contribution — CYCLE_SESSION_CAP (4)
+// per weekly slot, 2 per biweekly slot — since a student can now have
+// more than one recurring_schedules row (e.g. paying for 2x/week, each
+// slot capped independently by occurrencesFor's own cycle-anchor logic).
+// A student with no schedule at all still gets the tier's baseline 4 —
+// same as before this could ever be an array of more than one cadence,
+// so a trial/no-schedule student's cap is unaffected.
 export function effectiveSessionCycleCap(
   tier: string,
-  cadence: ScheduleCadence | null | undefined,
+  cadences: (ScheduleCadence | null | undefined)[],
 ): number | null {
   if (tier === "suite") return null;
-  return cadence === "biweekly" ? 2 : CYCLE_SESSION_CAP;
+  if (cadences.length === 0) return CYCLE_SESSION_CAP;
+  return cadences.reduce((sum: number, c) => sum + (c === "biweekly" ? 2 : CYCLE_SESSION_CAP), 0);
 }
 
 function daysInMonth(year: number, month: number): number {

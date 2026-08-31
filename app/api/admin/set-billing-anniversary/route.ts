@@ -30,24 +30,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  // Re-evaluate this student's recurring slot under the corrected
+  // Re-evaluate this student's recurring slot(s) under the corrected
   // anchor immediately, rather than leaving stale occurrences sitting
   // there until the daily cron happens to paper over some of them —
   // materializeRecurringSessions only ever fills in occurrences missing
   // from the CURRENT anchor's pattern, it never removes ones that no
   // longer belong. Same delete-then-regenerate approach
   // recurring-schedule's own POST route uses when the day/time changes.
-  const { data: schedule } = await supabase
+  // A student can have more than one schedule row (migration 0076) — all
+  // of them anchor to the same billing_anniversary_date, so all need
+  // their future occurrences cleared and regenerated.
+  const { data: schedules } = await supabase
     .from("recurring_schedules")
     .select("id")
-    .eq("student_id", studentId)
-    .maybeSingle();
+    .eq("student_id", studentId);
 
-  if (schedule) {
+  if (schedules && schedules.length > 0) {
     const { error: deleteError } = await supabase
       .from("sessions")
       .delete()
-      .eq("recurring_schedule_id", schedule.id)
+      .in("recurring_schedule_id", schedules.map((s) => s.id))
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString());
 

@@ -69,7 +69,7 @@ export default async function StudentDashboardPage() {
     { data: spotlightNotes },
     { data: upcomingCycleSessions },
     { data: pendingRequests },
-    { data: recurringSchedule },
+    { data: recurringSchedules },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -139,10 +139,10 @@ export default async function StudentDashboardPage() {
       .from("recurring_schedules")
       .select("cadence")
       .eq("student_id", student.id)
-      .maybeSingle(),
+      .eq("active", true),
   ]);
 
-  const sessionCycleCap = effectiveSessionCycleCap(student.tier, recurringSchedule?.cadence);
+  const sessionCycleCap = effectiveSessionCycleCap(student.tier, (recurringSchedules ?? []).map((s) => s.cadence));
 
   const hasPendingCancelRequest = (pendingRequests?.length ?? 0) > 0;
 

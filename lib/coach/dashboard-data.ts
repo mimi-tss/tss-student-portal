@@ -256,7 +256,7 @@ export async function getStudentSnapshot(
 
   const { start: cycleStart, end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
 
-  const [{ count: sessionsThisCycle }, { data: credits }, { data: nextSession }, { data: firstSession }, { data: cancelRequest }, { data: recurringSchedule }] =
+  const [{ count: sessionsThisCycle }, { data: credits }, { data: nextSession }, { data: firstSession }, { data: cancelRequest }, { data: recurringSchedules }] =
     await Promise.all([
       supabase
         .from("sessions")
@@ -306,7 +306,7 @@ export async function getStudentSnapshot(
         .from("recurring_schedules")
         .select("cadence")
         .eq("student_id", studentId)
-        .maybeSingle(),
+        .eq("active", true),
     ]);
 
   return {
@@ -315,7 +315,7 @@ export async function getStudentSnapshot(
     tier: student.tier,
     subscriptionStatus: student.subscription_status,
     sessionsThisCycle: sessionsThisCycle ?? 0,
-    sessionCycleCap: effectiveSessionCycleCap(student.tier, recurringSchedule?.cadence),
+    sessionCycleCap: effectiveSessionCycleCap(student.tier, (recurringSchedules ?? []).map((s) => s.cadence)),
     makeupCreditsAvailable: credits?.length ?? 0,
     nextSession: nextSession ? { scheduledAt: nextSession.scheduled_at, durationMinutes: nextSession.duration_minutes } : null,
     withYouSince: student.coach_start_date_override ?? firstSession?.scheduled_at ?? null,

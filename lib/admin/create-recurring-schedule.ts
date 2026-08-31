@@ -13,13 +13,20 @@ export interface CreateRecurringScheduleInput {
 
 export type CreateRecurringScheduleResult = { success: true } | { success: false; error: string };
 
-// Shared by the admin "set a student's recurring slot" route
-// (app/api/admin/recurring-schedule/route.ts) and the CSV bulk-import
-// route — same validate-working-hours / replace-existing-schedule /
-// materialize sequence either way. Accepts either the RLS-scoped session
-// client (single-add route, where "admins manage recurring schedules" —
-// migration 0020 — already permits the write) or the service-role admin
-// client (bulk import), same dual-acceptance as materializeRecurringSessions.
+// Shared by the CSV bulk-import route (its only caller — the admin
+// single-add route has its own edit-or-add-a-schedule-row logic in
+// app/api/admin/recurring-schedule/route.ts, since it has to handle
+// changing an existing slot as well as adding a new one). This helper
+// only ever creates a schedule for a brand-new student, so
+// existingSchedule below is always empty in practice; it's kept as
+// defensive cleanup rather than assumed. A student can have more than
+// one recurring_schedules row now (migration 0076 dropped the
+// one-per-student constraint), so this is a plain insert, not an
+// upsert — inserting a genuine duplicate day/time is caught by the
+// new (student_id, day_of_week, start_time) unique constraint instead.
+// Accepts either the RLS-scoped session client or the service-role
+// admin client (bulk import), same dual-acceptance as
+// materializeRecurringSessions.
 export async function createRecurringSchedule(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -84,24 +91,23 @@ export async function createRecurringSchedule(
 
   const { data: schedule, error } = await supabase
     .from("recurring_schedules")
-    .upsert(
-      {
-        student_id: studentId,
-        coach_id: effectiveCoachId,
-        day_of_week: dayOfWeek,
-        start_time: startTime,
-        duration_minutes: durationMinutes,
-        start_date: effectiveStartDate,
-        cadence: cadence === "biweekly" ? "biweekly" : "weekly",
-        active: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "student_id" },
-    )
+    .insert({
+      student_id: studentId,
+      coach_id: effectiveCoachId,
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      duration_minutes: durationMinutes,
+      start_date: effectiveStartDate,
+      cadence: cadence === "biweekly" ? "biweekly" : "weekly",
+      active: true,
+    })
     .select("id")
     .single();
 
   if (error) {
+    if (error.code === "23505") {
+      return { success: false, error: "This student already has a weekly slot at that day/time." };
+    }
     return { success: false, error: error.message };
   }
 
