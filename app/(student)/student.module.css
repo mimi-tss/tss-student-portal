@@ -576,6 +576,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 520px;
+  overflow-y: auto;
 }
 .exerciseItem {
   display: flex;
