@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## "Remove" now archives instead of trashing — recordings shouldn't be losable (2026-08-31)
+
+Direct follow-up to the Mimi incident above: Drive's own 30-day
+shared-drive trash retention isn't good enough for recordings
+specifically — per you directly, "recordings keep us in check and
+shouldn't be deleted," full stop, not just "recoverable for a month."
+
+`removeStudentFolderItem` ([lib/google/drive.ts](lib/google/drive.ts))
+no longer trashes at all — it moves the item into a new "Archive"
+subfolder created (once, on demand) inside that same student's own
+Drive folder. No new `students` column needed: the Archive folder is
+always findable/creatable from the student's existing
+`drive_folder_id`, same lazy-creation pattern this file already uses
+elsewhere.
+`listStudentRecordings` excludes folder-type children now
+(`mimeType != '...folder'`) so the Archive subfolder itself doesn't
+show up as a stray row in the dashboard's recordings list — the
+student/coach/admin recordings view looks exactly as before, an
+archived item just quietly isn't in it anymore instead of being gone.
+
+Applies uniformly to all three roles that can remove an item (student,
+coach, admin all share this one function per
+[lib/shared-folder.ts](lib/shared-folder.ts)) — the "shouldn't be
+deleted" principle isn't role-specific.
+
+No migration needed — pure Drive-side change, no schema. Verified live
+against the real "TSS Student Drives" shared drive with a disposable
+test file: confirmed the Archive folder gets created, the file
+actually moves, and the main listing correctly excludes both the moved
+file and the Archive folder itself; cleaned up the test file
+afterward. `tsc --noEmit`/`next build` clean.
+
+Not built yet, flagged as a clear next step if wanted: no in-app way to
+browse/restore from a student's Archive folder — for now that's a
+direct trip into Drive's own UI (at least it's one clearly-named
+subfolder inside the student's own folder now, not shared-drive-wide
+trash).
+
 ## Real incident caught a genuine bug in the just-built name-matching, before it ever shipped (2026-08-31)
 
 You (testing live as Mimi Orac, a real student) saw a recording in your

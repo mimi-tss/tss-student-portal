@@ -100,7 +100,10 @@ export interface StudentFolderFile {
 export async function listStudentRecordings(folderId: string): Promise<StudentFolderFile[]> {
   const drive = getDriveClient();
   const res = await drive.files.list({
-    q: `'${folderId}' in parents and trashed = false`,
+    // Excludes the "Archive" subfolder itself (see
+    // removeStudentFolderItem) — a removed item's new home shouldn't
+    // reappear as a stray folder row in this same listing.
+    q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
     corpora: "allDrives",
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
@@ -203,11 +206,45 @@ export async function createDriveShortcut(
   };
 }
 
-// Trashes (not permanently deletes) an item from a student's folder —
-// recoverable, matching this app's general preference for reversible
-// actions over hard deletes. Verifies the item is actually a direct
-// child of the given folder first, so one student's "remove" request
-// can't be pointed at an arbitrary Drive file id elsewhere.
+// Finds (or creates once) the "Archive" subfolder inside a student's
+// own Drive folder — no new students column needed, always derivable
+// from the student's existing drive_folder_id on demand.
+async function getOrCreateArchiveFolder(studentFolderId: string): Promise<string> {
+  const drive = getDriveClient();
+  const existing = await drive.files.list({
+    q: `'${studentFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and name = 'Archive'`,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    corpora: "allDrives",
+    fields: "files(id)",
+  });
+  const found = existing.data.files?.[0]?.id;
+  if (found) return found;
+
+  const created = await drive.files.create({
+    requestBody: {
+      name: "Archive",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [studentFolderId],
+    },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!created.data.id) throw new Error("Archive folder creation returned no id");
+  return created.data.id;
+}
+
+// Moves (never trashes, never permanently deletes) an item out of a
+// student's main folder into that student's own "Archive" subfolder —
+// recordings in particular are the studio's own record of what
+// actually happened in a lesson, so a student (or coach/admin) removing
+// one from view must never actually lose it, and shouldn't depend on
+// Google's own 30-day shared-drive trash retention either (confirmed
+// directly: a student's own accidental/mistaken removal must stay
+// recoverable indefinitely, not just for a month). Verifies the item is
+// actually a direct child of the given folder first, so one student's
+// "remove" request can't be pointed at an arbitrary Drive file id
+// elsewhere.
 export async function removeStudentFolderItem(folderId: string, fileId: string): Promise<void> {
   const drive = getDriveClient();
   const file = await drive.files.get({
@@ -220,9 +257,11 @@ export async function removeStudentFolderItem(folderId: string, fileId: string):
     throw new Error("file does not belong to this folder");
   }
 
+  const archiveFolderId = await getOrCreateArchiveFolder(folderId);
   await drive.files.update({
     fileId,
-    requestBody: { trashed: true },
+    addParents: archiveFolderId,
+    removeParents: folderId,
     supportsAllDrives: true,
   });
 }
