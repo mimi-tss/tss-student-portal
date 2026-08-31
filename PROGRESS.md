@@ -3,6 +3,68 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Real incident caught a genuine bug in the just-built name-matching, before it ever shipped (2026-08-31)
+
+You (testing live as Mimi Orac, a real student) saw a recording in your
+own dashboard that wasn't yours, clicked the student-facing "remove"
+button, then realized it might've actually belonged to a different
+student and wanted it back. Two things came out of chasing this down —
+one a real ops question, one a real bug in code from earlier today
+that hadn't shipped yet.
+
+**"Remove" only trashes, never permanently deletes**
+([removeStudentFolderItem](lib/google/drive.ts) already did this —
+confirmed, not changed here) — found it sitting in Drive's trash by
+`modifiedTime`/`trashedTime`, both parts (Meet had split the recording
+into "Recording"/"Recording 2") landed back in Mimi's folder from the
+Opus1 backfill 2 turns ago, and restored (`trashed: false`) both while
+investigating.
+
+**What was actually going on**: Celine ran two students back-to-back in
+her persistent room, properly stopping and restarting the recording
+between them (confirmed with you directly — "cut perfectly") — so the
+two video *files* really were split correctly, one per student. But
+Gemini's own notes doc merged both lessons into one shared document
+anyway (its "Next steps"/topic sections named both "Cameron" and
+"Mimi"). "Recording" was confirmed by you (you watched it) to be yours;
+"Recording 2" — Cameron's — got moved back out to the shared inbox
+to wait until Cameron exists as a student here at all (not onboarded
+yet, so no folder to put it in).
+
+**The bug this exposed**: `findNearbyGeminiNotes` (this session's own
+name-matching feature, built earlier today, migrations not yet applied
+so nothing in production was actually wrong) paired a recording to its
+notes doc by *creation-time proximity* — confirmed live this grabbed
+completely the wrong meeting's notes doc for this exact file (a 7:29pm
+meeting instead of the correct 4:59pm one), since a notes doc's own
+processing lag doesn't track its recording's independently. Fixed:
+renamed to `findGeminiNotesForRecording`
+([lib/google/drive.ts](lib/google/drive.ts)), now matches on the exact
+shared "YYYY/MM/DD HH:MM EDT" label text first (confirmed reliable),
+only falling back to the old time-window approach for a raw,
+not-yet-processed recording that has no label to search on yet.
+
+Separately, even with pairing fixed, this exact scenario (one shared
+notes doc, two real students, only one of them in the active roster)
+would still have silently produced a confident wrong match — the notes
+doc genuinely names both, and a per-recording check finds a clean
+single hit against the roster for *each* file independently, "wrongly"
+attaching both to the one known student. `runNameMatching`
+([lib/admin/recording-matching.ts](lib/admin/recording-matching.ts))
+is now two-pass: resolve every recording's paired notes doc first
+without matching anything, then only auto-match a notes doc that pairs
+to exactly one still-unmatched recording. A notes doc shared across
+multiple files is now itself the signal that it can't be trusted for
+either — falls to the manual queue instead, same fail-safe posture as
+everything else in this feature.
+
+Verified via `tsc --noEmit`/`next build` (clean) and the same live
+Drive data that exposed the bug — exact-label search now correctly
+finds the one true paired notes doc. Still gated behind migrations
+0077/0078 (not yet confirmed applied), so none of this — the bug or the
+fix — ever touched production matching; caught entirely through your
+own live testing as a real student before it could.
+
 ## Exit survey link on the cancel-request flow (2026-08-31)
 
 You gave the studio's Tally exit survey link
@@ -2692,15 +2754,9 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migrations 0077 and 0078 not yet confirmed applied** —
-`0077_meet_recordings_name_matching.sql` adds `matched_student_id`/
-`match_method` to `meet_recordings` (name-in-notes matching);
-`0078_recording_attention_items.sql` adds the `recording_unmatched`/
-`recording_missing` Needs Review kinds plus their `session_id`/
-`recording_id` columns on `attention_items`. Until both run, the
-Recordings page's name-matching pass and both new Needs Review flags
-will error rather than do anything — the existing day+session matching
-and every other Needs Review kind are unaffected either way.
+**Migrations 0077 and 0078 confirmed applied** (2026-08-31) — the
+Recordings page's name-matching pass and the `recording_unmatched`/
+`recording_missing` Needs Review kinds are live.
 
 **Migration 0076 confirmed applied** (2026-08-31) — a student can now
 be given more than one weekly recurring slot from their admin page.

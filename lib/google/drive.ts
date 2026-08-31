@@ -277,26 +277,47 @@ export async function moveFileToStudentFolder(fileId: string, fromFolderId: stri
 // A recording's own filename time (parsed separately) tells us when the
 // *meeting* happened; Gemini's notes doc for that same meeting is what
 // actually names the student, so pairing the two is what makes
-// name-based matching possible. Notes docs don't share the recording's
-// naming prefix reliably (an ad-hoc code-joined meeting's notes are
-// titled "Meeting started ..." while its recording keeps the meeting
-// code — confirmed live), so pairing by filename text doesn't work.
-// Pairing by creation-time proximity does: both files land in Drive
-// within minutes of each other, right after the call ends.
+// name-based matching possible.
+//
+// Prefer matching on the shared "YYYY/MM/DD HH:MM EDT" label text when
+// the recording has one — confirmed live this is exact and reliable.
+// Creation-time proximity alone is NOT reliable: confirmed live it can
+// grab a completely different meeting's notes doc, since a notes doc's
+// own processing lag doesn't track its recording's independently (a
+// notes doc created "close in time" to this recording can belong to a
+// different meeting hours off by its own label). Time-proximity is only
+// the fallback, for a not-yet-processed recording that's still just a
+// raw meeting code with no shared label text to search on at all.
 export interface GeminiNotesCandidate {
   id: string;
   name: string;
 }
 
-export async function findNearbyGeminiNotes(
+const LABEL_PATTERN = /\d{4}\/\d{2}\/\d{2} \d{2}:\d{2} EDT/;
+
+export async function findGeminiNotesForRecording(
+  recordingFileName: string,
   recordingCreatedTime: string,
-  windowMinutes = 20,
 ): Promise<GeminiNotesCandidate[]> {
+  const drive = getDriveClient();
+  const labelMatch = recordingFileName.match(LABEL_PATTERN);
+
+  if (labelMatch) {
+    const res = await drive.files.list({
+      q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains '${labelMatch[0]}'`,
+      fields: "files(id, name)",
+      pageSize: 5,
+    });
+    const exact = (res.data.files ?? []).filter((f) => f.id);
+    if (exact.length > 0) {
+      return exact.map((f) => ({ id: f.id as string, name: f.name ?? "Untitled" }));
+    }
+  }
+
+  const windowMinutes = 20;
   const center = new Date(recordingCreatedTime).getTime();
   const start = new Date(center - windowMinutes * 60 * 1000).toISOString();
   const end = new Date(center + windowMinutes * 60 * 1000).toISOString();
-
-  const drive = getDriveClient();
   const res = await drive.files.list({
     q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains 'Notes by Gemini' and createdTime > '${start}' and createdTime < '${end}'`,
     fields: "files(id, name)",

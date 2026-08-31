@@ -2,7 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   listMeetRecordingsInbox,
   moveFileToStudentFolder,
-  findNearbyGeminiNotes,
+  findGeminiNotesForRecording,
   exportDocText,
   MEET_RECORDINGS_INBOX_FOLDER_ID,
 } from "@/lib/google/drive";
@@ -174,10 +174,22 @@ export function findStudentNameInText(text: string, students: StudentForMatching
 // confirmed present in it (the notes header always includes the
 // meeting organizer's email) — guards against a same-timestamp
 // coincidence pairing the wrong coach's notes to this recording.
+//
+// Two-pass, not one: first resolve every unmatched recording's paired
+// notes doc without attaching anything, then only auto-match a notes
+// doc that pairs to exactly ONE still-unmatched recording. Confirmed
+// live this matters — a coach properly stopping and restarting the
+// recording between two back-to-back students still leaves Gemini's
+// notes as ONE shared doc covering both, so it names both students.
+// If only one of the two happens to already exist in the active
+// roster, a naive per-recording check finds a clean single hit for
+// EACH file and confidently (and wrongly) attaches both files to that
+// one known student. A notes doc shared across multiple still-unmatched
+// files is itself the signal that it can't be trusted for any of them.
 export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
   const { data: unmatched } = await admin
     .from("meet_recordings")
-    .select("id, coach_id, drive_created_at")
+    .select("id, coach_id, file_name, drive_created_at")
     .eq("status", "unmatched")
     .not("coach_id", "is", null);
 
@@ -202,27 +214,47 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
     studentsByCoach.set(key, list);
   }
 
-  let matched = 0;
+  // Pass 1: resolve each recording's paired notes doc (if any confirmed
+  // for the right coach) without matching anything yet.
+  const resolved: { recordingId: string; coachId: string; notesDocId: string }[] = [];
   for (const rec of unmatched) {
     const coachEmail = coachEmailById.get(rec.coach_id as string);
-    const roster = studentsByCoach.get(rec.coach_id as string) ?? [];
-    if (!coachEmail || roster.length === 0) continue;
+    if (!coachEmail) continue;
 
-    const candidates = await findNearbyGeminiNotes(rec.drive_created_at as string);
-    let notesText: string | null = null;
+    const candidates = await findGeminiNotesForRecording(rec.file_name as string, rec.drive_created_at as string);
     for (const candidate of candidates) {
       const text = await exportDocText(candidate.id);
       if (text.toLowerCase().includes(coachEmail)) {
-        notesText = text;
+        resolved.push({ recordingId: rec.id, coachId: rec.coach_id as string, notesDocId: candidate.id });
         break;
       }
     }
-    if (!notesText) continue;
+  }
 
-    const studentId = findStudentNameInText(notesText, roster);
+  const recordingsPerNotesDoc = new Map<string, number>();
+  for (const r of resolved) {
+    recordingsPerNotesDoc.set(r.notesDocId, (recordingsPerNotesDoc.get(r.notesDocId) ?? 0) + 1);
+  }
+
+  // Pass 2: only act on notes docs uniquely paired to one recording.
+  let matched = 0;
+  const notesTextCache = new Map<string, string>();
+  for (const { recordingId, coachId, notesDocId } of resolved) {
+    if ((recordingsPerNotesDoc.get(notesDocId) ?? 0) !== 1) continue;
+
+    const roster = studentsByCoach.get(coachId) ?? [];
+    if (roster.length === 0) continue;
+
+    let text = notesTextCache.get(notesDocId);
+    if (!text) {
+      text = await exportDocText(notesDocId);
+      notesTextCache.set(notesDocId, text);
+    }
+
+    const studentId = findStudentNameInText(text, roster);
     if (!studentId) continue;
 
-    const result = await attachRecordingToStudent(admin, rec.id, studentId, { method: "name_in_notes" });
+    const result = await attachRecordingToStudent(admin, recordingId, studentId, { method: "name_in_notes" });
     if (result.success) matched++;
   }
 
