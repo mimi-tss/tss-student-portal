@@ -2769,12 +2769,8 @@ unassign exercises from their own students; admin's own unassign was
 unaffected either way (already covered by the existing admin for-all
 policy).
 
-**New migration 0073 not yet confirmed applied** —
-`0073_activity_events_group_lesson.sql` adds `group_lesson_id` to
-`activity_events` for the group-lesson join-click audit trail. Until
-this runs, a click on a group-lesson Join button will fail to log at
-all (the insert has nowhere valid to put the reference) — the actual
-join still works fine either way, this only affects the Activity Log.
+**Migration 0073 confirmed applied** (2026-08-31) — a group-lesson Join
+click now logs correctly in the Activity Log.
 
 **Migrations 0070 and 0071 confirmed applied** (2026-08-29) — the
 student-migration-fields feature (Phone/Gender/Address/Guardian panels,
@@ -2804,24 +2800,12 @@ live.
 coach time-off feature (Team Huddle, per-coach lunch/dinner breaks) is
 live.
 
-**New migration 0062 not yet confirmed applied** —
-`supabase/migrations/0062_fix_attention_items_duplication.sql` cleans
-up the "Needs Action (42)" duplication bug and adds a unique index
-that prevents it recurring. Until this runs, the dedup fix in
-`lib/admin/attention-items.ts` will hit the old data (still 42 rows)
-and the app-side `upsert(..., { onConflict: "student_id,kind" })` call
-will actually ERROR — there's no matching unique constraint on the
-live DB yet for Postgres to conflict against. Run 0062 before using
-Needs Review again.
+**Migration 0062 confirmed applied** (2026-08-31) — the old "Needs
+Action (42)" duplication is cleaned up and can't recur.
 
-**New migration 0061 not yet confirmed applied** — 0060 didn't
-actually fix the makeup_credits recursion; it hit a *different*,
-genuinely self-referential policy from 0012 (student-fault cap check
-subqueries makeup_credits itself), confirmed still failing live after
-0060 was applied. `0061_fix_makeup_credits_self_reference.sql` moves
-that count into a SECURITY DEFINER function. Until this runs, granting
-a credit (single or multi-line) will keep failing with "infinite
-recursion detected in policy for relation makeup_credits".
+**Migration 0061 confirmed applied** (2026-08-31) — granting a credit
+(single or multi-line) works; the makeup_credits recursion 0060 missed
+is fixed.
 
 **Migration 0060 confirmed applied** (2026-08-28) — fixed 4 of the 5
 makeup_credits policies, just not the one actually causing the error.
