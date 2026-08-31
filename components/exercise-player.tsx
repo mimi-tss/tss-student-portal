@@ -54,6 +54,28 @@ export default function ExercisePlayer({ src }: { src: string }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openPopover]);
 
+  // popoverPos is only ever computed once, at the moment the popover
+  // opens — scrolling the page afterward left it visually pinned at
+  // that original spot instead of following its trigger button,
+  // confirmed live to end up overlapping unrelated content further up
+  // the page. Closing on scroll/resize is simpler and more robust than
+  // continuously recomputing position (and matches how a lightweight
+  // popover like this is expected to behave elsewhere). Capture phase
+  // on window so a scroll inside any nested scrollable ancestor is
+  // caught too, not just window-level scrolling.
+  useEffect(() => {
+    if (!openPopover) return;
+    function handleScrollOrResize() {
+      setOpenPopover(null);
+    }
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [openPopover]);
+
   function togglePopover(kind: PopoverKind, btnRef: React.RefObject<HTMLButtonElement | null>) {
     if (openPopover === kind) {
       setOpenPopover(null);
