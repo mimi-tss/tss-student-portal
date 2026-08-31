@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
+import { zonedYearMonthDay } from "@/lib/timezone";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -16,7 +17,9 @@ export type AttentionKind =
   | "no_show_3"
   | "no_recurring_schedule"
   | "hold_ending_soon"
-  | "inactive_10_days";
+  | "inactive_10_days"
+  | "recording_unmatched"
+  | "recording_missing";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
@@ -105,9 +108,54 @@ async function createIfNew(
   );
 }
 
+// recording_unmatched's own dedup key — a recording rarely has a known
+// student_id (that's the whole reason it needs review), so it can't
+// use createIfNew's (student_id, kind) index above; it dedups on the
+// recording itself instead, same idea as request_id already does for
+// cancel_request.
+async function createIfNewByRecording(
+  supabase: SupabaseClient,
+  input: { recordingId: string; coachId: string | null; summary: string },
+) {
+  await supabase.from("attention_items").upsert(
+    { kind: "recording_unmatched", recording_id: input.recordingId, coach_id: input.coachId, summary: input.summary },
+    { onConflict: "recording_id,kind", ignoreDuplicates: true },
+  );
+}
+
+// recording_missing needs to recur per session occurrence (a student
+// missing their recording two different weeks are two separate things
+// to review, unlike e.g. "inactive" which is one ongoing condition) —
+// dedups on session_id instead of student_id for the same reason.
+async function createIfNewBySession(
+  supabase: SupabaseClient,
+  input: { sessionId: string; studentId: string; summary: string },
+) {
+  await supabase.from("attention_items").upsert(
+    { kind: "recording_missing", session_id: input.sessionId, student_id: input.studentId, summary: input.summary },
+    { onConflict: "session_id,kind", ignoreDuplicates: true },
+  );
+}
+
+// Called the moment a recording leaves 'unmatched' (matched or
+// dismissed, see lib/admin/recording-matching.ts) — unlike the 5
+// condition-driven kinds above, a recording_unmatched item's underlying
+// problem has a single clean fix-it event, so resolving it here is more
+// helpful than making an admin close it by hand after already fixing it
+// in the Recordings queue.
+export async function resolveAttentionItemsForRecording(supabase: SupabaseClient, recordingId: string) {
+  await supabase
+    .from("attention_items")
+    .update({ status: "resolved", resolved_at: new Date().toISOString() })
+    .eq("recording_id", recordingId)
+    .eq("kind", "recording_unmatched")
+    .neq("status", "resolved");
+}
+
 const EXPIRING_WITHIN_DAYS = 5;
 const HOLD_ENDING_WITHIN_DAYS = 7;
 const INACTIVE_DAYS = 10;
+const RECORDING_GRACE_HOURS = 6; // matches the real multi-hour Meet processing delay confirmed live
 
 // Reconciles the 5 condition-driven kinds against current data. Cheap
 // enough to run on every Needs Attention / Overview read (a handful of
@@ -224,6 +272,82 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
       summary: s.streak_last_active_date
         ? `Last active ${s.streak_last_active_date} — hasn't logged in for over ${INACTIVE_DAYS} days`
         : `Never logged in`,
+    });
+  }
+
+  await syncRecordingAttentionItems(supabase);
+}
+
+// Both kinds here are deliberately forward-looking only (recorded_date/
+// scheduled_at >= today) — never applied to the historical backlog.
+// Surfacing weeks of pre-existing unmatched recordings here would
+// recreate the exact "queue too overwhelming to use" problem already
+// hit once building the Recordings page itself.
+async function syncRecordingAttentionItems(supabase: SupabaseClient) {
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayStr = todayStart.toISOString().slice(0, 10);
+  const graceCutoff = new Date(Date.now() - RECORDING_GRACE_HOURS * 60 * 60 * 1000);
+
+  const { data: unmatchedRecordings } = await supabase
+    .from("meet_recordings")
+    .select("id, coach_id, recorded_date, coaches(name)")
+    .eq("status", "unmatched")
+    .gte("recorded_date", todayStr);
+
+  for (const rec of unmatchedRecordings ?? []) {
+    const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? "an unrecognized coach";
+    await createIfNewByRecording(supabase, {
+      recordingId: rec.id,
+      coachId: rec.coach_id,
+      summary: `Recording from ${coachName} on ${rec.recorded_date} couldn't be matched to a student`,
+    });
+  }
+
+  const { data: candidateSessions } = await supabase
+    .from("sessions")
+    .select("id, student_id, scheduled_at, duration_minutes, status, students(name), coaches:actual_coach_id(timezone)")
+    .gte("scheduled_at", `${todayStr}T00:00:00Z`)
+    .lte("scheduled_at", new Date().toISOString())
+    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)");
+
+  for (const s of candidateSessions ?? []) {
+    const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
+    if (endTime > graceCutoff.getTime()) continue; // too soon to expect a recording yet
+
+    const timezone = (s.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
+    const [y, m, d] = zonedYearMonthDay(new Date(s.scheduled_at), timezone);
+    const sessionDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+    const { data: existingRecording } = await supabase
+      .from("meet_recordings")
+      .select("id")
+      .eq("status", "matched")
+      .eq("matched_student_id", s.student_id)
+      .eq("recorded_date", sessionDate)
+      .maybeSingle();
+
+    const studentName = (s.students as unknown as { name: string } | null)?.name ?? "Student";
+
+    if (existingRecording) {
+      // The condition that created this (if it did) is no longer true —
+      // unlike the 5 kinds above, this one's "resolved" is a computed
+      // fact (a recording now exists), not an admin decision, so it's
+      // safe and more helpful to auto-resolve rather than wait for a
+      // manual click on something that already fixed itself.
+      await supabase
+        .from("attention_items")
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("session_id", s.id)
+        .eq("kind", "recording_missing")
+        .neq("status", "resolved");
+      continue;
+    }
+
+    await createIfNewBySession(supabase, {
+      sessionId: s.id,
+      studentId: s.student_id,
+      summary: `${studentName}'s session on ${sessionDate} has no recording yet`,
     });
   }
 }

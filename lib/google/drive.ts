@@ -274,6 +274,50 @@ export async function moveFileToStudentFolder(fileId: string, fromFolderId: stri
   });
 }
 
+// A recording's own filename time (parsed separately) tells us when the
+// *meeting* happened; Gemini's notes doc for that same meeting is what
+// actually names the student, so pairing the two is what makes
+// name-based matching possible. Notes docs don't share the recording's
+// naming prefix reliably (an ad-hoc code-joined meeting's notes are
+// titled "Meeting started ..." while its recording keeps the meeting
+// code — confirmed live), so pairing by filename text doesn't work.
+// Pairing by creation-time proximity does: both files land in Drive
+// within minutes of each other, right after the call ends.
+export interface GeminiNotesCandidate {
+  id: string;
+  name: string;
+}
+
+export async function findNearbyGeminiNotes(
+  recordingCreatedTime: string,
+  windowMinutes = 20,
+): Promise<GeminiNotesCandidate[]> {
+  const center = new Date(recordingCreatedTime).getTime();
+  const start = new Date(center - windowMinutes * 60 * 1000).toISOString();
+  const end = new Date(center + windowMinutes * 60 * 1000).toISOString();
+
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains 'Notes by Gemini' and createdTime > '${start}' and createdTime < '${end}'`,
+    fields: "files(id, name)",
+    pageSize: 10,
+  });
+  return (res.data.files ?? [])
+    .filter((f) => f.id)
+    .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled" }));
+}
+
+// Exports a Google Doc's plain-text content — used to search a Gemini
+// notes doc for whichever student's name appears in it, and to confirm
+// the notes doc actually belongs to the expected coach (the notes doc
+// header includes the meeting organizer's email) before trusting
+// anything it says.
+export async function exportDocText(fileId: string): Promise<string> {
+  const drive = getDriveClient();
+  const res = await drive.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+  return res.data as unknown as string;
+}
+
 // Creates (once) a student's Drive folder nested under their assigned
 // coach's subfolder, and saves the folder ID onto the student record.
 // Called from every path that can set assigned_coach_id — a fresh Kajabi

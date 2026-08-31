@@ -20,6 +20,8 @@ const KIND_LABEL: Record<AttentionKind, string> = {
   no_recurring_schedule: "No Schedule",
   hold_ending_soon: "Hold Ending",
   inactive_10_days: "Inactive",
+  recording_unmatched: "Unmatched Recording",
+  recording_missing: "Missing Recording",
 };
 
 const KIND_CLASS: Record<AttentionKind, string> = {
@@ -37,6 +39,8 @@ const KIND_CLASS: Record<AttentionKind, string> = {
   no_recurring_schedule: styles.naKindPause,
   hold_ending_soon: styles.naKindPause,
   inactive_10_days: styles.naKindCancel,
+  recording_unmatched: styles.naKindCredit,
+  recording_missing: styles.naKindCredit,
 };
 
 const TABS: { status: AttentionStatus; label: string }[] = [

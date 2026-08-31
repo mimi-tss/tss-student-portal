@@ -3,6 +3,75 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recording matching: name-in-notes signal, plus two new Needs Review flags (2026-08-31)
+
+Two follow-ups from the Mimi Orac backfill test above, both from you
+directly. First: manually screenshotting Opus1's schedule per student
+to identify recordings "is too much" to do for the whole roster —
+asked whether each recording's attached Gemini notes could be searched
+for the student's name instead. Second: flag on Needs Review when a
+student didn't get their recording, but forward-looking only, not the
+historical backlog.
+
+**Name-in-notes matching** — every Meet recording that had Gemini
+notes enabled has a paired "...- Notes by Gemini" Google Doc sitting in
+the same shared inbox. Confirmed live: its "Next steps" section names
+the student explicitly and consistently ("[Mia Jackson] Color Code
+Notes: ..."), and its header includes the meeting organizer's actual
+email — both used to make this reliable. New
+`findNearbyGeminiNotes`/`exportDocText` ([lib/google/drive.ts](lib/google/drive.ts))
+find the notes doc by *creation-time proximity* to the recording (not
+filename — a notes doc's own naming doesn't reliably match its
+recording's: an ad-hoc code-joined meeting's notes are titled "Meeting
+started ..." while the recording keeps the meeting code). New
+`runNameMatching` ([lib/admin/recording-matching.ts](lib/admin/recording-matching.ts))
+confirms the coach's own email appears in a candidate notes doc before
+trusting it (guards against a same-timestamp coincidence pairing the
+wrong coach's notes), then checks that coach's active roster's full
+names against the text — exactly one hit required, same fail-safe
+posture as everything else in this feature. Runs *before* the existing
+day+session matching in the scan pipeline, since it doesn't depend on
+`sessions.status = 'attended'` ever being set — which, per the earlier
+finding, isn't actually happening at this studio yet, so this alone is
+now the path most likely to resolve anything.
+
+Schema followed the logic: `meet_recordings` gains `matched_student_id`
+(the new source of truth for "who this belongs to" regardless of which
+path matched it) and `match_method`
+([0077_meet_recordings_name_matching.sql](supabase/migrations/0077_meet_recordings_name_matching.sql)).
+`attachRecordingToSession` became `attachRecordingToStudent` — a name
+match has no specific session to point to, so `matched_session_id`
+stays optional now instead of required.
+
+**Two new Needs Review kinds**
+([0078_recording_attention_items.sql](supabase/migrations/0078_recording_attention_items.sql)),
+both strictly forward-looking (`recorded_date`/`scheduled_at >= today`)
+— never retroactive, per your explicit ask, since the historical
+backlog is already known to be huge and not useful to surface here.
+- `recording_unmatched`: a recording landed but neither matching path
+  could confidently place it. Dedups on the recording itself (often has
+  no known student_id at all — that's the whole problem), not the
+  existing `(student_id, kind)` pattern from 0062.
+- `recording_missing`: a session has clearly already happened (6-hour
+  grace period past its scheduled end, matching the real Meet
+  processing delays confirmed earlier this session) and still has
+  nothing matched to it. Dedups on `session_id` — unlike the 5 existing
+  condition-driven kinds, this one needs to recur per occurrence (a
+  student missing their recording two different weeks are two separate
+  things to review), and it auto-resolves once a matching recording
+  shows up rather than waiting for a manual click, since "resolved"
+  here is a computed fact, not an admin decision — a deliberate
+  divergence from the other 5 kinds' "resolving sticks forever"
+  behavior, called out directly in the code comment so it doesn't read
+  as an oversight later.
+
+Verified via `tsc --noEmit`/`next build` (clean) and a dry run of
+`findStudentNameInText` against the real Gemini notes content pulled
+live during the spike (correctly picked the one matching name out of a
+3-student roster). **Not yet live-tested against a real ambiguous
+day** — both new migrations need your confirmation before the
+Recordings page or Needs Review will reflect any of this.
+
 ## One-off: backfilled Mimi Orac's pre-app recording history from Opus1 (2026-08-31)
 
 Separate from the ongoing-forward matching queue below — this was about
@@ -2529,6 +2598,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migrations 0077 and 0078 not yet confirmed applied** —
+`0077_meet_recordings_name_matching.sql` adds `matched_student_id`/
+`match_method` to `meet_recordings` (name-in-notes matching);
+`0078_recording_attention_items.sql` adds the `recording_unmatched`/
+`recording_missing` Needs Review kinds plus their `session_id`/
+`recording_id` columns on `attention_items`. Until both run, the
+Recordings page's name-matching pass and both new Needs Review flags
+will error rather than do anything — the existing day+session matching
+and every other Needs Review kind are unaffected either way.
 
 **Migration 0076 confirmed applied** (2026-08-31) — a student can now
 be given more than one weekly recurring slot from their admin page.

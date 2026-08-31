@@ -2,9 +2,12 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import {
   listMeetRecordingsInbox,
   moveFileToStudentFolder,
+  findNearbyGeminiNotes,
+  exportDocText,
   MEET_RECORDINGS_INBOX_FOLDER_ID,
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
+import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
 
 interface CoachForMatching {
   id: string;
@@ -86,13 +89,17 @@ export async function scanForNewRecordings(admin: SupabaseClient): Promise<{ ins
 }
 
 // Moves the file into the matched student's own folder and marks the
-// row resolved — shared by both the automatic 1:1 path (runDayMatching)
-// and an admin's manual pick, so a match always means the file actually
-// moved, not just a DB flag.
-export async function attachRecordingToSession(
+// row resolved — shared by every match path (auto day+session,
+// auto name-in-notes, and an admin's manual pick), so a match always
+// means the file actually moved, not just a DB flag. matched_student_id
+// is the source of truth for "who this belongs to" regardless of path;
+// sessionId is optional since a name-match may have no specific session
+// to point to.
+export async function attachRecordingToStudent(
   admin: SupabaseClient,
   recordingId: string,
-  sessionId: string,
+  studentId: string,
+  opts: { sessionId?: string | null; method: "day_session" | "name_in_notes" | "manual" },
 ): Promise<{ success: boolean; error?: string }> {
   const { data: recording } = await admin
     .from("meet_recordings")
@@ -104,25 +111,26 @@ export async function attachRecordingToSession(
     return { success: false, error: "recording not found or already resolved" };
   }
 
-  const { data: session } = await admin
-    .from("sessions")
-    .select("id, students(drive_folder_id)")
-    .eq("id", sessionId)
-    .single();
-
-  const driveFolderId = (session?.students as unknown as { drive_folder_id: string | null } | null)?.drive_folder_id;
-  if (!session || !driveFolderId) {
+  const { data: student } = await admin.from("students").select("drive_folder_id").eq("id", studentId).single();
+  if (!student?.drive_folder_id) {
     return { success: false, error: "that student has no Drive folder set up yet" };
   }
 
-  await moveFileToStudentFolder(recording.drive_file_id, MEET_RECORDINGS_INBOX_FOLDER_ID, driveFolderId);
+  await moveFileToStudentFolder(recording.drive_file_id, MEET_RECORDINGS_INBOX_FOLDER_ID, student.drive_folder_id);
 
   const { error } = await admin
     .from("meet_recordings")
-    .update({ status: "matched", matched_session_id: sessionId, matched_at: new Date().toISOString() })
+    .update({
+      status: "matched",
+      matched_student_id: studentId,
+      matched_session_id: opts.sessionId ?? null,
+      match_method: opts.method,
+      matched_at: new Date().toISOString(),
+    })
     .eq("id", recordingId);
 
   if (error) return { success: false, error: error.message };
+  await resolveAttentionItemsForRecording(admin, recordingId);
   return { success: true };
 }
 
@@ -137,7 +145,88 @@ export async function dismissRecording(
     .eq("status", "unmatched");
 
   if (error) return { success: false, error: error.message };
+  await resolveAttentionItemsForRecording(admin, recordingId);
   return { success: true };
+}
+
+// Searches a Gemini notes doc's text for exactly one of a coach's
+// students by full name — deliberately requires an unambiguous single
+// hit (two names appearing, or none, both fall through to the manual
+// queue) since a wrong auto-match here means moving a real recording
+// into the wrong family's Drive folder.
+interface StudentForMatching {
+  id: string;
+  name: string;
+}
+
+export function findStudentNameInText(text: string, students: StudentForMatching[]): string | null {
+  const lower = text.toLowerCase();
+  const hits = students.filter((s) => lower.includes(s.name.toLowerCase()));
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+// Name-based matching via each recording's paired Gemini notes doc —
+// doesn't depend on sessions.status ever being marked 'attended' at
+// all, unlike runDayMatching below, so it can resolve recordings the
+// day+session path never will while attendance-marking isn't a habit
+// yet at this studio. Only considers a coach's own current, active
+// roster, and only trusts a notes doc once the coach's own email is
+// confirmed present in it (the notes header always includes the
+// meeting organizer's email) — guards against a same-timestamp
+// coincidence pairing the wrong coach's notes to this recording.
+export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
+  const { data: unmatched } = await admin
+    .from("meet_recordings")
+    .select("id, coach_id, drive_created_at")
+    .eq("status", "unmatched")
+    .not("coach_id", "is", null);
+
+  if (!unmatched?.length) return { matched: 0 };
+
+  const coachIds = [...new Set(unmatched.map((r) => r.coach_id as string))];
+  const [{ data: coaches }, { data: students }] = await Promise.all([
+    admin.from("coaches").select("id, email").in("id", coachIds),
+    admin
+      .from("students")
+      .select("id, name, assigned_coach_id")
+      .eq("archived", false)
+      .in("assigned_coach_id", coachIds),
+  ]);
+
+  const coachEmailById = new Map((coaches ?? []).map((c) => [c.id as string, (c.email as string).toLowerCase()]));
+  const studentsByCoach = new Map<string, StudentForMatching[]>();
+  for (const s of students ?? []) {
+    const key = s.assigned_coach_id as string;
+    const list = studentsByCoach.get(key) ?? [];
+    list.push({ id: s.id, name: s.name });
+    studentsByCoach.set(key, list);
+  }
+
+  let matched = 0;
+  for (const rec of unmatched) {
+    const coachEmail = coachEmailById.get(rec.coach_id as string);
+    const roster = studentsByCoach.get(rec.coach_id as string) ?? [];
+    if (!coachEmail || roster.length === 0) continue;
+
+    const candidates = await findNearbyGeminiNotes(rec.drive_created_at as string);
+    let notesText: string | null = null;
+    for (const candidate of candidates) {
+      const text = await exportDocText(candidate.id);
+      if (text.toLowerCase().includes(coachEmail)) {
+        notesText = text;
+        break;
+      }
+    }
+    if (!notesText) continue;
+
+    const studentId = findStudentNameInText(notesText, roster);
+    if (!studentId) continue;
+
+    const result = await attachRecordingToStudent(admin, rec.id, studentId, { method: "name_in_notes" });
+    if (result.success) matched++;
+  }
+
+  return { matched };
 }
 
 // Attended sessions for a coach on one calendar day that don't already
@@ -219,7 +308,10 @@ export async function runDayMatching(admin: SupabaseClient): Promise<{ autoMatch
     const sameDaySessions = await listCandidateSessions(admin, coachId, date, timezone, alreadyMatchedSessionIds);
     if (sameDaySessions.length !== 1) continue;
 
-    const result = await attachRecordingToSession(admin, recordingId, sameDaySessions[0].id);
+    const result = await attachRecordingToStudent(admin, recordingId, sameDaySessions[0].studentId, {
+      sessionId: sameDaySessions[0].id,
+      method: "day_session",
+    });
     if (result.success) autoMatched++;
   }
 

@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
-import { scanForNewRecordings, runDayMatching, listCandidateSessions } from "@/lib/admin/recording-matching";
+import {
+  scanForNewRecordings,
+  runNameMatching,
+  runDayMatching,
+  listCandidateSessions,
+} from "@/lib/admin/recording-matching";
 
 // Scans the shared Meet-recordings inbox on every load rather than on a
 // timer — this app has no scheduled-job infrastructure of its own
@@ -23,7 +28,14 @@ export async function GET() {
 
   const admin = createAdminClient();
   await scanForNewRecordings(admin);
-  const { autoMatched } = await runDayMatching(admin);
+  // Name-matching first — it doesn't depend on attendance ever being
+  // marked (day+session matching does), so it resolves more real cases
+  // at this studio right now. Day+session still runs after as a
+  // fallback for whatever name-matching couldn't resolve (no Gemini
+  // notes doc, ambiguous names).
+  const { matched: nameMatched } = await runNameMatching(admin);
+  const { autoMatched: dayMatched } = await runDayMatching(admin);
+  const autoMatched = nameMatched + dayMatched;
 
   const [{ data: unmatched }, { data: matchedRows }] = await Promise.all([
     admin
