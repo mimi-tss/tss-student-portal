@@ -145,7 +145,7 @@ export default function SharedFolderPanel({
       {files.length === 0 ? (
         <p className="p-5 text-sm text-[var(--text-muted)]">Nothing shared yet.</p>
       ) : (
-        <div className="p-2">
+        <div className="max-h-[270px] overflow-y-auto p-2">
           {files.map((f) => (
             <div
               key={f.id}
