@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Stop panel's "Mark retained"/"Mark cancelled" went permanently dead after one click (2026-08-31)
+
+You caught this live on a test student ("testttt") — the Stop panel
+showed "Cancellation confirmed" with both action buttons greyed out and
+unclickable, no way to retain the student.
+
+Root cause: both buttons are gated on `cancelRequest.attentionItemId`
+(`disabled={saving || !cancelRequest.attentionItemId}` in
+[subscription-lifecycle-client.tsx](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>)),
+and [page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>) only
+ever fetched that id filtered to `needs_action`/`in_progress` status.
+The very first click of either button resolves that attention_items
+row — so the *second* time this panel renders, the id comes back null
+and both buttons are disabled forever, with nothing telling the admin
+why. Since the underlying `student_requests` row stays "approved" (or
+"pending") independent of the attention item, the panel keeps showing
+itself as if a decision is still needed — just with no way to make one,
+including no way to correct a mistake (e.g. accidentally confirming a
+cancellation that should've been a retain).
+
+Fixed both sides: page.tsx's query no longer filters by status — the
+attention item is fetched by `request_id` alone, so its id is always
+available regardless of whether it's already resolved. And
+[resolveAttentionItem](lib/admin/attention-items.ts)'s own
+`student_requests` update dropped its `.eq("status", "pending")`
+scope — that filter would have silently no-op'd the exact correction
+this fix exists to allow (re-clicking "Mark retained" on an
+already-"approved" request needs to actually flip it to "denied", not
+match zero rows and pretend it worked, same silent-filtered-update
+gotcha this codebase has hit more than once before). RLS already
+permits this (`"admins can manage all requests"`, migration 0034, no
+status restriction) — no migration needed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login — verified by tracing the exact query/filter path
+that produced the screenshot's disabled state.
+
 ## "Remove" now archives instead of trashing — recordings shouldn't be losable (2026-08-31)
 
 Direct follow-up to the Mimi incident above: Drive's own 30-day

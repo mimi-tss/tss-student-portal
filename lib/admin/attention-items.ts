@@ -416,12 +416,21 @@ export async function resolveAttentionItem(
   // retention path — admin talked the student into staying, so the
   // request is denied instead and materializeRecurringSessions won't
   // stop generating future sessions for them.
+  //
+  // Deliberately NOT scoped to `.eq("status", "pending")` — this also
+  // needs to work as a correction after the request is already
+  // "approved" (e.g. admin mistakenly confirmed a cancellation and now
+  // needs to retain the student instead). The Stop panel now surfaces
+  // this same attention_items row regardless of its own status
+  // (page.tsx no longer filters to needs_action/in_progress only), so a
+  // second click here is a deliberate re-decision, not a stale replay —
+  // scoping to "pending" would have silently no-op'd the exact
+  // correction this exists to allow.
   if (item?.kind === "cancel_request" && item.request_id && status === "resolved") {
     await supabase
       .from("student_requests")
       .update({ status: requestOutcome, resolved_at: new Date().toISOString(), resolved_by: resolvedBy })
-      .eq("id", item.request_id)
-      .eq("status", "pending");
+      .eq("id", item.request_id);
   }
 }
 

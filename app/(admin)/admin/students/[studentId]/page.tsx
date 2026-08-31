@@ -165,11 +165,17 @@ export default async function AdminStudentPage({
     listAssignedExercises(supabase, student.id),
     cancelRequestRow
       ? Promise.all([
+          // Not filtered to needs_action/in_progress — once "Mark
+          // retained"/"Mark cancelled" has been clicked once, this row
+          // is already "resolved", but the Stop panel still needs its id
+          // to let admin correct/reverse that decision (e.g. retain a
+          // student after mistakenly confirming their cancellation).
+          // Filtering it out here left attentionItemId permanently null
+          // once resolved once, disabling both buttons for good.
           supabase
             .from("attention_items")
             .select("id")
             .eq("request_id", cancelRequestRow.id)
-            .in("status", ["needs_action", "in_progress"])
             .maybeSingle(),
           supabase
             .from("sessions")
