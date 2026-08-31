@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## One-off: backfilled Mimi Orac's pre-app recording history from Opus1 (2026-08-31)
+
+Separate from the ongoing-forward matching queue below — this was about
+history that predates this app entirely. Opus1 (the old system, being
+retired) never hosted recordings itself; it just linked out to files
+that were always sitting in the same Meet-recordings inbox this app
+already reads. So there's no data to migrate *out of* Opus1 — the task
+was finding, for one already-active student (Mimi Orac, Coach Celine,
+used as the test case), which of Celine's ~250 recordings from
+July–August in the shared inbox were actually hers, since none of it
+has a `sessions` row in this app to match against (it all predates
+real usage here).
+
+Pulled Mimi's attended-lesson dates/times directly from Opus1's own
+schedule view (screenshots), then matched each against the *time
+embedded in the recording's own filename* ("...2026/07/08 17:00 EDT -
+Recording") rather than Drive's `createdTime` (which is when upload
+finished, not when the meeting happened) — parsed and diffed
+programmatically, not eyeballed. On a coach with 10+ sessions on some
+days this is genuinely ambiguous: one target (Jul 22, 2:30pm) had no
+candidate within 2 hours and was correctly left unmatched rather than
+guessed, and you caught two more from memory that a pure time-diff
+would have gotten wrong or missed — Jul 3's actual time (17:30, which
+the diff had already found but only at "reasonable confidence") and
+that the Jul 17 slot had actually been rescheduled to Jul 18 (so the
+"closest" Jul-17 candidate the diff surfaced was a **different
+student's** recording, not hers — good thing this was confirmed before
+moving anything, not auto-applied).
+
+Moved 12 files (some lessons split across 2 recording chunks) covering
+8 of Mimi's 10 real lesson dates directly via the Drive API
+(`files.update` addParents/removeParents — same mechanism
+`moveFileToStudentFolder` in this session's matching feature uses, just
+run by hand for this one-off rather than through the app). Verified by
+listing her folder's contents afterward — all 12 land correctly.
+**Not repeated for any other student** — this was explicitly a single
+test case; doing this for the full active roster would need the actual
+Opus1 schedule export per student (still no bulk export from Opus1
+confirmed) and is meaningfully more manual effort per student given
+how ambiguous a busy coach's day can get.
+
 ## Recurring-schedule setup now checks a coach isn't getting double-booked (2026-08-31)
 
 Follow-up to the two-slots-per-student feature — you asked for every
