@@ -12,7 +12,17 @@ text elsewhere) → `#fff`, plus `text-transform: uppercase` (matches
 `.eyebrow`/`.sessionLabel`'s existing pattern in this same file, rather
 than hardcoding "JOIN SESSION" as a literal string in two JSX call
 sites). Both the disabled and active states inherit it since they share
-the one class. `tsc --noEmit`/`next build` clean.
+the one class.
+
+**Immediate follow-up, same conversation**: white text looked muddy on
+the disabled state specifically — `.joinBtn:disabled` was still using
+the blanket `opacity: 0.5` trick, which fades the white text and coral
+background together into a washed-out pink-grey instead of a clean
+"greyed out" look. Gave disabled its own flat colors instead of fading
+the active ones: `background: var(--surface-2)`, `color:
+var(--text-muted)` — same tokens used for muted/disabled text
+everywhere else in this app. Active state (full coral, white text)
+unaffected. `tsc --noEmit`/`next build` clean.
 
 ## Needs Review stuck on "Loading…" forever, all tab counts 0 (2026-08-31)
 
