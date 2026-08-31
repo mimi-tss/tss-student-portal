@@ -39,11 +39,9 @@ list is a server component, so its refresh is just the existing
 is client state, so it also gets an `onUnassigned` callback wired to
 the same `refreshAssignedExercises` the assign path already used.
 
-`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
-no login available in this environment, same caveat as other RLS-policy
-work this session; **please confirm migration 0074 applied** before
-relying on a coach being able to unassign (assigning still works either
-way — this only adds the missing capability, doesn't touch it).
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested by
+me — no login available in this environment — but migration 0074 is
+now confirmed applied (2026-08-31).
 
 ## Coach dashboard: made "My Students" searchable (2026-08-31)
 
@@ -2195,14 +2193,10 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0074 not yet confirmed applied** —
-`0074_exercise_assignments_coach_delete.sql` adds the RLS policy letting
-a coach delete (unassign) an `exercise_assignments` row for their own
-students. Until this runs, a coach clicking "Unassign" will get a 404
-("Assignment not found") even for their own student's assignment — RLS
-silently filters the delete to 0 rows rather than the intended row.
-Admin's own unassign is unaffected (already covered by the existing
-admin for-all policy).
+**Migration 0074 confirmed applied** (2026-08-31) — coaches can now
+unassign exercises from their own students; admin's own unassign was
+unaffected either way (already covered by the existing admin for-all
+policy).
 
 **New migration 0073 not yet confirmed applied** —
 `0073_activity_events_group_lesson.sql` adds `group_lesson_id` to
