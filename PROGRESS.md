@@ -3,6 +3,24 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Exit survey link on the cancel-request flow (2026-08-31)
+
+You gave the studio's Tally exit survey link
+(`https://tally.so/r/5BMe0b`) to show a student once they've requested
+to cancel.
+[plan-requests-client.tsx](<app/(student)/student/dashboard/plan-requests-client.tsx>)
+shows it (opens in a new tab) right after a successful submit, and also
+whenever a student with an already-pending request revisits the
+dashboard later — `submitted` is transient client state that resets on
+reload, so without checking `pending` too a student who missed it right
+after submitting would never see it again. Plain hardcoded URL, no
+admin-editable setting — matches how other one-off external links in
+this app work, and this isn't something expected to change often.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration
+needed. Not click-tested — another session's dev server is already
+running in this folder so this session's Browser pane can't reach it.
+
 ## Cancel-request flow now tells the student when their account gets paused (2026-08-31)
 
 You pointed out the "Request to cancel" flow's copy was vague — it just

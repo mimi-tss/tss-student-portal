@@ -4,6 +4,18 @@ import { useState } from "react";
 import { FormattedDate } from "@/components/formatted-time";
 import styles from "../../student.module.css";
 
+const EXIT_SURVEY_URL = "https://tally.so/r/5BMe0b";
+
+function ExitSurveyLink() {
+  return (
+    <p className={styles.panelText} style={{ marginTop: 6 }}>
+      <a href={EXIT_SURVEY_URL} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>
+        Please complete this quick exit survey
+      </a>
+    </p>
+  );
+}
+
 export default function PlanRequestsClient({
   initialPending,
   renewalDate,
@@ -44,10 +56,13 @@ export default function PlanRequestsClient({
 
   if (submitted) {
     return (
-      <p className={styles.panelText} style={{ marginTop: 10 }}>
-        Cancellation request submitted. Your account will be paused effective <FormattedDate value={renewalDate} />{" "}
-        until the studio finalizes your cancellation.
-      </p>
+      <div style={{ marginTop: 10 }}>
+        <p className={styles.panelText}>
+          Cancellation request submitted. Your account will be paused effective <FormattedDate value={renewalDate} />{" "}
+          until the studio finalizes your cancellation.
+        </p>
+        <ExitSurveyLink />
+      </div>
     );
   }
 
@@ -63,6 +78,11 @@ export default function PlanRequestsClient({
       >
         {pending ? "Cancellation request pending" : "Request to cancel"}
       </button>
+      {/* Covers a student who submitted earlier and is revisiting —
+          `submitted` above is transient client state that resets on
+          reload, but a still-pending request should keep offering the
+          survey, not just show it once right after the original submit. */}
+      {pending && <ExitSurveyLink />}
 
       {open && (
         <div className={styles.confirmCard}>
