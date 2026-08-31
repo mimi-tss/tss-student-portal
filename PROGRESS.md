@@ -3,6 +3,17 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Join button: uppercase, white text (2026-08-31)
+
+Styling tweak, same button as the two entries above.
+[student.module.css](<app/(student)/student.module.css>)'s `.joinBtn`:
+`color: var(--coral-text)` (the dark maroon used for gold/coral button
+text elsewhere) → `#fff`, plus `text-transform: uppercase` (matches
+`.eyebrow`/`.sessionLabel`'s existing pattern in this same file, rather
+than hardcoding "JOIN SESSION" as a literal string in two JSX call
+sites). Both the disabled and active states inherit it since they share
+the one class. `tsc --noEmit`/`next build` clean.
+
 ## Needs Review stuck on "Loading…" forever, all tab counts 0 (2026-08-31)
 
 You reported the Needs Review page never finishing its load — all

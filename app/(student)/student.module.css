@@ -237,8 +237,10 @@
 .joinBtn {
   width: 100%;
   background: var(--coral);
-  color: var(--coral-text);
+  color: #fff;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   border: none;
   border-radius: 8px;
   padding: 10px;
