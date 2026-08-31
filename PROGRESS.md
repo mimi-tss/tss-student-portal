@@ -2292,11 +2292,8 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0075 not yet confirmed applied** —
-`0075_meet_recordings.sql` adds the `meet_recordings` table backing the
-new Recordings queue (admin nav). Until this runs, the Recordings page
-will error on load (the table it queries doesn't exist yet) — nothing
-else in the app depends on it, so this is isolated to that one page.
+**Migration 0075 confirmed applied** (2026-08-31) — the `meet_recordings`
+table exists; the Recordings queue is live.
 
 **Migration 0074 confirmed applied** (2026-08-31) — coaches can now
 unassign exercises from their own students; admin's own unassign was
