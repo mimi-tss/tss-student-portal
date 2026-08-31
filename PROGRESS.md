@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Needs Review's cancel-request item never showed the student's own reason (2026-08-31)
+
+You caught this live — submitted a cancel request as a student (test
+account, "Mimi Orac"), and the Needs Action queue only showed "Mimi
+Orac submitted via form · effective end of cycle 2026-09-15", no
+reason at all, even though the form has a reason field and the student
+had typed one in. Root cause:
+[student/requests/route.ts](app/api/student/requests/route.ts) already
+saved the typed reason onto `student_requests.reason` correctly, but
+the `summary` string it separately builds for the `attention_items` row
+(what the Needs Review queue actually displays) never included it —
+just name + effective date. The reason was sitting in the database the
+whole time, just never made it into the one line an admin actually
+reads. Fixed: the summary now appends `· reason: <text>` when the
+student provided one (still omitted if they left it blank — the field
+is optional).
+
+Only fixes it going forward — `attention_items.summary` is a plain
+stored string set once at creation, not recomputed on read, so your
+existing test item still won't show a reason retroactively (its
+`summary` was already saved without one). Not worth a backfill
+migration for one row: an admin can already see that request's reason
+by clicking through to the student's own profile (the Stop panel there
+reads `student_requests.reason` directly, unaffected by this bug).
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration
+needed — pure application-code fix, existing columns.
+
 ## Recording matching: name-in-notes signal, plus two new Needs Review flags (2026-08-31)
 
 Two follow-ups from the Mimi Orac backfill test above, both from you

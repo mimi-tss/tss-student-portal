@@ -62,11 +62,18 @@ export async function POST(req: NextRequest) {
   // other privileged-but-scoped writes elsewhere (e.g. the login streak).
   const { data: studentRow } = await supabase.from("students").select("name").eq("id", student.id).single();
   const admin = createAdminClient();
+  // The reason was already saved onto student_requests.reason above, but
+  // never made it into the summary shown on the Needs Review queue — an
+  // admin reviewing the item had no way to see WHY without separately
+  // opening the student's profile. Appended here so it's visible at a
+  // glance, same place the effective date already is.
   await createAttentionItem(admin, {
     kind: "cancel_request",
     studentId: student.id,
     requestId: inserted.id,
-    summary: `${studentRow?.name ?? "Student"} submitted via form · effective end of cycle ${effectiveDate}`,
+    summary: `${studentRow?.name ?? "Student"} submitted via form · effective end of cycle ${effectiveDate}${
+      reason ? ` · reason: ${reason}` : ""
+    }`,
   });
 
   return NextResponse.json({ success: true });
