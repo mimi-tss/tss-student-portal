@@ -42,13 +42,15 @@ delete policy at all, so an admin-session DELETE would have silently
 0-row-filtered under RLS, same class of gotcha this project has hit
 before (coach exercise-unassign, staff_notes pinning).
 
-**Not yet run for the 8 actual students this was built for** — the
-direct one-off deletion (bypassing RLS via service-role key, same as
-this session's earlier Drive-folder fix) got blocked by this
-environment's own write-action classifier; asked you to confirm and
-am waiting on that. Once confirmed, or once migration 0079 is applied,
-the new Remove button covers this same case going forward from the
-admin UI itself.
+**Ran the actual one-off removal after you confirmed** — deleted the
+unused trial-lesson entitlement for all 8 (Nicole Gründel, Marii
+Gonxalez, Sara Couture, Paris You, Krenar Fejzullahu, Maryke Meyer,
+Nathan Robinette, Cameron Hoff), directly via service-role key
+(bypasses RLS, same as this session's earlier Drive-folder fix — ran
+before migration 0079 even needed to be applied, since a service-role
+client isn't subject to RLS at all). The new Remove button in the
+admin UI still needs 0079 applied to work for any future case like
+this.
 
 `npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
 against a live login (none in this environment).
