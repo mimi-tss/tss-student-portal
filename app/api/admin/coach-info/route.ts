@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
 
-// Edits coaches.name/email/timezone/hidden_from_students — the fields
+// Edits coaches.name/email/timezone/hidden_from_students/drive_folder_id — the fields
 // AddCoachPanel sets once at provisioning and nothing since let admin
 // correct. Not a money field, so isAdminRole (both admin and
 // admin_finance), same as coach-active/coach-links. coaches.email is the
@@ -10,7 +10,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 // Supabase auth user's email — updating it here is enough to fix a
 // coach's login on its own.
 export async function POST(req: NextRequest) {
-  const { coachId, name, email, timezone, hiddenFromStudents } = await req.json();
+  const { coachId, name, email, timezone, hiddenFromStudents, driveFolderId } = await req.json();
 
   if (!coachId || !name || !email || !timezone || typeof hiddenFromStudents !== "boolean") {
     return NextResponse.json(
@@ -34,9 +34,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "admin only" }, { status: 403 });
   }
 
+  // driveFolderId is optional in the request shape (undefined leaves the
+  // column untouched) so any future caller that doesn't send it can't
+  // accidentally clear an already-set folder — only the edit form's
+  // explicit blank ("") is treated as "clear it."
+  const update: Record<string, unknown> = { name, email, timezone, hidden_from_students: hiddenFromStudents };
+  if (driveFolderId !== undefined) update.drive_folder_id = driveFolderId || null;
+
   const { data: updated, error } = await supabase
     .from("coaches")
-    .update({ name, email, timezone, hidden_from_students: hiddenFromStudents })
+    .update(update)
     .eq("id", coachId)
     .select("id");
 

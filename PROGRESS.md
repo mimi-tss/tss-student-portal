@@ -3,6 +3,105 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recording-to-student matching: the "unmatched recordings" queue (2026-08-31)
+
+Section 7 of the spec ("Recordings") describes matching a Meet
+recording to the right student via *newest unmatched recording + one-tap
+confirm* — never actually built (confirmed: `grep`'d the whole repo for
+"unmatched", found nothing before this). Worked through the design with
+you live before building: your own question ("what if a coach takes
+attendance a week later?") is what killed the naive "newest recording"
+approach — by the time attendance is marked, several other students'
+recordings could already exist, so "newest" grabs the wrong one. Landed
+on **same-calendar-day matching** instead (in the *coach's own*
+timezone, not UTC or "whenever the queue happens to load"), which gives
+the same correct answer whether attendance is marked immediately or a
+week late — confirmed this also cleanly handles a coach's internal
+meeting recorded in the same persistent room: it either adds a second
+same-day candidate (falls out of the safe auto-match case into a manual
+pick, never a wrong auto-assignment) or has zero sessions to match at
+all (sits in the queue until dismissed).
+
+**New table** [0075_meet_recordings.sql](supabase/migrations/0075_meet_recordings.sql)
+— `coach_id` (nullable — filename didn't resolve to a known coach),
+`drive_file_id`, `recorded_date` (the calendar-day key everything
+matches on), `status` (`unmatched`/`matched`/`dismissed`),
+`matched_session_id`. RLS: admin can do everything (`is_admin()`,
+same posture as `staff_notes`/`attention_items`); a coach can view
+their own rows read-only — confirm/dismiss stays admin-only for now,
+matching the spec's own "admin-facing" framing; a coach-side action
+path is a clean follow-up if ever wanted, no schema change needed.
+
+**Matching logic** — [lib/admin/recording-matching.ts](lib/admin/recording-matching.ts):
+- `scanForNewRecordings` diffs the shared Meet-recordings inbox
+  (`MEET_RECORDINGS_INBOX_FOLDER_ID`, [lib/google/drive.ts](lib/google/drive.ts)
+  — confirmed live that every coach's recordings land in this one
+  folder regardless of whose room recorded it, since Meet's save
+  destination is per-organizer-account, not per-room) against what's
+  already tracked, and identifies the owning coach from the filename.
+  Two naming schemes show up in practice (verified against real files):
+  a not-yet-processed recording is just the raw meeting code
+  ("fyj-rnyj-hvq (...)"), a fully processed one is renamed to the
+  room's label ("Coach Celine's Personal Meeting Link - ... -
+  Recording"). `identifyCoach` tries the meeting code first (extracted
+  from each coach's own `meet_link`), then falls back to a first-name
+  substring match — dry-run tested against 5 real filenames pulled from
+  the studio's actual Drive, all resolved correctly.
+- `runDayMatching` auto-resolves only the unambiguous case: exactly one
+  unmatched recording **and** exactly one attended, not-yet-matched
+  session for that coach on that day. Anything else is left for the
+  admin queue.
+- `attachRecordingToSession` is the one place a match actually happens
+  (shared by both the automatic and manual path) — it **moves** the
+  file (not copies) from the shared inbox into the matched student's own
+  Drive folder, so it shows up through the existing
+  `listStudentRecordings` pathway immediately, no separate viewer UI
+  needed. Blocks with a clear error if the student has no
+  `drive_folder_id` yet, rather than silently dropping the file
+  somewhere wrong.
+
+**Admin UI** — new [Recordings](<app/(admin)/admin/recordings>) nav
+item. `GET /api/admin/meet-recordings` scans + auto-matches on every
+load rather than on a timer: this app has no scheduled-job
+infrastructure of its own to hook into (materialize-recurring/
+kajabi-sync run via an external cron outside this repo — not something
+addable from here), and an on-demand scan is simpler and keeps the
+admin in control of when it runs. Each unmatched item shows a
+day-scoped picker of candidate students to confirm, or a **Dismiss**
+button for a recording that isn't a lesson at all (an internal
+meeting) — dismiss was a deliberate addition from the design
+conversation specifically so nothing ever gets force-paired with an
+unrelated student just to clear the queue.
+
+**Also fixed, found while testing this**: `coaches.drive_folder_id` was
+`null` for Celine, Ivan, and Nikki — only Tara's had ever been set,
+despite all four coaches' real Drive subfolders existing under "TSS
+Student Drives". `ensureStudentDriveFolder` ([lib/google/drive.ts](lib/google/drive.ts))
+no-ops silently whenever a coach has no folder configured, which is
+exactly why a manually-added student (Mimi Orac, assigned to Celine at
+the time) never got a Drive folder — not a code bug, a data gap, with
+no admin-visible error when it happened. Fixed the three coaches'
+`drive_folder_id` directly (found the real folder IDs by listing "TSS
+Student Drives" directly via the service account) — a one-off data fix
+you explicitly confirmed before it ran, not a migration. Since this
+was silently unfixable from the admin UI at all before now, also added
+a **Drive folder ID** field to the coach Edit panel
+([all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+→ extended [coach-info/route.ts](app/api/admin/coach-info/route.ts))
+so this can't silently happen again without at least being visible and
+fixable. Not yet added to the *Add Coach* form itself (spec technically
+calls for it there too) — scoped out for now, flagging as a known gap
+rather than expanding this change further.
+
+Verified via `tsc --noEmit` and `next build` (both clean) and a
+dry-run of the filename-matching logic against 5 real recording names
+pulled from the studio's actual Drive. **Not live-tested against a real
+end-to-end match** — the queue can't be exercised until migration 0075
+is applied (see below) and a real recording exists for an attended
+session; please try the Recordings page after confirming the migration,
+ideally on a day with exactly one attended session for one coach first
+(the clean auto-match case) before a messier multi-session day.
+
 ## Coaches (and admin) can now unassign exercises, not just assign (2026-08-31)
 
 Follow-up to the "My Students" search — you asked for unassign too.
@@ -2192,6 +2291,12 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0075 not yet confirmed applied** —
+`0075_meet_recordings.sql` adds the `meet_recordings` table backing the
+new Recordings queue (admin nav). Until this runs, the Recordings page
+will error on load (the table it queries doesn't exist yet) — nothing
+else in the app depends on it, so this is isolated to that one page.
 
 **Migration 0074 confirmed applied** (2026-08-31) — coaches can now
 unassign exercises from their own students; admin's own unassign was

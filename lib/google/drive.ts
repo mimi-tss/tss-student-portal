@@ -227,6 +227,53 @@ export async function removeStudentFolderItem(folderId: string, fileId: string):
   });
 }
 
+// Meet's fixed auto-save destination for every recording made under the
+// admin account (GOOGLE_ADMIN_EMAIL) — confirmed live: every coach's
+// recordings (Celine, Ivan, Nikki, Tara) land here regardless of whose
+// persistent room recorded it, since Meet's recording destination is
+// per-organizer-account, not per-room. There is no Workspace admin
+// setting on this account's plan to redirect it elsewhere (confirmed by
+// reviewing the actual Meet admin console — no "recording file
+// location" option present on this edition), so this is the one place
+// to watch for new recordings.
+export const MEET_RECORDINGS_INBOX_FOLDER_ID = "1TU_dSfCkJvzcUswFHb-MDQ5c8VMA3ZUd";
+
+export interface MeetRecordingFile {
+  id: string;
+  name: string;
+  createdTime: string;
+}
+
+// Lists every recording sitting in the shared Meet-recordings inbox —
+// feeds lib/admin/recording-matching.ts's scan step, which diffs this
+// against meet_recordings.drive_file_id to find newly-arrived files.
+export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'video/mp4'`,
+    orderBy: "createdTime desc",
+    pageSize: 200,
+    fields: "files(id, name, createdTime)",
+  });
+  return (res.data.files ?? [])
+    .filter((f) => f.id && f.createdTime)
+    .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
+}
+
+// Moves a file from the shared inbox into a student's own Drive
+// folder once a recording is confirmed matched — a real move (parent
+// swap), not a copy, so the inbox doesn't accumulate every recording
+// forever alongside the now-organized copy.
+export async function moveFileToStudentFolder(fileId: string, fromFolderId: string, toFolderId: string): Promise<void> {
+  const drive = getDriveClient();
+  await drive.files.update({
+    fileId,
+    addParents: toFolderId,
+    removeParents: fromFolderId,
+    supportsAllDrives: true,
+  });
+}
+
 // Creates (once) a student's Drive folder nested under their assigned
 // coach's subfolder, and saves the folder ID onto the student record.
 // Called from every path that can set assigned_coach_id — a fresh Kajabi

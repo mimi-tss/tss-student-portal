@@ -42,6 +42,7 @@ interface CoachRow {
   studentCount: number;
   active: boolean;
   meetLink: string | null;
+  driveFolderId: string | null;
 }
 
 interface Session {
@@ -194,6 +195,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
         timezone: string;
         hiddenFromStudents: boolean;
         meetLink: string | null;
+        driveFolderId: string | null;
         workingHours: Record<string, [string, string][]>;
         pendingEffectiveDate: string | null;
       }
@@ -917,6 +919,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                           timezone: c.timezone,
                           hiddenFromStudents: c.hiddenFromStudents,
                           meetLink: c.meetLink,
+                          driveFolderId: c.driveFolderId,
                           workingHours: c.workingHours,
                           pendingEffectiveDate: c.pendingEffectiveDate,
                         })
@@ -958,6 +961,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             initialTimezone={panel.timezone}
             initialHiddenFromStudents={panel.hiddenFromStudents}
             initialMeetLink={panel.meetLink}
+            initialDriveFolderId={panel.driveFolderId}
             initialWorkingHours={panel.workingHours}
             pendingEffectiveDate={panel.pendingEffectiveDate}
             onClose={() => setPanel(null)}
@@ -1147,6 +1151,7 @@ function EditCoachPanel({
   initialTimezone,
   initialHiddenFromStudents,
   initialMeetLink,
+  initialDriveFolderId,
   initialWorkingHours,
   pendingEffectiveDate,
   onClose,
@@ -1158,6 +1163,7 @@ function EditCoachPanel({
   initialTimezone: string;
   initialHiddenFromStudents: boolean;
   initialMeetLink: string | null;
+  initialDriveFolderId: string | null;
   initialWorkingHours: Record<string, [string, string][]>;
   pendingEffectiveDate: string | null;
   onClose: () => void;
@@ -1168,6 +1174,7 @@ function EditCoachPanel({
   const [timezone, setTimezone] = useState(initialTimezone);
   const [hiddenFromStudents, setHiddenFromStudents] = useState(initialHiddenFromStudents);
   const [meetLink, setMeetLink] = useState(initialMeetLink ?? "");
+  const [driveFolderId, setDriveFolderId] = useState(initialDriveFolderId ?? "");
   const [hours, setHours] = useState<Record<string, [string, string][]>>(() => {
     const copy: Record<string, [string, string][]> = {};
     for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
@@ -1193,6 +1200,7 @@ function EditCoachPanel({
           email: email.trim(),
           timezone,
           hiddenFromStudents,
+          driveFolderId: driveFolderId.trim() || null,
         }),
       }),
       fetch("/api/admin/coach-links", {
@@ -1249,7 +1257,21 @@ function EditCoachPanel({
             className={styles.input}
           />
         </div>
+        <div className={styles.field} style={{ minWidth: 260 }}>
+          <label>Drive folder ID</label>
+          <input
+            placeholder="Coach's subfolder ID under TSS Student Drives"
+            value={driveFolderId}
+            onChange={(e) => setDriveFolderId(e.target.value)}
+            className={styles.input}
+          />
+        </div>
       </div>
+      <p className={styles.mutedText} style={{ marginTop: -6, marginBottom: 10, fontSize: 12 }}>
+        Copy the ID from the coach&apos;s subfolder URL under &quot;TSS Student Drives&quot;
+        (drive.google.com/drive/folders/<strong>THIS PART</strong>). Left blank, new students assigned to this coach
+        won&apos;t get a Drive folder created at all.
+      </p>
       <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
         <input
           type="checkbox"
