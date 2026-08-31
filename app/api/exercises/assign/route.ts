@@ -56,3 +56,39 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+// Unassign — RLS (migration 0074) scopes a coach's delete to their own
+// students, same as their select policy; admin is already covered by the
+// existing "admins can manage exercise assignments" for-all policy. A
+// coach can unassign an admin-made assignment and vice versa (both share
+// the same student-scoped view), matching this route's existing
+// coach/admin parity for assigning.
+export async function DELETE(req: NextRequest) {
+  const { assignmentId } = await req.json();
+
+  if (!assignmentId) {
+    return NextResponse.json({ error: "assignmentId required" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { error, count } = await supabase
+    .from("exercise_assignments")
+    .delete({ count: "exact" })
+    .eq("id", assignmentId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  // RLS silently filters rows the caller isn't scoped to rather than
+  // erroring — a 0-row delete means "not found or not yours", not success.
+  if (!count) {
+    return NextResponse.json({ error: "Assignment not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}

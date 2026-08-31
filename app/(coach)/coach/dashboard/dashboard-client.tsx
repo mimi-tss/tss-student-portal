@@ -9,7 +9,7 @@ import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import { useTimeZone } from "@/components/timezone-context";
 import { formatPlainDate } from "@/lib/format-date";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
-import ExercisePlayer from "@/components/exercise-player";
+import AssignedExercisesList from "@/components/assigned-exercises-list";
 import styles from "../../coach.module.css";
 import type { TodaySession, ExpiringMakeup, UpcomingBirthday, StudentSnapshot } from "@/lib/coach/dashboard-data";
 import type { CoachGroupLesson } from "@/lib/group-lessons";
@@ -551,24 +551,10 @@ export default function DashboardClient({
                   assignedExerciseIds={assignedExercises.map((ex) => ex.exerciseId).filter((id): id is string => !!id)}
                   onAssigned={() => refreshAssignedExercises(snapshot.id)}
                 />
-                {assignedExercises.length > 0 ? (
-                  <ul className={styles.list} style={{ marginTop: 14 }}>
-                    {assignedExercises.map((ex) => (
-                      <li key={ex.id} className={styles.listItem}>
-                        <p>{ex.title}</p>
-                        {ex.audioUrl && (
-                          <div style={{ marginTop: 6 }}>
-                            <ExercisePlayer src={ex.audioUrl} />
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.panelText} style={{ marginTop: 10 }}>
-                    Nothing assigned yet.
-                  </p>
-                )}
+                <AssignedExercisesList
+                  assignedExercises={assignedExercises}
+                  onUnassigned={() => refreshAssignedExercises(snapshot.id)}
+                />
               </div>
 
               <div className={styles.panel}>

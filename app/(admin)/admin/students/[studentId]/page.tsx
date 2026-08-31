@@ -11,7 +11,7 @@ import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
-import ExercisePlayer from "@/components/exercise-player";
+import AssignedExercisesList from "@/components/assigned-exercises-list";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import RecurringScheduleClient from "./recurring-schedule-client";
 import AdminUpcomingSessions from "./admin-upcoming-sessions";
@@ -492,24 +492,7 @@ export default async function AdminStudentPage({
           exercises={exerciseCatalog.data ?? []}
           assignedExerciseIds={assignedExercises.map((ex) => ex.exerciseId).filter((id): id is string => !!id)}
         />
-        {assignedExercises.length > 0 ? (
-          <ul className={styles.list} style={{ marginTop: 14 }}>
-            {assignedExercises.map((ex) => (
-              <li key={ex.id} className={styles.listItem}>
-                <p>{ex.title}</p>
-                {ex.audioUrl && (
-                  <div style={{ marginTop: 6 }}>
-                    <ExercisePlayer src={ex.audioUrl} />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={styles.mutedText} style={{ marginTop: 10 }}>
-            Nothing assigned yet.
-          </p>
-        )}
+        <AssignedExercisesList assignedExercises={assignedExercises} />
       </div>
 
       <div className={styles.panel}>

@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coaches (and admin) can now unassign exercises, not just assign (2026-08-31)
+
+Follow-up to the "My Students" search — you asked for unassign too.
+Turned out there was no way to remove an assigned exercise at all, for
+either coach or admin: [assign/route.ts](app/api/exercises/assign/route.ts)
+only ever had a POST, and there was no RLS delete policy for a coach on
+`exercise_assignments` at all (only the admin "for all" policy from
+0024) — a coach `DELETE` would've silently 0-row-filtered even with a
+route added, same class of RLS gotcha this project has hit before.
+
+[0074_exercise_assignments_coach_delete.sql](supabase/migrations/0074_exercise_assignments_coach_delete.sql)
+adds the missing coach policy, scoped the same as their existing select
+policy (`auth_coach_student_ids()`) rather than to just
+`assigned_by_coach_id = auth_coach_id()` — a coach can unassign an
+admin-made assignment on their own student too, matching the existing
+"same ability" parity between coach and admin that
+`AssignExercisePanel`'s own comment already documents.
+
+Added a `DELETE` handler to the same route (takes `assignmentId`, the
+`exercise_assignments` row id — not the exercise id). A 0-row delete
+(RLS filtered it, not a real error) reports 404 rather than a false
+"success" or a raw 500. New shared
+[assigned-exercises-list.tsx](components/assigned-exercises-list.tsx)
+replaces the near-identical inline list-rendering that used to be
+duplicated in both
+[dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>)
+(coach) and
+[page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>) (admin) —
+Tailwind arbitrary `var()` classes rather than a CSS module, same
+reasoning as `AssignExercisePanel` and `ExercisePlayer` already use, so
+it renders correctly under either route group's theme root. Admin's
+list is a server component, so its refresh is just the existing
+`router.refresh()` inside the new component; the coach dashboard's list
+is client state, so it also gets an `onUnassigned` callback wired to
+the same `refreshAssignedExercises` the assign path already used.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login available in this environment, same caveat as other RLS-policy
+work this session; **please confirm migration 0074 applied** before
+relying on a coach being able to unassign (assigning still works either
+way — this only adds the missing capability, doesn't touch it).
+
 ## Coach dashboard: made "My Students" searchable (2026-08-31)
 
 You asked whether the coach dashboard's "My Students" list could be
@@ -2152,6 +2194,15 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0074 not yet confirmed applied** —
+`0074_exercise_assignments_coach_delete.sql` adds the RLS policy letting
+a coach delete (unassign) an `exercise_assignments` row for their own
+students. Until this runs, a coach clicking "Unassign" will get a 404
+("Assignment not found") even for their own student's assignment — RLS
+silently filters the delete to 0 rows rather than the intended row.
+Admin's own unassign is unaffected (already covered by the existing
+admin for-all policy).
 
 **New migration 0073 not yet confirmed applied** —
 `0073_activity_events_group_lesson.sql` adds `group_lesson_id` to
