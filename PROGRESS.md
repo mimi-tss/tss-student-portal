@@ -2919,13 +2919,9 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0079 not yet confirmed applied** —
-`0079_admin_delete_entitlements.sql` adds a delete policy so admin can
-actually remove an entitlement row (used by the new "Remove" trial-
-lesson action on the Students list). Until this runs, that Remove
-button will fail with "No unused trial lesson to remove" even when one
-exists — the delete silently 0-row-filters under RLS with no policy
-allowing it.
+**Migration 0079 confirmed applied** (2026-08-31) — admin now has a
+real delete policy on `entitlements`; the "Remove" trial-lesson action
+on the Students list is live.
 
 **Migrations 0077 and 0078 confirmed applied** (2026-08-31) — the
 Recordings page's name-matching pass and the `recording_unmatched`/
