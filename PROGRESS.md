@@ -106,6 +106,32 @@ different students on the same coach at an overlapping day/time and
 confirm the second one is rejected with the "already has X booked"
 message, not silently accepted.
 
+## Student dashboard: red warning banner for a makeup expiring soon (2026-08-31)
+
+You asked for a loud callout above Homework Notes when a student has
+an unused makeup credit expiring within 14 days — "MAKEUP EXPIRING
+SOON ON DATE, SCHEDULE IT NOW", clicking through to the scheduler.
+[page.tsx](<app/(student)/student/dashboard/page.tsx>) already fetched
+`availableCredits` (unused, unexpired makeup credits — see the "Your
+plan" panel) for the "Makeup credits" stat row, so no new query was
+needed: `expiringSoonCredits` just filters that same array to
+`expires_at <= now + 14 days`. One credit renders one line; several
+render one line each, all inside a single `Link` (`/student/book`,
+same route "Scheduler" in the nav points to) wrapping the whole box —
+clicking anywhere in it goes straight to booking, not just a link
+inside it. New `.expiringWarning` class in
+[student.module.css](<app/(student)/student.module.css>), coral/red
+(`--coral`) to read as urgent, distinct from the neutral `.note`
+styling used for Homework Notes right below it.
+
+Verified visually with a throwaway static mock (same CSS variables,
+temporarily served from `public/` then deleted) rather than through
+real login — no login in this environment. `npx tsc --noEmit -p .`
+shows no errors in either touched file (a handful of *pre-existing*
+errors elsewhere in the tree, in files a concurrent session has mid-
+edit — `lib/admin/recording-matching.ts` and friends — are unrelated
+to this change and untouched by it).
+
 ## Shared folder panel: capped to 5 visible rows, scrolls for the rest (2026-08-31)
 
 You wanted the Shared Folder box on the student dashboard shorter — it
