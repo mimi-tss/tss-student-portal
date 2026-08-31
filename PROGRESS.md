@@ -203,6 +203,18 @@ different students on the same coach at an overlapping day/time and
 confirm the second one is rejected with the "already has X booked"
 message, not silently accepted.
 
+## "Your exercises" list: same 5-row cap as the Shared Folder panel (2026-08-31)
+
+Same request as the Shared Folder panel above — a student with many
+assigned exercises grew this box indefinitely. `.exerciseList`
+([student.module.css](<app/(student)/student.module.css>)) gets
+`max-height: 520px; overflow-y: auto` (sized for ~5 rows including
+each exercise's inline audio player, the tallest row shape in this
+list — a description-only row without audio fits more than 5).
+Verified visually with a throwaway static mock (7 rows, confirmed rows
+6-7 sit below the fold and scroll) rather than through real login — no
+login in this environment.
+
 ## Student dashboard: red warning banner for a makeup expiring soon (2026-08-31)
 
 You asked for a loud callout above Homework Notes when a student has
