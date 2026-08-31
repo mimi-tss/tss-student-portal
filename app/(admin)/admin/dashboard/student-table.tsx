@@ -53,6 +53,27 @@ export default function StudentTable({
     router.refresh();
   }
 
+  async function handleRemoveTrial(student: Student) {
+    const confirmed = window.confirm(`Remove ${student.name}'s unused trial lesson? This can't be undone.`);
+    if (!confirmed) return;
+
+    setBusyId(student.id);
+    const res = await fetch("/api/admin/remove-trial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId: student.id }),
+    });
+    setBusyId(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      window.alert(body.error ?? "Could not remove that trial lesson.");
+      return;
+    }
+
+    router.refresh();
+  }
+
   async function handleDelete(student: Student) {
     const confirmed = window.confirm(
       `Permanently delete ${student.name}? This deletes every session, credit, note, and chat message they have — everything. This cannot be undone.\n\nIf you just want to hide them from this list, use Archive instead.`,
@@ -132,9 +153,19 @@ export default function StudentTable({
               </td>
               <td>
                 {trialSet.has(student.id) ? (
-                  <Link href={`/admin/book-trial/${student.id}`} className={styles.linkBtnSmall}>
-                    Book trial
-                  </Link>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    <Link href={`/admin/book-trial/${student.id}`} className={styles.linkBtnSmall}>
+                      Book trial
+                    </Link>{" "}
+                    <button
+                      onClick={() => handleRemoveTrial(student)}
+                      disabled={busyId === student.id}
+                      className={styles.linkBtnSmall}
+                      style={{ color: "var(--coral)" }}
+                    >
+                      Remove
+                    </button>
+                  </span>
                 ) : (
                   <span className={styles.mutedText}>—</span>
                 )}
