@@ -249,6 +249,10 @@
   text-decoration: none;
   display: block;
 }
+.joinBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .btnDanger {
   background: var(--coral);
   color: var(--coral-text);

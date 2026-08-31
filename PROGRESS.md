@@ -3,6 +3,28 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Join button: always visible, just disabled until 10 minutes before (2026-08-31)
+
+Small follow-up while looking at the join flow — you asked for the
+button to stay in place (not pop into existence with no warning right
+at the 10-minute mark) and just be unclickable until then.
+[join-button.tsx](<app/(student)/student/dashboard/join-button.tsx>):
+`visible` boolean became a three-state `joinable` (`true` / `false` /
+`null`) — `null` only once the session is actually over, which still
+hides it entirely (nothing to disable back to; the parent's own "next
+session" query moves on to a different session by then anyway).
+Otherwise it always renders: a disabled `<button>` (same `.joinBtn`
+class, new `.joinBtn:disabled` rule —
+[student.module.css](<app/(student)/student.module.css>), same
+`opacity: 0.5; cursor: not-allowed` pattern `.btnDanger:disabled`
+already uses) before the window opens, swapping to the real `<a>` once
+joinable. Only one call site (student dashboard's own "Next session"
+card, both the 1:1 and group-lesson variants) — the parent only gates
+on whether a meet link exists at all, not timing, so no other changes
+needed.
+
+No migration, `tsc --noEmit`/`next build` clean.
+
 ## Added info@tarasimonstudios.com as an Admin account (2026-08-31)
 
 You asked for this directly — a plain data/account provisioning task,

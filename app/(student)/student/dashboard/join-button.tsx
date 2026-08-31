@@ -23,21 +23,30 @@ export default function JoinButton({
   durationMinutes: number;
   meetLink: string;
 }) {
-  const [visible, setVisible] = useState(false);
+  // joinable === null means "session is over" (past end time) — still
+  // hides entirely then, same as before. Before that, the button always
+  // renders; only whether it's clickable changes, per direct request —
+  // seeing it ahead of time (just disabled) reads better than it
+  // popping into existence with no warning right at the 10-minute mark.
+  const [joinable, setJoinable] = useState<boolean | null>(false);
 
   useEffect(() => {
     function check() {
       const start = new Date(scheduledAt).getTime();
       const end = start + durationMinutes * 60 * 1000;
       const now = Date.now();
-      setVisible(now >= start - EARLY_JOIN_MINUTES * 60 * 1000 && now <= end);
+      if (now > end) {
+        setJoinable(null);
+      } else {
+        setJoinable(now >= start - EARLY_JOIN_MINUTES * 60 * 1000);
+      }
     }
     check();
     const interval = setInterval(check, 15_000);
     return () => clearInterval(interval);
   }, [scheduledAt, durationMinutes]);
 
-  if (!visible) return null;
+  if (joinable === null) return null;
 
   function handleClick() {
     // Best-effort dispute evidence ("did they actually click Join") —
@@ -49,6 +58,14 @@ export default function JoinButton({
     } catch {
       // never block the actual join action over a logging failure
     }
+  }
+
+  if (!joinable) {
+    return (
+      <button type="button" disabled className={styles.joinBtn} title={`Available ${EARLY_JOIN_MINUTES} minutes before your session`}>
+        Join session
+      </button>
+    );
   }
 
   return (
