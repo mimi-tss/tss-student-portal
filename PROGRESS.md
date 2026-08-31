@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Cancel-request flow now tells the student when their account gets paused (2026-08-31)
+
+You pointed out the "Request to cancel" flow's copy was vague — it just
+said membership stays active "until the studio confirms," never the
+actual date, and never told the student what happens at that point
+(their recurring sessions stop getting scheduled past it — see
+`materializeRecurringSessions`'s `cancelRequest.effective_date` cutoff,
+[lib/scheduling/recurring.ts:401](lib/scheduling/recurring.ts)). Worth
+being explicit that this is a real, dated consequence, not just "we'll
+be in touch."
+
+[plan-requests-client.tsx](<app/(student)/student/dashboard/plan-requests-client.tsx>)
+now takes the student's actual renewal date as a prop (from
+`page.tsx`'s existing `renewalInfo(student.billing_anniversary_date)`
+— the exact same `currentBillingCycleRange` calculation
+`/api/student/requests` itself uses for the request's `effective_date`,
+so the date shown is guaranteed to match what actually gets saved, not
+a separately-computed estimate that could drift). Both the pre-submit
+confirmation card and the post-submit message now read "...your account
+will be paused effective [date] until the studio finalizes your
+cancellation" instead of the old generic wording.
+
+Worth noting: "paused" here is plain-language framing for the student,
+not a technical status change — submitting a cancel request never
+touches `students.subscription_status`; only Pause (a separate,
+admin-only feature) does that. What actually happens at the effective
+date is exactly what "paused" describes from the student's point of
+view: no more recurring sessions get scheduled past it.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+— another session's dev server is already running in this folder, so
+this session's own Browser pane can't reach it; the date-prop threading
+was verified by reading `renewalInfo`/`currentBillingCycleRange`
+directly rather than a live click-through.
+
 ## Needs Review's cancel-request item never showed the student's own reason (2026-08-31)
 
 You caught this live — submitted a cancel request as a student (test

@@ -1,9 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { FormattedDate } from "@/components/formatted-time";
 import styles from "../../student.module.css";
 
-export default function PlanRequestsClient({ initialPending }: { initialPending: boolean }) {
+export default function PlanRequestsClient({
+  initialPending,
+  renewalDate,
+}: {
+  initialPending: boolean;
+  // The student's current billing-cycle end — same date
+  // /api/student/requests computes as the request's own effective_date
+  // (both derive from currentBillingCycleRange), so this is exactly the
+  // date their recurring sessions actually stop getting generated past,
+  // not a rough estimate.
+  renewalDate: string;
+}) {
   const [pending, setPending] = useState(initialPending);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -33,7 +45,8 @@ export default function PlanRequestsClient({ initialPending }: { initialPending:
   if (submitted) {
     return (
       <p className={styles.panelText} style={{ marginTop: 10 }}>
-        Cancellation request submitted — the studio will follow up before your next renewal.
+        Cancellation request submitted. Your account will be paused effective <FormattedDate value={renewalDate} />{" "}
+        until the studio finalizes your cancellation.
       </p>
     );
   }
@@ -55,8 +68,9 @@ export default function PlanRequestsClient({ initialPending }: { initialPending:
         <div className={styles.confirmCard}>
           <p className={styles.confirmTitle}>Request to cancel</p>
           <p className={styles.confirmText}>
-            This submits a request to the studio — your membership stays active until they confirm, effective at
-            the end of your current billing cycle.
+            This submits a request to the studio. Your membership stays active until{" "}
+            <FormattedDate value={renewalDate} />, when your account will be paused until the studio finalizes your
+            cancellation.
           </p>
           <textarea
             value={reason}

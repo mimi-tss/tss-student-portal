@@ -413,7 +413,7 @@ export default async function StudentDashboardPage() {
           >
             Book / reschedule a session
           </Link>
-          <PlanRequestsClient initialPending={hasPendingCancelRequest} />
+          <PlanRequestsClient initialPending={hasPendingCancelRequest} renewalDate={renewalDate.toISOString()} />
         </div>
 
         <Link href="/student/book" className={styles.panelLink}>
