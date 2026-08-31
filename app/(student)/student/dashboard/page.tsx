@@ -179,6 +179,35 @@ export default async function StudentDashboardPage() {
     nextGroupLesson !== null &&
     (!nextSession || new Date(nextGroupLesson.scheduledAt).getTime() < new Date(nextSession.scheduled_at).getTime());
 
+  // "Upcoming lessons this cycle" merges 1:1 sessions (which already
+  // include any makeup-credit-booked ones — a makeup session is just a
+  // regular `sessions` row with `is_makeup`/`makeup_credit_id` set, not
+  // a separate table) with group lessons falling inside the same
+  // billing cycle, into one chronological list — group lessons
+  // previously had their own separate card above this one.
+  type CycleItem = {
+    id: string;
+    scheduledAt: string;
+    durationMinutes: number;
+    group: { topic: string | null; coachName: string } | null;
+  };
+  const cycleItems: CycleItem[] = [
+    ...(upcomingCycleSessions ?? []).map((s) => ({
+      id: s.id,
+      scheduledAt: s.scheduled_at,
+      durationMinutes: s.duration_minutes,
+      group: null,
+    })),
+    ...upcomingGroupLessons
+      .filter((g) => new Date(g.scheduledAt).getTime() < cycleEnd.getTime())
+      .map((g) => ({
+        id: g.id,
+        scheduledAt: g.scheduledAt,
+        durationMinutes: g.durationMinutes,
+        group: { topic: g.topic, coachName: g.coachName },
+      })),
+  ].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+
   return (
     <div className={styles.wrap}>
       <div className={styles.hero}>
@@ -247,18 +276,6 @@ export default async function StudentDashboardPage() {
           )}
         </div>
       </div>
-
-      {upcomingGroupLessons.length > 0 && (
-        <div className={styles.note} style={{ marginTop: 16 }}>
-          <div className={styles.noteFrom}>Upcoming group lesson{upcomingGroupLessons.length > 1 ? "s" : ""}</div>
-          {upcomingGroupLessons.map((g) => (
-            <p key={g.id} className={styles.noteText} style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 14 }}>
-              {g.topic || "Group Lesson"} — <FormattedDate value={g.scheduledAt} />,{" "}
-              <FormattedTime value={g.scheduledAt} /> with Coach {g.coachName} ({g.durationMinutes} min)
-            </p>
-          ))}
-        </div>
-      )}
 
       {spotlightNote && (
         <div className={styles.note}>
@@ -381,14 +398,18 @@ export default async function StudentDashboardPage() {
 
         <Link href="/student/book" className={styles.panelLink}>
           <h3>Upcoming lessons this cycle</h3>
-          {upcomingCycleSessions && upcomingCycleSessions.length > 0 ? (
+          {cycleItems.length > 0 ? (
             <ul className={styles.sessionList}>
-              {upcomingCycleSessions.map((s) => (
-                <li key={s.id} className={styles.sessionListItem}>
+              {cycleItems.map((item) => (
+                <li key={item.id} className={styles.sessionListItem}>
                   <p className={styles.statValue} style={{ margin: 0 }}>
-                    <FormattedDateTime value={s.scheduled_at} />
+                    {item.group ? `${item.group.topic || "Group Lesson"} — ` : ""}
+                    <FormattedDateTime value={item.scheduledAt} />
                   </p>
-                  <p className={styles.panelText}>{s.duration_minutes} min</p>
+                  <p className={styles.panelText}>
+                    {item.group ? `with Coach ${item.group.coachName} · ` : ""}
+                    {item.durationMinutes} min
+                  </p>
                 </li>
               ))}
             </ul>
