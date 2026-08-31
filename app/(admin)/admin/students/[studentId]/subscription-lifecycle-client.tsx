@@ -57,9 +57,15 @@ export default function SubscriptionLifecycleClient({
   const [panel, setPanel] = useState<Panel>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set after a successful Start when the coach already had something
+  // else booked at one or more of the new slot's future occurrences —
+  // same signal /api/admin/recurring-schedule's own client
+  // (recurring-schedule-client.tsx) surfaces for a change/add.
+  const [notice, setNotice] = useState<string | null>(null);
 
   function toggle(p: Panel) {
     setError(null);
+    setNotice(null);
     setConfirmingUnpause(false);
     setPanel((cur) => (cur === p ? null : p));
   }
@@ -76,18 +82,20 @@ export default function SubscriptionLifecycleClient({
   async function handleStart() {
     setSaving(true);
     setError(null);
+    setNotice(null);
     const res = await fetch("/api/admin/recurring-schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId }),
     });
+    const body = await res.json().catch(() => ({}));
     setSaving(false);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setError(body.error ?? "Could not start weekly sessions.");
       return;
     }
     setPanel(null);
+    if (body.warning) setNotice(body.warning);
     router.refresh();
   }
 
@@ -275,6 +283,7 @@ export default function SubscriptionLifecycleClient({
       </div>
 
       {error && <p className={styles.errorText} style={{ marginTop: 10 }}>{error}</p>}
+      {notice && <p style={{ color: "var(--gold)", fontSize: 13, marginTop: 10 }}>{notice}</p>}
 
       {panel === "start" && (
         <div className={styles.warnPanel} style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>

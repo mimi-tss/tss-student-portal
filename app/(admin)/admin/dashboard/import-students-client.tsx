@@ -14,6 +14,7 @@ interface RowResult {
   email: string;
   status: "created" | "updated" | "failed";
   error?: string;
+  warning?: string;
 }
 
 const COLUMNS =
@@ -152,7 +153,7 @@ export default function ImportStudentsClient() {
             {results.filter((r) => r.status === "updated").length} backfilled, of {results.length}{" "}
             rows.
           </p>
-          {results.some((r) => r.status === "failed") && (
+          {results.some((r) => r.status === "failed" || r.warning) && (
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -162,19 +163,19 @@ export default function ImportStudentsClient() {
                 </tr>
               </thead>
               <tbody>
-                {results.map((r, i) => (
-                  <tr key={i}>
-                    <td>{r.row}</td>
-                    <td>{r.email}</td>
-                    <td>
-                      {r.status === "created"
-                        ? "Created"
-                        : r.status === "updated"
-                          ? "Backfilled"
-                          : `Failed: ${r.error}`}
-                    </td>
-                  </tr>
-                ))}
+                {results
+                  .filter((r) => r.status === "failed" || r.warning)
+                  .map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.row}</td>
+                      <td>{r.email}</td>
+                      <td>
+                        {r.status === "failed"
+                          ? `Failed: ${r.error}`
+                          : `Created — heads up: ${r.warning}`}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           )}

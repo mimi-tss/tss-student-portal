@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
 
 export interface CreateRecurringScheduleInput {
   studentId: string;
@@ -11,7 +11,9 @@ export interface CreateRecurringScheduleInput {
   cadence?: "weekly" | "biweekly";
 }
 
-export type CreateRecurringScheduleResult = { success: true } | { success: false; error: string };
+export type CreateRecurringScheduleResult =
+  | { success: true; warning: string | null }
+  | { success: false; error: string };
 
 // Shared by the CSV bulk-import route (its only caller — the admin
 // single-add route has its own edit-or-add-a-schedule-row logic in
@@ -62,13 +64,66 @@ export async function createRecurringSchedule(
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("working_hours")
+    .select("working_hours, timezone")
     .eq("id", effectiveCoachId)
     .single();
 
   if (!slotFitsWorkingHours(coach?.working_hours ?? {}, dayOfWeek, startTime, durationMinutes)) {
     return { success: false, error: "that time falls outside the coach's working hours" };
   }
+
+  // Same coach-availability checks app/api/admin/recurring-schedule's
+  // own route runs for the single-add flow — CSV import shares the same
+  // real risk of double-booking a coach across two different students
+  // (or landing on a standing block), just for a brand-new student
+  // instead of an existing one.
+  const nextInstant = nextWeeklySlotInstant(dayOfWeek, startTime, coach?.timezone ?? "America/New_York");
+  const nextInstantEnd = new Date(nextInstant.getTime() + durationMinutes * 60000);
+  const { data: conflictingBlock } = await supabase
+    .from("coach_blocks")
+    .select("id")
+    .eq("coach_id", effectiveCoachId)
+    .lt("start_at", nextInstantEnd.toISOString())
+    .gt("end_at", nextInstant.toISOString())
+    .maybeSingle();
+
+  if (conflictingBlock) {
+    return { success: false, error: "that time is blocked off on the coach's calendar (e.g. a standing meeting or break)" };
+  }
+
+  const { data: coachSchedules } = await supabase
+    .from("recurring_schedules")
+    .select("id, start_time, duration_minutes, students(name)")
+    .eq("coach_id", effectiveCoachId)
+    .eq("day_of_week", dayOfWeek);
+
+  const [newHH, newMM] = startTime.split(":").map(Number);
+  const newStartMin = newHH * 60 + newMM;
+  const newEndMin = newStartMin + durationMinutes;
+  const coachConflict = (coachSchedules ?? []).find((other: { start_time: string; duration_minutes: number }) => {
+    const [oh, om] = other.start_time.split(":").map(Number);
+    const otherStartMin = oh * 60 + om;
+    const otherEndMin = otherStartMin + other.duration_minutes;
+    return newStartMin < otherEndMin && newEndMin > otherStartMin;
+  });
+
+  if (coachConflict) {
+    const otherStudent = coachConflict.students as unknown as { name: string } | null;
+    return {
+      success: false,
+      error: otherStudent?.name
+        ? `the coach already has ${otherStudent.name} booked at an overlapping time that day`
+        : "the coach already has another student booked at an overlapping time that day",
+    };
+  }
+
+  const { data: conflictingSession } = await supabase
+    .from("sessions")
+    .select("id")
+    .eq("actual_coach_id", effectiveCoachId)
+    .eq("scheduled_at", nextInstant.toISOString())
+    .not("status", "eq", "cancelled-with-notice")
+    .maybeSingle();
 
   const { data: existingSchedule } = await supabase
     .from("recurring_schedules")
@@ -111,7 +166,13 @@ export async function createRecurringSchedule(
     return { success: false, error: error.message };
   }
 
-  await materializeRecurringSessions(supabase, { scheduleId: schedule.id });
+  const result = await materializeRecurringSessions(supabase, { scheduleId: schedule.id });
 
-  return { success: true };
+  const warning = conflictingSession
+    ? "the coach already has another booking at this slot's very next occurrence — that date (and possibly others) won't have gotten a session"
+    : result.skipped > 0
+      ? `${result.skipped} occurrence(s) in the next year were skipped because the coach already had something else booked then`
+      : null;
+
+  return { success: true, warning };
 }

@@ -68,6 +68,12 @@ export default function RecurringScheduleClient({
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set on a successful save when the coach already had something else
+  // booked at one or more of this slot's future occurrences — the save
+  // still went through (a one-off conflict weeks out doesn't block the
+  // whole recurring setup), but the admin should know rather than
+  // assume every week actually got a session.
+  const [notice, setNotice] = useState<string | null>(null);
 
   const editingSchedule = typeof editingId === "string" && editingId !== "new" ? schedules.find((s) => s.id === editingId) ?? null : null;
 
@@ -89,6 +95,7 @@ export default function RecurringScheduleClient({
 
   function startEditing(id: string | "new") {
     setError(null);
+    setNotice(null);
     const s = id === "new" ? null : schedules.find((sch) => sch.id === id) ?? null;
     setDayOfWeek(s?.dayOfWeek ?? 1);
     setStartTime(s?.startTime ?? "16:00");
@@ -103,6 +110,7 @@ export default function RecurringScheduleClient({
   async function handleSave() {
     setSaving(true);
     setError(null);
+    setNotice(null);
 
     const res = await fetch("/api/admin/recurring-schedule", {
       method: "POST",
@@ -128,6 +136,7 @@ export default function RecurringScheduleClient({
     }
 
     setEditingId(null);
+    if (body.warning) setNotice(body.warning);
     router.refresh();
   }
 
@@ -182,6 +191,7 @@ export default function RecurringScheduleClient({
   return (
     <div>
       {error && <p className={styles.errorText} style={{ marginBottom: 8 }}>{error}</p>}
+      {notice && <p style={{ color: "var(--gold)", fontSize: 13, marginBottom: 8 }}>{notice}</p>}
 
       {schedules.length === 0 && editingId === null ? (
         hideStartPrompt ? (

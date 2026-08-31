@@ -2,7 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { waitUntil } from "@vercel/functions";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
-import { materializeRecurringSessions, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
 
 export interface ProvisionStudentInput {
   email: string;
@@ -83,9 +83,55 @@ export async function provisionStudent(
     if (input.dayOfWeek === undefined || input.dayOfWeek === null || !input.startTime) {
       return { success: false, error: "day of week and start time required for a recurring schedule" };
     }
-    const { data: coach } = await admin.from("coaches").select("working_hours").eq("id", coachId).single();
+    const { data: coach } = await admin.from("coaches").select("working_hours, timezone").eq("id", coachId).single();
     if (!slotFitsWorkingHours(coach?.working_hours ?? {}, input.dayOfWeek, input.startTime, durationMinutes)) {
       return { success: false, error: "that time falls outside the coach's working hours" };
+    }
+
+    // Same coach-double-booking checks the admin single-add route and
+    // the CSV-import helper both run — this is the third of three
+    // places a recurring schedule gets created, and the risk is
+    // identical: nothing stopped this brand-new student's slot from
+    // landing on top of a standing block or another student's existing
+    // recurring lesson with the same coach.
+    const nextInstant = nextWeeklySlotInstant(input.dayOfWeek, input.startTime, coach?.timezone ?? "America/New_York");
+    const nextInstantEnd = new Date(nextInstant.getTime() + durationMinutes * 60000);
+    const { data: conflictingBlock } = await admin
+      .from("coach_blocks")
+      .select("id")
+      .eq("coach_id", coachId)
+      .lt("start_at", nextInstantEnd.toISOString())
+      .gt("end_at", nextInstant.toISOString())
+      .maybeSingle();
+
+    if (conflictingBlock) {
+      return { success: false, error: "that time is blocked off on the coach's calendar (e.g. a standing meeting or break)" };
+    }
+
+    const { data: coachSchedules } = await admin
+      .from("recurring_schedules")
+      .select("start_time, duration_minutes, students(name)")
+      .eq("coach_id", coachId)
+      .eq("day_of_week", input.dayOfWeek);
+
+    const [newHH, newMM] = input.startTime.split(":").map(Number);
+    const newStartMin = newHH * 60 + newMM;
+    const newEndMin = newStartMin + durationMinutes;
+    const coachConflict = (coachSchedules ?? []).find((other: { start_time: string; duration_minutes: number }) => {
+      const [oh, om] = other.start_time.split(":").map(Number);
+      const otherStartMin = oh * 60 + om;
+      const otherEndMin = otherStartMin + other.duration_minutes;
+      return newStartMin < otherEndMin && newEndMin > otherStartMin;
+    });
+
+    if (coachConflict) {
+      const otherStudent = coachConflict.students as unknown as { name: string } | null;
+      return {
+        success: false,
+        error: otherStudent?.name
+          ? `the coach already has ${otherStudent.name} booked at an overlapping time that day`
+          : "the coach already has another student booked at an overlapping time that day",
+      };
     }
   } else if (lessonType === "4pack" && !input.creditExpiresAt) {
     return { success: false, error: "an expiry date is required to grant a 4-pack" };

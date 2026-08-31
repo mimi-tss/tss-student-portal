@@ -3,6 +3,68 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recurring-schedule setup now checks a coach isn't getting double-booked (2026-08-31)
+
+Follow-up to the two-slots-per-student feature — you asked for every
+place that sets up a recurring lesson to flag if the coach isn't really
+available, and to make sure the coach can't end up double-booked. Went
+looking and found this checked working hours and the coach's own
+standing blocks (Team Huddle, lunch, vacation) in one of the three
+places a recurring schedule gets created, but **nothing anywhere ever
+checked whether a different student already had this coach booked at
+an overlapping recurring time** — two students could each get
+"confirmed" onto the same coach at the same slot with no warning at
+all.
+
+**Hard-blocked (409, nothing gets created)**: a new day/time-range
+overlap check against every OTHER active `recurring_schedules` row for
+the same coach on the same day-of-week — this is a guaranteed-forever
+conflict (unlike a one-off booking, below), so it's treated the same
+way the existing working-hours and coach_blocks checks already are.
+Error names the student already holding that time when known ("the
+coach already has Jane Doe booked at an overlapping time that day").
+
+**Soft-flagged, not blocked**: a coach could also already have a
+one-off session (a makeup, a trial, a reassigned lesson) sitting right
+at the new slot's very next occurrence — that's not a recurring
+pattern, so it doesn't deserve blocking the whole setup over one
+incidental date. `materializeRecurringSessions` already silently skips
+generating a session for any instant the coach is busy at (its own
+`coachTaken` check, across the full year-ahead horizon) — previously
+that was invisible, a schedule could "save successfully" while quietly
+producing fewer sessions than expected. The route/helpers now return a
+`warning` string (specific for the immediate next-occurrence case,
+falling back to a generic "N occurrence(s) skipped" count from
+materialize's own result otherwise), and every caller now surfaces it:
+[recurring-schedule-client.tsx](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>)
+and
+[subscription-lifecycle-client.tsx](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>)'s
+Start form both show it inline after a save; the CSV importer
+([import-students-client.tsx](<app/(admin)/admin/dashboard/import-students-client.tsx>))
+shows it per-row ("Created — heads up: ...") in the results table,
+which now surfaces a warned row even when nothing failed (previously
+that table only ever appeared if something failed outright).
+
+Applied to all three places a recurring schedule actually gets created
+— confirmed there really are three independent code paths, not one
+shared function everywhere:
+[recurring-schedule/route.ts](app/api/admin/recurring-schedule/route.ts)
+(admin's own add/change UI),
+[create-recurring-schedule.ts](lib/admin/create-recurring-schedule.ts)
+(CSV bulk import — this one had *no* coach_blocks check at all before
+today, not just the missing overlap check), and
+[provision-student.ts](lib/admin/provision-student.ts) (the "Add a new
+student" form's one-go lesson setup — checks run before the student row
+is even inserted, so a conflict never leaves a half-provisioned
+student behind, same posture as its existing working-hours check).
+
+No migration needed — pure application-level checks against existing
+tables. `npx tsc --noEmit -p .` and `next build` both clean. Not
+live-tested (no login here) — worth trying deliberately: set up two
+different students on the same coach at an overlapping day/time and
+confirm the second one is rejected with the "already has X booked"
+message, not silently accepted.
+
 ## Student dashboard: merged group lessons into "Upcoming lessons this cycle" (2026-08-31)
 
 You flagged the separate "Upcoming group lessons" card as redundant —

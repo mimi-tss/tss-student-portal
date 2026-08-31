@@ -153,6 +153,55 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The coach side of the same problem: a different student could
+  // already have a recurring slot with this coach that overlaps the new
+  // one — nothing before this checked that, so two students could each
+  // get "confirmed" onto the same coach at the same time. Recurring vs.
+  // recurring is a guaranteed-forever conflict (unlike a one-off booked
+  // session, below), so this hard-blocks rather than just warning.
+  const { data: coachSchedules } = await supabase
+    .from("recurring_schedules")
+    .select("id, start_time, duration_minutes, students(name)")
+    .eq("coach_id", effectiveCoachId)
+    .eq("day_of_week", dayOfWeek);
+
+  const coachConflict = (coachSchedules ?? []).find((other) => {
+    if (scheduleId && other.id === scheduleId) return false;
+    const [oh, om] = other.start_time.split(":").map(Number);
+    const otherStartMin = oh * 60 + om;
+    const otherEndMin = otherStartMin + other.duration_minutes;
+    return newStartMin < otherEndMin && newEndMin > otherStartMin;
+  });
+
+  if (coachConflict) {
+    const otherStudent = coachConflict.students as unknown as { name: string } | null;
+    return NextResponse.json(
+      {
+        error: otherStudent?.name
+          ? `the coach already has ${otherStudent.name} booked at an overlapping time that day`
+          : "the coach already has another student booked at an overlapping time that day",
+      },
+      { status: 409 },
+    );
+  }
+
+  // One-off bookings (a makeup, a trial, a reassigned session) aren't a
+  // recurring pattern, so they can't be checked the same structural way
+  // — but the coach could still already have a real session sitting
+  // right at this new slot's very next occurrence. This doesn't hard-
+  // block (a single incidental booking weeks out shouldn't stop the
+  // whole recurring setup — materializeRecurringSessions below already
+  // skips just that one instant and keeps the rest, same as it does for
+  // any other already-taken slot), but the response's `skipped` count
+  // lets the caller warn the admin rather than silently under-booking.
+  const { data: conflictingSession } = await supabase
+    .from("sessions")
+    .select("id")
+    .eq("actual_coach_id", effectiveCoachId)
+    .eq("scheduled_at", nextInstant.toISOString())
+    .not("status", "eq", "cancelled-with-notice")
+    .maybeSingle();
+
   // Editing an existing schedule (scheduleId given): drop its own
   // not-yet-happened, untouched occurrences from the new start date
   // onward, so the old pattern doesn't linger alongside the new one.
@@ -232,7 +281,19 @@ export async function POST(req: NextRequest) {
 
   const result = await materializeRecurringSessions(supabase, { scheduleId: schedule.id });
 
-  return NextResponse.json({ success: true, ...result });
+  // Surface the coach-availability signal rather than letting it hide
+  // inside a bare success response — materializeRecurringSessions
+  // silently skips any instant the coach is already busy at (its own
+  // coachTaken check, across the full year-ahead horizon, not just the
+  // next occurrence), so a schedule can "save successfully" while
+  // quietly generating fewer sessions than the admin expects.
+  const warning = conflictingSession
+    ? "heads up: the coach already has another booking at this slot's very next occurrence — that date (and possibly others) won't have gotten a session"
+    : result.skipped > 0
+      ? `heads up: ${result.skipped} occurrence(s) in the next year were skipped because the coach or student already had something else booked then`
+      : null;
+
+  return NextResponse.json({ success: true, ...result, warning });
 }
 
 export async function DELETE(req: NextRequest) {

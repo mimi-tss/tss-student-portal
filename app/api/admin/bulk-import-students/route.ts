@@ -297,7 +297,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ validationErrors }, { status: 400 });
   }
 
-  const results: { row: number; email: string; status: "created" | "updated" | "failed"; error?: string }[] = [];
+  const results: {
+    row: number;
+    email: string;
+    status: "created" | "updated" | "failed";
+    error?: string;
+    warning?: string;
+  }[] = [];
 
   for (let i = 0; i < parsedRows.length; i += CONCURRENCY) {
     const batch = parsedRows.slice(i, i + CONCURRENCY);
@@ -345,6 +351,15 @@ export async function POST(req: NextRequest) {
               email: parsed.email,
               status: "failed" as const,
               error: `student created but schedule failed: ${scheduleResult.error}`,
+            };
+          }
+
+          if (scheduleResult.warning) {
+            return {
+              row: parsed.row,
+              email: parsed.email,
+              status: "created" as const,
+              warning: scheduleResult.warning,
             };
           }
         }
