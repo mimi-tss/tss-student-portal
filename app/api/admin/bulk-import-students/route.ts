@@ -36,6 +36,7 @@ interface NewStudentRow {
   studentSince: string | null;
   coachSince: string | null;
   contactInfo: ContactInfoFields;
+  usedGuardianEmailAsLogin: boolean;
 }
 
 interface ExistingStudentRow {
@@ -120,6 +121,16 @@ function parseContactInfo(raw: Record<string, string>): ContactInfoFields {
 //     "backfill everyone we're migrating in" without the admin having
 //     to blank out unrelated columns for rows that are just backfills.
 //
+// A row with no `email` of its own (common for younger students — only
+// a parent's email is on file) falls back to `guardian_email` as the
+// login/`students.email` address rather than being rejected outright;
+// only a row with neither is a hard error. `guardian_email` is still
+// also stored on its own column regardless, so this only affects which
+// address the student logs in with. Two siblings sharing one
+// guardian_email and neither having their own email would collide on
+// that shared address — caught by the existing "appears more than once
+// in this CSV" duplicate check, same as any other repeated email.
+//
 // Creation/update proceeds per-row after validation passes and does
 // NOT abort on a single row's failure (a Drive-API hiccup or transient
 // auth error on row 23 of 50 shouldn't discard 22 already-good rows,
@@ -168,11 +179,25 @@ export async function POST(req: NextRequest) {
 
   rawRows.forEach((raw, i) => {
     const rowNum = i + 2; // +1 for 0-index, +1 for the header row
-    const email = (raw.email ?? "").toLowerCase();
     const contactInfo = parseContactInfo(raw);
 
+    // A student with no email of their own (common for younger kids —
+    // only a parent's email is on file) logs in as their guardian
+    // instead of not being importable at all. guardian_email is still
+    // stored separately on the student's own guardian_email column
+    // either way (parseContactInfo above), so this only affects which
+    // address becomes the login/`students.email` column.
+    const ownEmail = (raw.email ?? "").trim().toLowerCase();
+    const usedGuardianEmailAsLogin = !ownEmail && !!contactInfo.guardianEmail;
+    const email = ownEmail || (contactInfo.guardianEmail ?? "").toLowerCase();
+
     if (!email || !EMAIL_RE.test(email)) {
-      validationErrors.push({ row: rowNum, error: `invalid email "${raw.email ?? ""}"` });
+      validationErrors.push({
+        row: rowNum,
+        error: ownEmail
+          ? `invalid email "${raw.email ?? ""}"`
+          : `no email and no guardian_email to fall back to — at least one is required`,
+      });
       return;
     }
     if (seenEmails.has(email)) {
@@ -199,7 +224,11 @@ export async function POST(req: NextRequest) {
     const coachRaw = raw.coach?.trim() ?? "";
     const dayRaw = raw.day_of_week?.trim() ?? "";
     const timeRaw = raw.start_time?.trim() ?? "";
-    const frequencyRaw = (raw.frequency?.trim() || "weekly").toLowerCase();
+    // "bi-weekly" (hyphenated) is the natural way most people write this,
+    // so it's accepted as an alias for "biweekly" rather than rejected —
+    // strip whitespace/hyphens before comparing, keep the original raw
+    // value for any error message below.
+    const frequencyRaw = (raw.frequency?.trim() || "weekly").toLowerCase().replace(/[\s-]+/g, "");
     const ambassador = parseBoolean(raw.ambassador?.trim() ?? "");
     const birthDateRaw = raw.birth_date?.trim() ?? "";
     const billingStartDateRaw = raw.billing_start_date?.trim() ?? "";
@@ -287,6 +316,7 @@ export async function POST(req: NextRequest) {
       ambassador,
       birthDate: birthDateRaw || null,
       billingStartDate: billingStartDateRaw || null,
+      usedGuardianEmailAsLogin,
       studentSince: studentSinceRaw || null,
       coachSince: coachSinceRaw || null,
       contactInfo,
@@ -354,14 +384,28 @@ export async function POST(req: NextRequest) {
             };
           }
 
-          if (scheduleResult.warning) {
+          if (scheduleResult.warning || parsed.usedGuardianEmailAsLogin) {
             return {
               row: parsed.row,
               email: parsed.email,
               status: "created" as const,
-              warning: scheduleResult.warning,
+              warning: [
+                parsed.usedGuardianEmailAsLogin ? "no email on file — logs in as their guardian" : null,
+                scheduleResult.warning,
+              ]
+                .filter(Boolean)
+                .join("; "),
             };
           }
+        }
+
+        if (parsed.usedGuardianEmailAsLogin) {
+          return {
+            row: parsed.row,
+            email: parsed.email,
+            status: "created" as const,
+            warning: "no email on file — logs in as their guardian",
+          };
         }
 
         return { row: parsed.row, email: parsed.email, status: "created" as const };
