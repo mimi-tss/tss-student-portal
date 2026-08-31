@@ -4,6 +4,11 @@ import { getAttentionItems, type AttentionStatus } from "@/lib/admin/attention-i
 
 const STATUSES: AttentionStatus[] = ["needs_action", "in_progress", "resolved"];
 
+// Some headroom past the default — every call reconciles 6 condition-
+// driven kinds (including the recording-matching pass, batched but
+// still a handful of sequential round-trips) before returning anything.
+export const maxDuration = 60;
+
 // Backs the Needs Review page's three tabs. Also reconciles the 5
 // condition-driven kinds (credit_expiring, trial_unbooked, etc.) against
 // current data on every call — see syncComputedAttentionItems.

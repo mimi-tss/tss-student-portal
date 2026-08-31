@@ -124,17 +124,24 @@ function Row({ item, onChanged }: { item: AttentionItem; onChanged: () => void }
 export default function NeedsReviewClient() {
   const [tab, setTab] = useState<AttentionStatus>("needs_action");
   const [items, setItems] = useState<AttentionItem[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<AttentionStatus, number>>({
     needs_action: 0,
     in_progress: 0,
     resolved: 0,
   });
 
+  // Neither fetch had a .catch before this — a failed request (a 500,
+  // a timeout, anything that doesn't come back as parseable JSON) left
+  // `items` stuck at null and the page showing "Loading…" forever, with
+  // no error and no way to retry short of a full page reload.
   function load() {
     setItems(null);
+    setLoadError(null);
     fetch(`/api/admin/attention-items?status=${tab}`)
       .then((res) => res.json())
-      .then((data) => setItems(data.items ?? []));
+      .then((data) => setItems(data.items ?? []))
+      .catch(() => setLoadError("Couldn't load this list."));
   }
 
   function loadCounts() {
@@ -144,7 +151,9 @@ export default function NeedsReviewClient() {
           .then((res) => res.json())
           .then((data) => [t.status, (data.items ?? []).length] as const),
       ),
-    ).then((results) => setCounts(Object.fromEntries(results) as Record<AttentionStatus, number>));
+    )
+      .then((results) => setCounts(Object.fromEntries(results) as Record<AttentionStatus, number>))
+      .catch(() => {});
   }
 
   useEffect(load, [tab]);
@@ -171,9 +180,17 @@ export default function NeedsReviewClient() {
       </div>
 
       <div className={styles.panel}>
-        {items === null && <p className={styles.mutedText}>Loading…</p>}
-        {items && items.length === 0 && <p className={styles.emptyState}>Nothing here.</p>}
-        {items && items.map((item) => <Row key={item.id} item={item} onChanged={handleChanged} />)}
+        {loadError && (
+          <p className={styles.errorText}>
+            {loadError}{" "}
+            <button onClick={load} className={styles.linkBtnSmall}>
+              Try again
+            </button>
+          </p>
+        )}
+        {!loadError && items === null && <p className={styles.mutedText}>Loading…</p>}
+        {!loadError && items && items.length === 0 && <p className={styles.emptyState}>Nothing here.</p>}
+        {!loadError && items && items.map((item) => <Row key={item.id} item={item} onChanged={handleChanged} />)}
       </div>
     </div>
   );

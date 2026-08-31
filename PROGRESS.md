@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Needs Review stuck on "Loading…" forever, all tab counts 0 (2026-08-31)
+
+You reported the Needs Review page never finishing its load — all
+three tab counts stuck at (0) and the list itself permanently showing
+"Loading…". Couldn't reproduce directly (no live login in this
+environment), so this is two real, separate fixes rather than one
+confirmed root cause — both were genuine problems either way.
+
+**The client could get stuck forever on any failure, with zero
+feedback** — [needs-review-client.tsx](<app/(admin)/admin/needs-review/needs-review-client.tsx>)'s
+`load()`/`loadCounts()` had no `.catch()` at all. If the API request
+ever failed in a way that doesn't cleanly resolve to `{items: [...]}`
+JSON (a timeout, a 500 whose body isn't parseable, a network blip),
+`items` stayed `null` forever — exactly this screenshot's symptom.
+Added a `.catch()` with a visible error + "Try again" button so a
+future failure is at least diagnosable instead of an indistinguishable
+infinite spinner.
+
+**A real perf issue found while looking, likely contributing** —
+`syncRecordingAttentionItems` (added earlier today with the meet-
+recordings-matching feature, migrations 0075-0078) ran one query per
+unmatched recording and up to two more per candidate session,
+sequentially, on every single Needs Review/Overview read — a studio
+with dozens of sessions in a day meant dozens of sequential round-trips
+before the page could even start rendering. Rewrote it to batch:
+one multi-row upsert for unmatched recordings, one query to fetch every
+matched recording touching today's candidate students (checked against
+each session in JS instead of one exists-check query per session), and
+one batched update + one batched upsert for the resolved/still-missing
+split — same exact behavior and same two dedup keys (`recording_id`,
+`session_id` — a recording rarely has a known student to dedup on the
+usual way, and a student missing their recording two different weeks
+are two separate things to review), just O(1) queries instead of O(N).
+Also bumped [attention-items/route.ts](app/api/admin/attention-items/route.ts)'s
+`maxDuration` to 60s as headroom, same pattern bulk-import already uses.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **Please retest
+Needs Review** and let me know if it's still stuck — if so, the actual
+cause is something I couldn't find from reading code alone (this
+environment has no live login), and I'll need whatever the browser's
+Network tab shows for the failing `/api/admin/attention-items` request
+(status code, response body) to keep chasing it.
+
 ## Join button: always visible, just disabled until 10 minutes before (2026-08-31)
 
 Small follow-up while looking at the join flow — you asked for the

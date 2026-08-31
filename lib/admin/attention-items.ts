@@ -108,34 +108,6 @@ async function createIfNew(
   );
 }
 
-// recording_unmatched's own dedup key — a recording rarely has a known
-// student_id (that's the whole reason it needs review), so it can't
-// use createIfNew's (student_id, kind) index above; it dedups on the
-// recording itself instead, same idea as request_id already does for
-// cancel_request.
-async function createIfNewByRecording(
-  supabase: SupabaseClient,
-  input: { recordingId: string; coachId: string | null; summary: string },
-) {
-  await supabase.from("attention_items").upsert(
-    { kind: "recording_unmatched", recording_id: input.recordingId, coach_id: input.coachId, summary: input.summary },
-    { onConflict: "recording_id,kind", ignoreDuplicates: true },
-  );
-}
-
-// recording_missing needs to recur per session occurrence (a student
-// missing their recording two different weeks are two separate things
-// to review, unlike e.g. "inactive" which is one ongoing condition) —
-// dedups on session_id instead of student_id for the same reason.
-async function createIfNewBySession(
-  supabase: SupabaseClient,
-  input: { sessionId: string; studentId: string; summary: string },
-) {
-  await supabase.from("attention_items").upsert(
-    { kind: "recording_missing", session_id: input.sessionId, student_id: input.studentId, summary: input.summary },
-    { onConflict: "session_id,kind", ignoreDuplicates: true },
-  );
-}
 
 // Called the moment a recording leaves 'unmatched' (matched or
 // dismissed, see lib/admin/recording-matching.ts) — unlike the 5
@@ -283,6 +255,12 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
 // Surfacing weeks of pre-existing unmatched recordings here would
 // recreate the exact "queue too overwhelming to use" problem already
 // hit once building the Recordings page itself.
+//
+// Batched rather than one query per row — this runs on every Needs
+// Review/Overview read (getAttentionItems below), so a studio with
+// dozens of sessions today would otherwise mean dozens of sequential
+// round-trips just for this one reconciliation pass before the page
+// could even start rendering, worth avoiding on a hot read path.
 async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
@@ -295,13 +273,23 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
     .eq("status", "unmatched")
     .gte("recorded_date", todayStr);
 
-  for (const rec of unmatchedRecordings ?? []) {
-    const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? "an unrecognized coach";
-    await createIfNewByRecording(supabase, {
-      recordingId: rec.id,
-      coachId: rec.coach_id,
-      summary: `Recording from ${coachName} on ${rec.recorded_date} couldn't be matched to a student`,
-    });
+  if (unmatchedRecordings && unmatchedRecordings.length > 0) {
+    // Dedups on recording_id, not student_id like createIfNew above — a
+    // recording rarely has a known student_id (that's the whole reason
+    // it needs review), so it can't use that index; batched into one
+    // multi-row upsert instead of one call per recording.
+    await supabase.from("attention_items").upsert(
+      unmatchedRecordings.map((rec) => {
+        const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? "an unrecognized coach";
+        return {
+          kind: "recording_unmatched" as const,
+          recording_id: rec.id,
+          coach_id: rec.coach_id,
+          summary: `Recording from ${coachName} on ${rec.recorded_date} couldn't be matched to a student`,
+        };
+      }),
+      { onConflict: "recording_id,kind", ignoreDuplicates: true },
+    );
   }
 
   const { data: candidateSessions } = await supabase
@@ -311,44 +299,80 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
     .lte("scheduled_at", new Date().toISOString())
     .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)");
 
-  for (const s of candidateSessions ?? []) {
-    const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
-    if (endTime > graceCutoff.getTime()) continue; // too soon to expect a recording yet
-
-    const timezone = (s.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
-    const [y, m, d] = zonedYearMonthDay(new Date(s.scheduled_at), timezone);
-    const sessionDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-    const { data: existingRecording } = await supabase
-      .from("meet_recordings")
-      .select("id")
-      .eq("status", "matched")
-      .eq("matched_student_id", s.student_id)
-      .eq("recorded_date", sessionDate)
-      .maybeSingle();
-
-    const studentName = (s.students as unknown as { name: string } | null)?.name ?? "Student";
-
-    if (existingRecording) {
-      // The condition that created this (if it did) is no longer true —
-      // unlike the 5 kinds above, this one's "resolved" is a computed
-      // fact (a recording now exists), not an admin decision, so it's
-      // safe and more helpful to auto-resolve rather than wait for a
-      // manual click on something that already fixed itself.
-      await supabase
-        .from("attention_items")
-        .update({ status: "resolved", resolved_at: new Date().toISOString() })
-        .eq("session_id", s.id)
-        .eq("kind", "recording_missing")
-        .neq("status", "resolved");
-      continue;
-    }
-
-    await createIfNewBySession(supabase, {
-      sessionId: s.id,
-      studentId: s.student_id,
-      summary: `${studentName}'s session on ${sessionDate} has no recording yet`,
+  // Past-grace-period only — a session that just ended is too soon to
+  // expect a recording yet, same cutoff as before, just filtered up
+  // front instead of skipped one at a time in the loop below.
+  const dueSessions = (candidateSessions ?? [])
+    .filter((s) => {
+      const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
+      return endTime <= graceCutoff.getTime();
+    })
+    .map((s) => {
+      const timezone = (s.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
+      const [y, m, d] = zonedYearMonthDay(new Date(s.scheduled_at), timezone);
+      return {
+        id: s.id,
+        studentId: s.student_id,
+        studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
+        sessionDate: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+      };
     });
+
+  if (dueSessions.length === 0) return;
+
+  // One query for every already-matched recording touching today's
+  // candidate students, instead of one "does this exact pair exist"
+  // query per session — same (student, date) matching, just checked in
+  // JS against a batch instead of round-tripping per row.
+  const studentIds = [...new Set(dueSessions.map((s) => s.studentId))];
+  const { data: matchedRecordings } = await supabase
+    .from("meet_recordings")
+    .select("matched_student_id, recorded_date")
+    .eq("status", "matched")
+    .in("matched_student_id", studentIds)
+    .gte("recorded_date", todayStr);
+
+  const matchedKeys = new Set(
+    (matchedRecordings ?? []).map((r) => `${r.matched_student_id}|${r.recorded_date}`),
+  );
+
+  const resolvedSessionIds: string[] = [];
+  const missingRows: { kind: "recording_missing"; session_id: string; student_id: string; summary: string }[] = [];
+
+  for (const s of dueSessions) {
+    if (matchedKeys.has(`${s.studentId}|${s.sessionDate}`)) {
+      resolvedSessionIds.push(s.id);
+    } else {
+      missingRows.push({
+        kind: "recording_missing",
+        session_id: s.id,
+        student_id: s.studentId,
+        summary: `${s.studentName}'s session on ${s.sessionDate} has no recording yet`,
+      });
+    }
+  }
+
+  if (resolvedSessionIds.length > 0) {
+    // The condition that created this (if it did) is no longer true —
+    // unlike the 5 kinds above, this one's "resolved" is a computed
+    // fact (a recording now exists), not an admin decision, so it's
+    // safe and more helpful to auto-resolve rather than wait for a
+    // manual click on something that already fixed itself.
+    await supabase
+      .from("attention_items")
+      .update({ status: "resolved", resolved_at: new Date().toISOString() })
+      .in("session_id", resolvedSessionIds)
+      .eq("kind", "recording_missing")
+      .neq("status", "resolved");
+  }
+
+  if (missingRows.length > 0) {
+    // Dedups on session_id, not student_id — a student missing their
+    // recording two different weeks are two separate things to review,
+    // unlike e.g. "inactive" which is one ongoing condition.
+    await supabase
+      .from("attention_items")
+      .upsert(missingRows, { onConflict: "session_id,kind", ignoreDuplicates: true });
   }
 }
 
