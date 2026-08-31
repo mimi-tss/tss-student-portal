@@ -3,6 +3,56 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added info@tarasimonstudios.com as an Admin account (2026-08-31)
+
+You asked for this directly — a plain data/account provisioning task,
+no code change involved. There's no "Add admin" UI in this app (unlike
+coaches/students, which both have one) — the two existing admin
+accounts (`test-admin@tarasimonstudios.com`, `mimi@tarasimonstudios.com`)
+were both created the same way, straight against Supabase. Created an
+`auth.users` row for `info@tarasimonstudios.com` (email_confirm: true,
+no password — same passwordless-login posture as every other role) and
+a `profiles` row with `role: "admin"`, id-linked to it — confirmed via
+[resolve-account.ts](lib/auth/resolve-account.ts) that this is the
+complete set needed for the account to work: the `/login` page's
+email-then-6-digit-code flow resolves any `profiles.role in
+(admin, admin_finance)` account straight off `auth.users`, no coaches/
+students row involved. This account can log in right now at `/login`.
+
+## Admin can now remove an unused trial-lesson entitlement (2026-08-31)
+
+Follow-up to fixing the CSV importer above — you re-uploaded with the
+8 biweekly students set to `suite` tier instead of `pro`, but `suite`
+auto-grants a one-time trial-lesson perk on creation
+([provision-student.ts](lib/admin/provision-student.ts):184), which
+these migrated students (real session history already, not new
+trials) don't need. There was no way for staff to remove one at all —
+the "Trial lesson" column on the Students list only ever had a "Book
+trial" link, nothing to undo one.
+
+Added a "Remove" action right next to it
+([student-table.tsx](<app/(admin)/admin/dashboard/student-table.tsx>)),
+backed by a new [remove-trial](app/api/admin/remove-trial/route.ts)
+route — deletes the entitlement row, scoped to `perk_type=trial_lesson`
+AND `used=false` (an already-used trial became a real booked session;
+nothing to undo there through this path). Needed a new migration
+([0079_admin_delete_entitlements.sql](supabase/migrations/0079_admin_delete_entitlements.sql))
+— `entitlements` had admin select/update policies (0005/0007) but no
+delete policy at all, so an admin-session DELETE would have silently
+0-row-filtered under RLS, same class of gotcha this project has hit
+before (coach exercise-unassign, staff_notes pinning).
+
+**Not yet run for the 8 actual students this was built for** — the
+direct one-off deletion (bypassing RLS via service-role key, same as
+this session's earlier Drive-folder fix) got blocked by this
+environment's own write-action classifier; asked you to confirm and
+am waiting on that. Once confirmed, or once migration 0079 is applied,
+the new Remove button covers this same case going forward from the
+admin UI itself.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login (none in this environment).
+
 ## Stop panel's "Mark retained"/"Mark cancelled" went permanently dead after one click (2026-08-31)
 
 You caught this live on a test student ("testttt") — the Stop panel
@@ -2866,6 +2916,14 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0079 not yet confirmed applied** —
+`0079_admin_delete_entitlements.sql` adds a delete policy so admin can
+actually remove an entitlement row (used by the new "Remove" trial-
+lesson action on the Students list). Until this runs, that Remove
+button will fail with "No unused trial lesson to remove" even when one
+exists — the delete silently 0-row-filters under RLS with no policy
+allowing it.
 
 **Migrations 0077 and 0078 confirmed applied** (2026-08-31) — the
 Recordings page's name-matching pass and the `recording_unmatched`/
