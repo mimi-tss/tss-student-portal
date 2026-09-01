@@ -38,11 +38,8 @@ app (Change/Save/Cancel), plus a "Delete" with a `window.confirm` given
 this removes something a customer may have actually paid for. The
 existing "Book" link is untouched, still per-credit.
 
-`npx tsc --noEmit -p .` and `next build` both clean. **New migration
-0081 not yet confirmed applied** — until it runs, "Delete" will fail
-with "Credit not found or already used" even on a real, unused credit
-(RLS has nowhere to grant the delete). Edit doesn't need it and works
-either way.
+`npx tsc --noEmit -p .` and `next build` both clean. Migration 0081
+confirmed applied (2026-08-31) — Delete is live.
 
 ## New Needs Review kind: flag a weekly student's unbilled "5th week" as a one-off upsell (2026-08-31)
 
@@ -3335,20 +3332,13 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0081 not yet confirmed applied** —
-`0081_admin_delete_makeup_credits.sql` adds the missing admin delete
-policy on `makeup_credits`. Until this runs, deleting a session credit
-from the student detail page will fail with "Credit not found or
-already used" even on a real, unused one — editing its expiry date
-works either way (that only needed the existing update policy).
+**Migration 0081 confirmed applied** (2026-08-31) — admin can now
+delete a session credit from the student detail page.
 
-**New migration 0080 not yet confirmed applied** —
-`0080_fifth_week_attention_items.sql` adds the `occurrence_at` column,
-kind, and dedup index the new "5th week available" Needs Review item
-needs. Until this runs, that item can never actually get created (the
-insert would hit the old `attention_items_kind_check` constraint and
-fail) — the Needs Review page and Overview stats are otherwise
-unaffected either way.
+**Migration 0080 confirmed applied** (2026-08-31) — the "5th week
+available" Needs Review item is live; ran the sync immediately for
+every currently-qualifying student rather than waiting for the next
+Needs Review page load (see entry above).
 
 **Migration 0079 confirmed applied** (2026-08-31) — admin now has a
 real delete policy on `entitlements`; the "Remove" trial-lesson action
