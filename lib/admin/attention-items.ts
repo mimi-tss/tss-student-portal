@@ -101,18 +101,26 @@ export async function createAttentionItem(
 // kind+student is ever seen, in ANY status — resolving (or moving to
 // in_progress) sticks even if the underlying condition is still true,
 // per 0035's own header comment. Relies on the partial unique index
-// from migration 0062 (student_id, kind) scoped to just these 6 kinds;
-// upsert+ignoreDuplicates makes this atomic under concurrent reads
-// instead of the old check-then-insert, which had a race window that
-// let concurrent page loads each create their own duplicate.
+// from migration 0062 (student_id, kind) scoped to just these 6 kinds.
+// Goes through the attention_item_upsert_condition() RPC (migration
+// 0081), not a plain .upsert() — Postgres requires an ON CONFLICT
+// clause's WHERE predicate to match a partial index's own predicate
+// exactly, and supabase-js's onConflict option has no way to express
+// that extra WHERE clause, so a direct .upsert() against this index
+// always fails (confirmed live: every call errored with "no unique or
+// exclusion constraint matching the ON CONFLICT specification",
+// silently, since nothing here ever checked the error). The RPC does
+// the exact same atomic on-conflict-do-nothing insert, just from a
+// context that CAN state the matching predicate.
 async function createIfNew(
   supabase: SupabaseClient,
   input: { kind: AttentionKind; studentId: string; summary: string },
 ) {
-  await supabase.from("attention_items").upsert(
-    { kind: input.kind, student_id: input.studentId, summary: input.summary },
-    { onConflict: "student_id,kind", ignoreDuplicates: true },
-  );
+  await supabase.rpc("attention_item_upsert_condition", {
+    p_kind: input.kind,
+    p_student_id: input.studentId,
+    p_summary: input.summary,
+  });
 }
 
 
@@ -325,11 +333,22 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
       summary: `Has an extra lesson slot open this cycle (${c.occurrenceAt.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}, same day/time as usual) — offer a one-off add-on`,
     }));
 
-  if (rows.length > 0) {
-    await supabase
-      .from("attention_items")
-      .upsert(rows, { onConflict: "student_id,kind,occurrence_at", ignoreDuplicates: true });
-  }
+  // Per-row RPC calls (attention_item_upsert_fifth_week, migration
+  // 0081), run in parallel — same reasoning as createIfNew's own
+  // comment above: a plain .upsert() can't match this partial index's
+  // WHERE predicate at all. Parallel keeps this close to the single
+  // batched round-trip a working .upsert() would have been, rather than
+  // going fully sequential.
+  await Promise.all(
+    rows.map((r) =>
+      supabase.rpc("attention_item_upsert_fifth_week", {
+        p_student_id: r.student_id,
+        p_coach_id: r.coach_id,
+        p_occurrence_at: r.occurrence_at,
+        p_summary: r.summary,
+      }),
+    ),
+  );
 }
 
 // Both kinds here are deliberately forward-looking only (recorded_date/
@@ -358,19 +377,20 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   if (unmatchedRecordings && unmatchedRecordings.length > 0) {
     // Dedups on recording_id, not student_id like createIfNew above — a
     // recording rarely has a known student_id (that's the whole reason
-    // it needs review), so it can't use that index; batched into one
-    // multi-row upsert instead of one call per recording.
-    await supabase.from("attention_items").upsert(
+    // it needs review), so it can't use that index. Per-row RPC calls
+    // (attention_item_upsert_recording_unmatched, migration 0081), run
+    // in parallel — a plain .upsert() can't match this partial index's
+    // WHERE predicate at all, same reasoning as createIfNew's own
+    // comment above.
+    await Promise.all(
       unmatchedRecordings.map((rec) => {
         const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? "an unrecognized coach";
-        return {
-          kind: "recording_unmatched" as const,
-          recording_id: rec.id,
-          coach_id: rec.coach_id,
-          summary: `Recording from ${coachName} on ${rec.recorded_date} couldn't be matched to a student`,
-        };
+        return supabase.rpc("attention_item_upsert_recording_unmatched", {
+          p_recording_id: rec.id,
+          p_coach_id: rec.coach_id,
+          p_summary: `Recording from ${coachName} on ${rec.recorded_date} couldn't be matched to a student`,
+        });
       }),
-      { onConflict: "recording_id,kind", ignoreDuplicates: true },
     );
   }
 
@@ -448,14 +468,22 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
       .neq("status", "resolved");
   }
 
-  if (missingRows.length > 0) {
-    // Dedups on session_id, not student_id — a student missing their
-    // recording two different weeks are two separate things to review,
-    // unlike e.g. "inactive" which is one ongoing condition.
-    await supabase
-      .from("attention_items")
-      .upsert(missingRows, { onConflict: "session_id,kind", ignoreDuplicates: true });
-  }
+  // Dedups on session_id, not student_id — a student missing their
+  // recording two different weeks are two separate things to review,
+  // unlike e.g. "inactive" which is one ongoing condition. Per-row RPC
+  // calls (attention_item_upsert_recording_missing, migration 0081),
+  // run in parallel — a plain .upsert() can't match this partial
+  // index's WHERE predicate at all, same reasoning as createIfNew's
+  // own comment above.
+  await Promise.all(
+    missingRows.map((row) =>
+      supabase.rpc("attention_item_upsert_recording_missing", {
+        p_session_id: row.session_id,
+        p_student_id: row.student_id,
+        p_summary: row.summary,
+      }),
+    ),
+  );
 }
 
 // ---- reads ----
