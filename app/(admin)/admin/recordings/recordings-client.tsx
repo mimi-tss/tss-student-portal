@@ -27,14 +27,22 @@ export default function RecordingsClient() {
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
+  // No .catch before this — a slow/failed request (this route can take
+  // a while: it scans Drive, then runs name+day matching against every
+  // unmatched recording) left `items` stuck at null and the page
+  // showing "Loading…" forever, with no error and no way to retry short
+  // of a full page reload. Same fix as the Needs Review page's own
+  // identical gap.
   function load() {
     setItems(null);
+    setError(null);
     fetch("/api/admin/meet-recordings")
       .then((res) => res.json())
       .then((data) => {
         setItems(data.items ?? []);
         setAutoMatched(data.autoMatched ?? 0);
-      });
+      })
+      .catch(() => setError("Couldn't load recordings — try again."));
   }
 
   useEffect(load, []);
@@ -86,10 +94,17 @@ export default function RecordingsClient() {
           {autoMatched} recording{autoMatched === 1 ? "" : "s"} matched automatically just now.
         </p>
       )}
-      {error && <p className={styles.panelText} style={{ color: "#c0392b" }}>{error}</p>}
+      {error && (
+        <p className={styles.panelText} style={{ color: "#c0392b" }}>
+          {error}{" "}
+          <button onClick={load} className={styles.linkBtnSmall}>
+            Try again
+          </button>
+        </p>
+      )}
 
-      {items === null && <p className={styles.panelText}>Loading…</p>}
-      {items && items.length === 0 && <p className={styles.emptyState}>Nothing unmatched right now.</p>}
+      {!error && items === null && <p className={styles.panelText}>Loading…</p>}
+      {!error && items && items.length === 0 && <p className={styles.emptyState}>Nothing unmatched right now.</p>}
 
       {items?.map((item) => (
         <div key={item.id} className={styles.naRow}>

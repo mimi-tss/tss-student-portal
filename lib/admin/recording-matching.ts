@@ -215,21 +215,31 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
   }
 
   // Pass 1: resolve each recording's paired notes doc (if any confirmed
-  // for the right coach) without matching anything yet.
-  const resolved: { recordingId: string; coachId: string; notesDocId: string }[] = [];
-  for (const rec of unmatched) {
-    const coachEmail = coachEmailById.get(rec.coach_id as string);
-    if (!coachEmail) continue;
+  // for the right coach) without matching anything yet. Recordings run
+  // in parallel — each is its own independent Drive lookup, and this
+  // was previously one recording at a time (confirmed live: ~300-500ms
+  // per recording, enough on its own to approach a serverless function's
+  // duration limit once more than a couple dozen recordings are
+  // unmatched at once). The inner "stop at the first confirmed
+  // candidate" behavior per recording is unchanged.
+  const resolvedOrNull = await Promise.all(
+    unmatched.map(async (rec) => {
+      const coachEmail = coachEmailById.get(rec.coach_id as string);
+      if (!coachEmail) return null;
 
-    const candidates = await findGeminiNotesForRecording(rec.file_name as string, rec.drive_created_at as string);
-    for (const candidate of candidates) {
-      const text = await exportDocText(candidate.id);
-      if (text.toLowerCase().includes(coachEmail)) {
-        resolved.push({ recordingId: rec.id, coachId: rec.coach_id as string, notesDocId: candidate.id });
-        break;
+      const candidates = await findGeminiNotesForRecording(rec.file_name as string, rec.drive_created_at as string);
+      for (const candidate of candidates) {
+        const text = await exportDocText(candidate.id);
+        if (text.toLowerCase().includes(coachEmail)) {
+          return { recordingId: rec.id, coachId: rec.coach_id as string, notesDocId: candidate.id };
+        }
       }
-    }
-  }
+      return null;
+    }),
+  );
+  const resolved = resolvedOrNull.filter(
+    (r): r is { recordingId: string; coachId: string; notesDocId: string } => r !== null,
+  );
 
   const recordingsPerNotesDoc = new Map<string, number>();
   for (const r of resolved) {

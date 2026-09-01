@@ -16,6 +16,16 @@ import {
 // an on-demand scan is simpler and gives the admin direct control over
 // when it runs. The unmatched list this returns already reflects
 // whatever the scan + auto-match pass just resolved.
+//
+// Needs real runway: runNameMatching alone does 1-2 Drive API calls per
+// unmatched recording, sequentially — confirmed live, ~300-500ms each,
+// so even a few dozen recordings adds up past Vercel's default 10s
+// function timeout (a request that just silently times out, same
+// failure shape this route's own client never used to check for
+// either). Matches the same maxDuration pattern already used for
+// attention-items' own multi-query sync.
+export const maxDuration = 60;
+
 export async function GET() {
   const supabase = await createClient();
   const {
