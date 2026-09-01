@@ -3,6 +3,50 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed: a student's group-lesson (bootcamp) registration never showed on their admin profile page (2026-09-01)
+
+You caught this with a concrete example: Dalia Hyman is registered for
+"Bootcamp N1" (confirmed live on the Group Lessons page, "1 upcoming"),
+but her own admin student-detail page showed "Next session: Nothing
+scheduled" and "No other sessions scheduled this cycle."
+
+Root cause: [page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>)'s
+"Next session" query and [/api/sessions/upcoming](app/api/sessions/upcoming/route.ts)
+(which backs "All sessions this billing cycle") both only ever queried
+the `sessions` table — a group-lesson registration lives entirely in a
+separate table (`group_lesson_registrations`/`group_lessons`) neither
+one touched. The student's own real dashboard already solved this
+exact problem months ago
+([getStudentUpcomingGroupLessons](lib/group-lessons.ts), merged in via
+`groupLessonIsNext`/`cycleItems`) — this admin page is supposed to be a
+read-only mirror of what the student actually sees, but never got the
+same treatment, so it quietly drifted out of sync with what the
+student's own dashboard would show.
+
+**Fixed both panels, reusing the existing helper rather than
+reimplementing it**:
+- "Next session" now compares the soonest 1:1 session against the
+  soonest group lesson (same `groupLessonIsNext` comparison the student
+  dashboard already uses) and shows whichever is first. A group lesson
+  shown here is read-only — no Cancel/Reassign buttons, since those act
+  on `sessions` rows and a registration isn't one; links to Group
+  Lessons instead, where it's actually managed (Edit/Stop/Remove from
+  series, per that page's own controls).
+- `/api/sessions/upcoming` now also returns the student's group lessons
+  falling inside the current billing cycle (same cycle-end filter the
+  student dashboard's own `cycleItems` merge uses), and
+  [admin-upcoming-sessions.tsx](<app/(admin)/admin/students/[studentId]/admin-upcoming-sessions.tsx>)
+  renders them in the same list, same read-only treatment.
+
+Confirmed via RLS before assuming this would just work for admin: the
+existing "admins can manage group lesson registrations" `for all`
+policy (migration 0031) already covers admin reading *any* student's
+registrations, not just their own — no RLS gap to also fix here.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login (none in this environment) — please confirm Dalia
+now shows Bootcamp N1 on her profile page once this deploys.
+
 ## Recordings now scan + auto-match on a schedule, not just on page load (2026-09-01)
 
 Direct follow-up to today's Recordings investigation — you asked how

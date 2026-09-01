@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
+import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
 import { formatTenure, formatPlainDate } from "@/lib/format-date";
 import { renewalInfo } from "@/lib/billing/renewal";
 import { FormattedDateTime } from "@/components/formatted-time";
@@ -161,10 +162,11 @@ export default async function AdminStudentPage({
       .maybeSingle(),
   ]);
 
-  const [recordings, exerciseCatalog, assignedExercises, cancelRequestExtras] = await Promise.all([
+  const [recordings, exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
     student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
     supabase.from("exercises").select("id, title").eq("active", true).order("title"),
     listAssignedExercises(supabase, student.id),
+    getStudentUpcomingGroupLessons(supabase, student.id),
     cancelRequestRow
       ? Promise.all([
           // Not filtered to needs_action/in_progress — once "Mark
@@ -205,6 +207,19 @@ export default async function AdminStudentPage({
     : null;
 
   const { renewalDate } = renewalInfo(student.billing_anniversary_date);
+
+  // "Next session" here previously only ever looked at 1:1 `sessions`
+  // rows — a group-lesson registration (bootcamp, etc.) never showed up
+  // at all, even though it's a real upcoming commitment, because it
+  // lives in a separate table (group_lesson_registrations) this page
+  // never queried. Mirrors the same merge the student's own dashboard
+  // already does (getStudentUpcomingGroupLessons + groupLessonIsNext) —
+  // this admin view is supposed to be a read-only mirror of what the
+  // student actually sees, so it should show the same thing.
+  const nextGroupLesson = upcomingGroupLessons[0] ?? null;
+  const groupLessonIsNext =
+    nextGroupLesson !== null &&
+    (!nextSession || new Date(nextGroupLesson.scheduledAt).getTime() < new Date(nextSession.scheduled_at).getTime());
 
   return (
     <main className={styles.wrap}>
@@ -401,7 +416,19 @@ export default async function AdminStudentPage({
             Book a session
           </Link>
         </div>
-        {nextSession ? (
+        {groupLessonIsNext ? (
+          <>
+            <p>
+              {nextGroupLesson!.topic || "Group Lesson"} — <FormattedDateTime value={nextGroupLesson!.scheduledAt} />
+            </p>
+            <p className={styles.mutedText} style={{ marginTop: 4 }}>
+              with Coach {nextGroupLesson!.coachName} · {nextGroupLesson!.durationMinutes} min · manage via{" "}
+              <Link href="/admin/group-lessons" className={styles.linkBtn}>
+                Group Lessons
+              </Link>
+            </p>
+          </>
+        ) : nextSession ? (
           <>
             <p>
               <FormattedDateTime value={nextSession.scheduled_at} />

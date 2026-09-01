@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { FormattedDateTime } from "@/components/formatted-time";
 import AdminCancelButtons from "./admin-cancel-buttons";
 import ReassignSessionCoach from "./reassign-session-coach";
@@ -12,6 +13,14 @@ interface UpcomingSession {
   duration_minutes: number;
   is_makeup: boolean;
   actual_coach_id: string;
+}
+
+interface UpcomingGroupLesson {
+  id: string;
+  topic: string | null;
+  scheduledAt: string;
+  durationMinutes: number;
+  coachName: string;
 }
 
 interface Coach {
@@ -39,6 +48,7 @@ export default function AdminUpcomingSessions({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<UpcomingSession[] | null>(null);
+  const [groupLessons, setGroupLessons] = useState<UpcomingGroupLesson[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -53,6 +63,7 @@ export default function AdminUpcomingSessions({
       return;
     }
     setSessions(body.sessions);
+    setGroupLessons(body.groupLessons ?? []);
   }
 
   if (!open) {
@@ -81,11 +92,11 @@ export default function AdminUpcomingSessions({
       {error && <p className={styles.errorText}>{error}</p>}
       {loading && <p className={styles.mutedText}>Loading…</p>}
 
-      {!loading && sessions && sessions.length === 0 && (
+      {!loading && sessions && sessions.length === 0 && groupLessons.length === 0 && (
         <p className={styles.emptyState}>No other sessions scheduled this cycle.</p>
       )}
 
-      {!loading && sessions && sessions.length > 0 && (
+      {!loading && sessions && (sessions.length > 0 || groupLessons.length > 0) && (
         <ul className={styles.list}>
           {sessions.map((s) => (
             <li key={s.id} className={styles.listItem}>
@@ -109,6 +120,19 @@ export default function AdminUpcomingSessions({
                   onSuccess={load}
                 />
               </div>
+            </li>
+          ))}
+          {groupLessons.map((g) => (
+            <li key={g.id} className={styles.listItem}>
+              <p>
+                {g.topic || "Group Lesson"} — <FormattedDateTime value={g.scheduledAt} />
+              </p>
+              <p className={styles.mutedText} style={{ marginTop: 4 }}>
+                with Coach {g.coachName} · {g.durationMinutes} min · manage via{" "}
+                <Link href="/admin/group-lessons" className={styles.linkBtnSmall}>
+                  Group Lessons
+                </Link>
+              </p>
             </li>
           ))}
         </ul>
