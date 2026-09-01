@@ -3,6 +3,51 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings: found today's 3 missing files, then bounded the scan after a real scare (2026-09-01)
+
+You reported 3 students (Brooke Burns, Shannon von Driska, Rollins
+Anderson) had class with Nikki today with no recording in their
+folder. Traced it: the actual .mp4 files were sitting in the shared
+Drive inbox the whole time, but `meet_recordings` had zero rows for
+today — nobody had opened the admin Recordings page yet today, and
+this feature only ever scans on page load (no cron), per its own
+original design.
+
+**Ran the scan directly to check** (same Drive service-account
+credentials the app itself uses) — and hit a real problem in the
+process: [drive.ts](lib/google/drive.ts)'s `listMeetRecordingsInbox()`
+had no time bound at all. That shared inbox turned out to be this
+studio's *entire* recording history in one folder — Meet never
+archives or moves anything — 4026 files going back to January 2025.
+My diagnostic script paginated through all of them (the real app's
+own query never has, capped at one page of 200 — that's what kept
+this latent until now), and inserted all 4026 as fresh "unmatched"
+rows in one call. Caught it before it caused real damage: the
+Recordings page re-runs name+day matching (Drive/Gemini API calls) on
+every load, so the next admin visit would have tried to process a
+year-plus of backlog. Deleted all 4026 backlog rows immediately (you
+confirmed — "we don't need the past ones") — this only touched the
+tracking table, no actual Drive file was moved or altered by any of
+this.
+
+**Real fix**: `listMeetRecordingsInbox()` now only asks Drive for
+files created in the last 3 days (comfortable margin over Meet's own
+multi-hour processing delay), so this can never happen again
+regardless of how the query is implemented later. Only the 3
+legitimate rows from today remain — all Nikki, all today, correctly
+scoped.
+
+**Where it stands for the 3 students**: 3 recording files exist for
+today, matching 3 real attended sessions with Nikki the same day —
+genuinely ambiguous for auto-matching (it only ever resolves a clean
+1-recording-to-1-session day, specifically to avoid ever moving a
+file into the wrong family's folder). One of the 3 files is timestamped
+hours before any of today's sessions started and is likely unrelated.
+Recommended you use the Recordings page's manual picker to confirm the
+right file against each student rather than have me guess.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Coach meet links now get their tracking query params stripped on save (2026-09-01)
 
 You asked why Nikki's coach dashboard showed
