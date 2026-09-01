@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings picker: fixed for real by dropping its inline scan (2026-09-01)
+
+You asked "can't I do it in app?" after I kept pointing at Drive as a
+workaround — that was the actual thing to fix, and the real root cause
+turned out to be architectural, not tunable. The Recordings page's own
+GET route ran the *entire* scan + name-match + day-match pass inline,
+every single load, before returning anything to render — so the
+manual picker below could never even show up, no matter how much the
+underlying pipeline got optimized. Spent a while chasing this as a
+timing problem first (maxDuration, parallelizing both matching passes,
+capping batch size 15 then 8) — each helped some (confirmed via direct
+curl timing against production: 26 recordings ~20-26s, 15 ~11-12s, 8
+~8.4s) but the failures never fully went away, and the noise between
+attempts (rapid pushes outrunning Vercel's own deploy propagation)
+made it impossible to nail the exact ceiling from outside.
+
+**The actual fix**: now that scanning/matching runs automatically in
+the background every 2 hours (the cron added earlier this session),
+the page never needed to also do that work inline. Split it out — GET
+`/api/admin/meet-recordings` is back to a plain read of whatever's
+already in `meet_recordings` (confirmed directly: 674ms for 28 rows,
+down from a route that failed outright past 20s), and the slow pass
+moved to its own `POST /api/admin/meet-recordings/rescan`, wired to a
+new **"Check now"** button — so admin can still force an immediate
+check without it blocking the list from ever loading. The confirm/
+dismiss actions were never part of the slow path to begin with — this
+was purely the list-loading step.
+
+Also kept the batch-cap/parallelization work from the investigation —
+still real, valid improvements to the background cron path even
+though they turned out not to be the actual fix for the interactive
+page.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Fixed: recurring-schedule slots crossing midnight wrongly rejected as outside working hours (2026-09-01)
 
 You reported: coach Nikki has working hours Thu 8:30pm-12:00am + Fri
