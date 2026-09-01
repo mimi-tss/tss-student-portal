@@ -151,9 +151,8 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
   const now = new Date();
   const expiringCutoff = new Date(now.getTime() + EXPIRING_WITHIN_DAYS * 24 * 60 * 60 * 1000);
   const holdCutoff = new Date(now.getTime() + HOLD_ENDING_WITHIN_DAYS * 24 * 60 * 60 * 1000);
-  const inactiveCutoff = new Date(now.getTime() - INACTIVE_DAYS * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const inactiveCutoffInstant = new Date(now.getTime() - INACTIVE_DAYS * 24 * 60 * 60 * 1000);
+  const inactiveCutoff = inactiveCutoffInstant.toISOString().slice(0, 10);
 
   const [
     { data: dncStudents },
@@ -195,11 +194,21 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
       .not("paused_end", "is", null)
       .lte("paused_end", holdCutoff.toISOString().slice(0, 10))
       .gte("paused_end", now.toISOString().slice(0, 10)),
+    // A student who's never logged in isn't "inactive" until they've
+    // actually had time to — a just-migrated/just-added student with
+    // streak_last_active_date still null shouldn't get flagged the
+    // moment they exist (confirmed: a batch student migration is about
+    // to add a bunch of never-logged-in-yet students all at once, which
+    // would've otherwise flooded this with false positives on day one).
+    // Same INACTIVE_DAYS grace period either way — just measured from
+    // created_at instead of streak_last_active_date for the null case.
     supabase
       .from("students")
       .select("id, name, streak_last_active_date")
       .neq("subscription_status", "cancelled")
-      .or(`streak_last_active_date.is.null,streak_last_active_date.lt.${inactiveCutoff}`),
+      .or(
+        `and(streak_last_active_date.is.null,created_at.lt.${inactiveCutoffInstant.toISOString()}),streak_last_active_date.lt.${inactiveCutoff}`,
+      ),
   ]);
 
   for (const s of dncStudents ?? []) {
