@@ -187,15 +187,19 @@ export function findStudentNameInText(text: string, students: StudentForMatching
 // one known student. A notes doc shared across multiple still-unmatched
 // files is itself the signal that it can't be trusted for any of them.
 // Caps how many recordings one invocation processes — confirmed live
-// this route was hitting an execution ceiling (empty 500 at ~20-26s
-// every time, despite the actual API work measuring only ~5-10s
-// directly) that maxDuration alone didn't fix; parallelizing both
-// passes helped but didn't guarantee headroom against a backlog spike
-// like the one that created this need in the first place. Oldest
-// first, so a bounded per-call budget still sweeps the whole backlog
-// forward across the cron's own repeated 2-hour runs rather than
-// getting stuck reprocessing the same newest items every time.
-const NAME_MATCH_BATCH_SIZE = 15;
+// this route was timing out (empty 500, no thrown/caught error of our
+// own) under real backlog load, and that the failure point scales
+// with batch size (26 recordings failed around 20-26s, 15 around
+// 11-12s) rather than hitting a fixed wall — per-recording cost in
+// the actual deployed environment is meaningfully higher than direct
+// local measurement showed (~0.7s/recording live vs ~150-200ms
+// measured locally, likely connection/auth overhead that doesn't
+// reproduce in a single long-lived local process). 8 is a deliberately
+// conservative margin below the smallest failure point actually
+// observed. Oldest first, so a bounded per-call budget still sweeps
+// the whole backlog forward across the cron's own repeated 2-hour
+// runs rather than getting stuck reprocessing the same newest items.
+const NAME_MATCH_BATCH_SIZE = 8;
 
 export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
   const { data: unmatched } = await admin
