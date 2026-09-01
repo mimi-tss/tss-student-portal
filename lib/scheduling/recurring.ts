@@ -266,10 +266,30 @@ export function slotFitsWorkingHours(
   const startMin = sh * 60 + sm;
   const endMin = startMin + durationMinutes;
 
-  return windows.some(([winStart, winEnd]) => {
+  const fitsWindow = (winStart: string, winEnd: string, from: number, to: number) => {
     const [wsh, wsm] = winStart.split(":").map(Number);
-    return startMin >= wsh * 60 + wsm && endMin <= windowEndMinutes(winEnd);
-  });
+    return from >= wsh * 60 + wsm && to <= windowEndMinutes(winEnd);
+  };
+
+  if (endMin <= 24 * 60) {
+    return windows.some(([winStart, winEnd]) => fitsWindow(winStart, winEnd, startMin, endMin));
+  }
+
+  // Slot crosses midnight (e.g. a 60min slot starting 11:30pm). Storage
+  // has no cross-day window, just two day-keyed entries meeting at
+  // midnight, so the tail before midnight must be covered by a same-day
+  // window running through "00:00" and the remainder must be covered by
+  // a next-day window starting at "00:00" — otherwise a genuinely
+  // continuous working-hours span (e.g. Thu 8:30pm-12am + Fri 12am-12:30am)
+  // would wrongly reject a slot that sits entirely inside it.
+  const nextDayWindows = workingHours?.[DAY_KEYS[(dayOfWeek + 1) % 7]] ?? [];
+  const coveredThroughMidnight = windows.some(([winStart, winEnd]) =>
+    fitsWindow(winStart, winEnd, startMin, 24 * 60),
+  );
+  const coveredAfterMidnight = nextDayWindows.some(([winStart, winEnd]) =>
+    fitsWindow(winStart, winEnd, 0, endMin - 24 * 60),
+  );
+  return coveredThroughMidnight && coveredAfterMidnight;
 }
 
 // Every future occurrence of the slot within the horizon, as real UTC
