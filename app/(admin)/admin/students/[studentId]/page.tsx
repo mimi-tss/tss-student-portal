@@ -19,6 +19,7 @@ import ReassignSessionCoach from "./reassign-session-coach";
 import StudentHeaderActions from "./student-header-actions";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
+import AddCreditClient from "../../dashboard/add-credit-client";
 import styles from "../../../admin.module.css";
 
 const TIER_LABEL: Record<string, string> = { lite: "Lite", suite: "Suite", pro: "Pro", elite: "Elite" };
@@ -433,7 +434,10 @@ export default async function AdminStudentPage({
       </div>
 
       <div className={styles.panel}>
-        <h2>Session credits</h2>
+        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>Session credits</h2>
+          <AddCreditClient studentId={student.id} />
+        </div>
         {credits && credits.length > 0 ? (
           <ul className={styles.list}>
             {credits.map((c) => (

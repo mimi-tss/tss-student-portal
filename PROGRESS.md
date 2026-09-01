@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now add a session credit from a student's own detail page (2026-08-31)
+
+You noticed the "Session credits" panel on a student's own page was
+read-only — the only place to grant one was the dashboard's student
+table, meaning admin had to leave the profile they were already looking
+at. [AddCreditClient](<app/(admin)/admin/dashboard/add-credit-client.tsx>)
+already took `studentId` as a self-contained prop (no picker baked in),
+so this just reuses it directly rather than building a second version —
+now rendered next to the "Session credits" heading on
+[page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>) too.
+
+Only real change to the shared component itself: it previously did
+`setSaved(true)` and nothing else on success — fine for the dashboard's
+table row (no adjacent credit list to update), but the student-page
+usage sits right next to a live list of that student's own credits that
+needs to actually reflect what was just added. Added `router.refresh()`
+plus an optional `onAdded` callback (unused by the dashboard's own
+call site, harmless there either way).
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration
+needed — same existing `/api/admin/add-credit` route, just a second
+entry point to it.
+
 ## "Start recurring sessions" panel had no way to pick biweekly at all (2026-08-31)
 
 Found immediately after the biweekly-dates fix above, while an admin

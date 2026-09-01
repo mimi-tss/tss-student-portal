@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "../../admin.module.css";
 
 interface CreditLine {
@@ -21,7 +22,19 @@ function newLine(): CreditLine {
 // first failing line rather than rolling back the ones that already
 // succeeded — those credits are real, so the error says how many landed
 // and leaves the remaining lines in the form to retry.
-export default function AddCreditClient({ studentId }: { studentId: string }) {
+export default function AddCreditClient({
+  studentId,
+  onAdded,
+}: {
+  studentId: string;
+  // Callers that render this next to a live list of the student's own
+  // credits (the student detail page's "Session credits" panel) need
+  // that list to actually reflect what was just added — this component
+  // itself renders no list, so a router.refresh() alone isn't enough
+  // signal for those callers to know when to expect fresh data.
+  onAdded?: () => void;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [lines, setLines] = useState<CreditLine[]>([newLine()]);
@@ -79,6 +92,8 @@ export default function AddCreditClient({ studentId }: { studentId: string }) {
     setOpen(false);
     setDurationMinutes(30);
     setLines([newLine()]);
+    router.refresh();
+    onAdded?.();
   }
 
   if (!open) {
