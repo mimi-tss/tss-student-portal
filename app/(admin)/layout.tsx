@@ -27,7 +27,7 @@ export default async function AdminLayout({
     <TimeZoneProvider defaultZone={DEFAULT_TIMEZONE}>
       <div className={`${anton.variable} ${inter.variable} ${caveat.variable} ${styles.root}`}>
         <div className={styles.appShell}>
-          <AdminNav needsReviewCount={needsActionCount} role={role} />
+          <AdminNav initialNeedsReviewCount={needsActionCount} role={role} />
           <div className={styles.appMain}>{children}</div>
         </div>
       </div>

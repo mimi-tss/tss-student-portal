@@ -35,10 +35,11 @@ const MORE_LINKS = [
   { href: "/admin/reports", label: "Reports", icon: "◧", financeOnly: true },
 ];
 
-export default function AdminNav({ needsReviewCount, role }: { needsReviewCount: number; role: Role }) {
+export default function AdminNav({ initialNeedsReviewCount, role }: { initialNeedsReviewCount: number; role: Role }) {
   const pathname = usePathname();
   const hasFinance = role === "admin_finance";
   const [collapsed, setCollapsed] = useState(false);
+  const [needsReviewCount, setNeedsReviewCount] = useState(initialNeedsReviewCount);
 
   // Read the saved preference after mount rather than in useState's
   // initializer — localStorage doesn't exist during server rendering, so
@@ -48,6 +49,24 @@ export default function AdminNav({ needsReviewCount, role }: { needsReviewCount:
   useEffect(() => {
     if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
   }, []);
+
+  // This nav lives in the admin layout, which (per Next.js App Router)
+  // only re-runs its server component on a hard page load — a soft
+  // client-side navigation between sibling admin pages (e.g. clicking
+  // back into Needs Review after resolving items elsewhere) never
+  // re-fetches it, so the badge could get stuck showing whatever count
+  // was true when the admin section was first opened, arbitrarily far
+  // out of date (confirmed live: showed 142 while the actual page
+  // showed 58). Re-fetching the same count the Needs Review page itself
+  // uses, on mount and again on every route change, keeps this close to
+  // live without needing a shared store between every page that can
+  // touch an attention_items row.
+  useEffect(() => {
+    fetch("/api/admin/attention-items?status=needs_action")
+      .then((res) => res.json())
+      .then((data) => setNeedsReviewCount((data.items ?? []).length))
+      .catch(() => {});
+  }, [pathname]);
 
   function toggleCollapsed() {
     setCollapsed((c) => {
