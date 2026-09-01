@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now reschedule a session, not just cancel it (2026-08-31)
+
+You pointed at the student detail page's session lists (Next session +
+"All sessions this billing cycle") — Cancel/Staff cancel/Reassign
+coach existed, nothing to move a session to a new time. Doing that
+before meant: cancel the row, then separately scroll up to "Book a
+session" (which only existed once, at the top) and hope you remembered
+which slot you'd just freed up.
+
+[admin-cancel-buttons.tsx](<app/(admin)/admin/students/[studentId]/admin-cancel-buttons.tsx>)
+gets a new "Reschedule" entry point next to Cancel/Staff cancel — it
+reuses the *exact* same regular-cancel flow (same 24h-notice credit
+rule as a student's own self-cancellation, same reason field), tracked
+via a small `intent: "cancel" | "reschedule"` state that only changes
+what happens after a successful cancel: "cancel" refreshes the page in
+place like before, "reschedule" instead routes straight to
+`/admin/students/{studentId}/book` to pick the new time in one motion.
+No new backend route — same `/api/admin/cancel-session` either way.
+Needed a new `studentId` prop threaded through from all three existing
+call sites (the student detail page's Next-session panel and full
+list, plus the coach-schedule day view's cancel panel in
+[all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>),
+which already had `studentId` in scope).
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified the
+button layout/labels visually via a static mock; the actual
+cancel→redirect flow isn't click-tested against a live login (none in
+this environment).
+
 ## Admin can now add a session credit from a student's own detail page (2026-08-31)
 
 You noticed the "Session credits" panel on a student's own page was
