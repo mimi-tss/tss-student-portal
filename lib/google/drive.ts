@@ -283,13 +283,29 @@ export interface MeetRecordingFile {
   createdTime: string;
 }
 
-// Lists every recording sitting in the shared Meet-recordings inbox —
+// How far back the scan looks for "new" recordings — this folder is
+// the studio's entire Meet recording history in one place (confirmed
+// live: 4000+ files going back to January 2025, since Meet never moves
+// or archives anything on its own). Without a bound, a full scan finds
+// every file ever recorded as "new" the moment meet_recordings has no
+// row for it yet — confirmed the hard way: an unbounded scan dumped
+// 4000+ historical rows into meet_recordings in one call, which then
+// made the Recordings page try to run name/day-matching (Drive+Gemini
+// API calls) against the entire backlog on its next load. 3 days
+// comfortably covers Meet's own multi-hour processing delay
+// (RECORDING_GRACE_HOURS elsewhere) with margin, while keeping this
+// permanently forward-looking regardless of how the query above is
+// implemented (pagination, page size, etc.).
+const RECORDING_SCAN_LOOKBACK_DAYS = 3;
+
+// Lists recent recordings sitting in the shared Meet-recordings inbox —
 // feeds lib/admin/recording-matching.ts's scan step, which diffs this
 // against meet_recordings.drive_file_id to find newly-arrived files.
 export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
   const drive = getDriveClient();
+  const cutoff = new Date(Date.now() - RECORDING_SCAN_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const res = await drive.files.list({
-    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'video/mp4'`,
+    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'video/mp4' and createdTime > '${cutoff}'`,
     orderBy: "createdTime desc",
     pageSize: 200,
     fields: "files(id, name, createdTime)",
