@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed "Confirm does nothing" on the Recordings picker (2026-09-01)
+
+You reported Confirm just silently didn't work after picking a
+student. Tried to reproduce the real failure directly (same service-
+account credentials the app uses) to see the actual error, but the
+write itself — moving a real file, updating a real match — got
+correctly blocked by this environment's own safety check before I
+could see it happen; a read-only check of the target file's
+permissions came back clean, so nothing pointed at an obvious cause
+from the data side alone.
+
+Found the real gap by inspection instead:
+[recording-matching.ts](lib/admin/recording-matching.ts)'s
+`attachRecordingToStudent` never wrapped its Drive file-move call — a
+thrown error (permissions, a stale file id, anything) propagated
+straight up as an uncaught exception through the match route,
+producing an opaque empty 500 with no error text anywhere.
+[recordings-client.tsx](<app/(admin)/admin/recordings/recordings-client.tsx>)'s
+`confirm`/`dismiss` handlers also had no try/catch, so that (or any
+other fetch/parse failure) left the busy state stuck and nothing
+visibly happening — no error, no retry, exactly what you saw.
+
+Fixed both: the Drive move failure is now caught and returned as a
+normal `{success:false, error}` result like every other reason this
+can fail, and both client handlers wrap their fetch in
+try/catch/finally. Whatever was actually failing will now show an
+actual message instead of nothing. **Please retry the same Confirm on
+Brooke Burns/Shannon von Driska's recordings** — whatever error
+appears now (if any) is the real one to chase next; if it succeeds
+outright, this was the whole fix.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Recordings picker: filename now opens the file in Drive (2026-09-01)
 
 Small follow-up once the picker was actually loading — you wanted to
