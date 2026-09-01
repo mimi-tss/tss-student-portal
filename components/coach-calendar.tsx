@@ -11,7 +11,7 @@ import {
   formatDateTimeInZone,
   timezoneAbbreviation,
 } from "@/lib/timezone";
-import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
+import { resolveWorkingHoursForDate, windowEndMinutes, windowEndDateParts } from "@/lib/scheduling/working-hours";
 import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { useTimeZone } from "./timezone-context";
@@ -350,9 +350,9 @@ export default function CoachCalendar({
 
       for (const [start, end] of windows) {
         const [sh, sm] = start.split(":").map(Number);
-        const [eh, em] = end.split(":").map(Number);
+        const endParts = windowEndDateParts(day, end);
         const startInstant = zonedTimeToUtc(year, month, day, sh, sm, coachTimeZone);
-        const endInstant = zonedTimeToUtc(year, month, day, eh, em, coachTimeZone);
+        const endInstant = zonedTimeToUtc(year, month, endParts.day, endParts.hour, endParts.minute, coachTimeZone);
         const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
         const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
         const gStart = gsh * 60 + gsm;
@@ -430,8 +430,7 @@ export default function CoachCalendar({
     const windows = resolveWorkingHoursForDate(hoursSource, coachDateKey)[coachDow] ?? [];
     const inWorkingHours = windows.some(([start, end]) => {
       const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      return coachMinutes >= sh * 60 + sm && coachMinutes < eh * 60 + em;
+      return coachMinutes >= sh * 60 + sm && coachMinutes < windowEndMinutes(end);
     });
 
     // Checked before the working-hours gate below — a group lesson is

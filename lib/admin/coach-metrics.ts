@@ -2,7 +2,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { zonedTimeToUtc, zonedDayKey, zonedYearMonthDay } from "@/lib/timezone";
 import { getCoachGroupLessons } from "@/lib/group-lessons";
 import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
-import { resolveWorkingHoursForDate, type CoachHoursSource } from "@/lib/scheduling/working-hours";
+import { resolveWorkingHoursForDate, windowEndDateParts, type CoachHoursSource } from "@/lib/scheduling/working-hours";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type WorkingHours = Record<string, [string, string][]>;
@@ -43,9 +43,9 @@ function computeUtilization(
 
     for (const [start, end] of windows) {
       const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
+      const endParts = windowEndDateParts(day, end);
       const winStart = zonedTimeToUtc(y, m, day, sh, sm, timeZone).getTime();
-      const winEnd = zonedTimeToUtc(y, m, day, eh, em, timeZone).getTime();
+      const winEnd = zonedTimeToUtc(y, m, endParts.day, endParts.hour, endParts.minute, timeZone).getTime();
       if (winEnd <= winStart) continue;
 
       let blockedInWindow = 0;

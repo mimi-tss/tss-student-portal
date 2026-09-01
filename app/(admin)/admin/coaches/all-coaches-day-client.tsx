@@ -13,6 +13,7 @@ import {
 } from "@/lib/timezone";
 import { allTimezones, timezoneLabel, DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { isHolidayInstant } from "@/lib/scheduling/holidays";
+import { windowEndMinutes, windowEndDateParts } from "@/lib/scheduling/working-hours";
 import { useTimeZone } from "@/components/timezone-context";
 import { FormattedDateTime } from "@/components/formatted-time";
 import AddCoachBlockForm from "@/components/add-coach-block-form";
@@ -279,9 +280,9 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
         const d = parseDateKey(refKey);
         for (const [start, end] of windows) {
           const [sh, sm] = start.split(":").map(Number);
-          const [eh, em] = end.split(":").map(Number);
+          const endParts = windowEndDateParts(d.getDate(), end);
           const startInstant = zonedTimeToUtc(d.getFullYear(), d.getMonth() + 1, d.getDate(), sh, sm, s.coach.timezone);
-          const endInstant = zonedTimeToUtc(d.getFullYear(), d.getMonth() + 1, d.getDate(), eh, em, s.coach.timezone);
+          const endInstant = zonedTimeToUtc(d.getFullYear(), d.getMonth() + 1, endParts.day, endParts.hour, endParts.minute, s.coach.timezone);
           const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
           const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
           const gStart = gsh * 60 + gsm;
@@ -318,8 +319,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
     const windows = schedule.coach.workingHours?.[coachDow] ?? [];
     const inWorkingHours = windows.some(([start, end]) => {
       const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      return coachMinutes >= sh * 60 + sm && coachMinutes < eh * 60 + em;
+      return coachMinutes >= sh * 60 + sm && coachMinutes < windowEndMinutes(end);
     });
     if (!inWorkingHours) return { type: "blank" };
 

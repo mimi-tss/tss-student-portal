@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { windowEndMinutes } from "@/lib/scheduling/working-hours";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -40,7 +41,13 @@ export async function POST(req: NextRequest) {
       if (!Array.isArray(w) || w.length !== 2 || typeof w[0] !== "string" || typeof w[1] !== "string") {
         return NextResponse.json({ error: `${day} has a malformed window` }, { status: 400 });
       }
-      if (w[1] <= w[0]) {
+      // "00:00" as an end time means end-of-day (24:00), not literal
+      // midnight-at-the-start — a window like ["20:30","00:00"] (e.g. an
+      // 8:30pm-midnight session) is real and valid, but plain string
+      // comparison reads "00:00" as earlier than any start time.
+      const [startH, startM] = w[0].split(":").map(Number);
+      const startMinutes = startH * 60 + startM;
+      if (windowEndMinutes(w[1]) <= startMinutes) {
         return NextResponse.json({ error: `${day}: end time must be after start time` }, { status: 400 });
       }
     }

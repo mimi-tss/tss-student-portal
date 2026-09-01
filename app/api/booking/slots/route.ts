@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
-import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
+import { resolveWorkingHoursForDate, windowEndDateParts } from "@/lib/scheduling/working-hours";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 
 // Computes open slots for the student's own assigned coach:
@@ -169,10 +169,10 @@ export async function GET(req: NextRequest) {
 
     for (const [winStart, winEnd] of windows) {
       const [startH, startM] = winStart.split(":").map(Number);
-      const [endH, endM] = winEnd.split(":").map(Number);
+      const endParts = windowEndDateParts(day, winEnd);
 
       let cursor = zonedTimeToUtc(year, month, day, startH, startM, timeZone);
-      const windowEnd = zonedTimeToUtc(year, month, day, endH, endM, timeZone);
+      const windowEnd = zonedTimeToUtc(year, month, endParts.day, endParts.hour, endParts.minute, timeZone);
 
       while (cursor.getTime() + slotMinutes * 60 * 1000 <= windowEnd.getTime()) {
         const slotEnd = new Date(cursor.getTime() + slotMinutes * 60 * 1000);

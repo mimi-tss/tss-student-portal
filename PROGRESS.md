@@ -3,6 +3,72 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed: a working-hours window ending at midnight was unbookable everywhere (2026-09-01)
+
+You reported this concretely: coach Nikki has a real student booked
+11pm-12am, but the "Edit coach" hours panel rejected an 8:30pm-12:00am
+Thursday window with "end time must be after start time" — and even
+padding it to 11:59pm still wouldn't fit a 60-minute lesson.
+
+Root cause: every place in this codebase that reads a working-hours
+window's end time (`["HH:MM","HH:MM"]`, e.g. `["20:30","00:00"]`)
+converts it to minutes via literal `eh * 60 + em`. For an end of
+`"00:00"` that's 0 — read as *midnight at the start of that day*, not
+the end of it — so a window ending at midnight always compared as
+ending before it began. Confirmed with a script before touching
+anything: start=1230min, end=0min, so any such window silently failed
+validation, and even if one had existed already, matched zero minutes
+everywhere else that checked it.
+
+This wasn't one bug, it was the same wrong assumption duplicated in
+**seven places** — checked and fixed all of them, not just the one the
+screenshot happened to hit:
+- [app/api/admin/coach-working-hours/route.ts](app/api/admin/coach-working-hours/route.ts) —
+  the save validation itself (the screenshot's error).
+- [app/api/booking/slots/route.ts](app/api/booking/slots/route.ts) —
+  real slot generation for both admin and student booking; this is why
+  even a successfully-saved midnight-ending window would've offered zero
+  bookable slots.
+- [lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)'s
+  `slotFitsWorkingHours` — gatekeeps recurring-schedule creation
+  (admin's recurring-schedule route, `create-recurring-schedule.ts`,
+  `provision-student.ts` all call this one shared function).
+- [components/coach-calendar.tsx](components/coach-calendar.tsx) — both
+  the grid's row-range (min/max hour) calc and its per-cell
+  "is this working hours" check.
+- [all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>) —
+  the same two calcs, duplicated in admin's separate all-coaches day
+  grid.
+- [lib/admin/coach-metrics.ts](lib/admin/coach-metrics.ts) — coach
+  utilization/bookable-hours reporting; this one didn't error, it just
+  silently `continue`d past the whole window (`winEnd <= winStart`), so
+  a coach with a midnight-ending window would've quietly undercounted
+  their own bookable/occupied hours.
+
+**Fix**: two new shared helpers in
+[lib/scheduling/working-hours.ts](lib/scheduling/working-hours.ts) —
+`windowEndMinutes` (end-of-day = 1440, for same-day minute
+comparisons) and `windowEndDateParts` (end-of-day = day+1 00:00, for
+building the actual UTC instant via `zonedTimeToUtc`) — every call site
+above now goes through one of these instead of its own inline
+`eh * 60 + em`. `windowEndDateParts` deliberately just passes `day + 1`
+through to `zonedTimeToUtc`, which already normalizes month/year
+rollover via `Date.UTC` — checked this explicitly (Dec 31 → Jan 1 next
+year) rather than assuming it.
+
+Deliberately narrow in scope: this only fixes a window that *ends* at
+midnight within the same day (Nikki's actual case). A window that
+starts in the evening and runs *past* midnight into the next calendar
+day's own separate window list (e.g. "11pm-2am") is a different, bigger
+feature — not built, wasn't asked for.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified the actual
+math with throwaway scripts, not just reasoning about it: confirmed the
+8:30pm-12:00am window now validates, an 11pm-12am 60-minute session now
+fits inside it, and the month/year-boundary rollover in
+`windowEndDateParts` behaves correctly. Not click-tested against a live
+login (none in this environment).
+
 ## Payroll and cancellation-cap period boundaries now anchor to Eastern midnight, not UTC midnight (2026-09-01)
 
 You stated the intended model plainly: payroll (and "everything" like

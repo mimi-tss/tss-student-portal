@@ -1,5 +1,6 @@
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
+import { windowEndMinutes } from "@/lib/scheduling/working-hours";
 
 // How far ahead recurring occurrences are materialized. Topped up daily
 // by /api/cron/materialize-recurring, so a recurring schedule already
@@ -267,8 +268,7 @@ export function slotFitsWorkingHours(
 
   return windows.some(([winStart, winEnd]) => {
     const [wsh, wsm] = winStart.split(":").map(Number);
-    const [weh, wem] = winEnd.split(":").map(Number);
-    return startMin >= wsh * 60 + wsm && endMin <= weh * 60 + wem;
+    return startMin >= wsh * 60 + wsm && endMin <= windowEndMinutes(winEnd);
   });
 }
 
