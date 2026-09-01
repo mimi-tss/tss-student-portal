@@ -3,6 +3,21 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## "Start recurring sessions" panel had no way to pick biweekly at all (2026-08-31)
+
+Found immediately after the biweekly-dates fix above, while an admin
+was trying to actually start one — the Start/Pause/Stop lifecycle panel
+([subscription-lifecycle-client.tsx](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>))
+posts to the same `/api/admin/recurring-schedule` route
+[recurring-schedule-client.tsx](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>)'s
+own Change/Add form uses, but never sent (or offered a way to choose)
+`cadence` at all — the route defaults to `"weekly"` when it's missing,
+so this panel could only ever start a plain weekly slot. Added the same
+Weekly/Biweekly `<select>` the other form already has, wired into the
+POST body. Also reworded the panel's hardcoded "Start **weekly**
+recurring sessions" heading and error text now that it isn't always
+weekly. `tsc --noEmit`/`next build` clean.
+
 ## Biweekly recurring schedules materialized wrong dates whenever start_date fell after the month's 1st occurrence (2026-08-31)
 
 You caught this live setting up Maryke's schedule (Mondays, biweekly,

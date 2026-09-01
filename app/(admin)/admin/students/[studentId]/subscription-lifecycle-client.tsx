@@ -76,6 +76,12 @@ export default function SubscriptionLifecycleClient({
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [coachId, setCoachId] = useState(defaultCoachId ?? "");
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Missing entirely until now — this panel could only ever start a
+  // plain weekly slot, with no way to reach the biweekly cadence
+  // recurring-schedule-client.tsx's own Change/Add form already
+  // supports, even though /api/admin/recurring-schedule has always
+  // accepted it.
+  const [cadence, setCadence] = useState<"weekly" | "biweekly">("weekly");
 
   const canStart = subscriptionStatus === "active" && hasCoach && !hasRecurringSchedule;
 
@@ -86,12 +92,12 @@ export default function SubscriptionLifecycleClient({
     const res = await fetch("/api/admin/recurring-schedule", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId }),
+      body: JSON.stringify({ studentId, dayOfWeek, startTime, durationMinutes, startDate, coachId, cadence }),
     });
     const body = await res.json().catch(() => ({}));
     setSaving(false);
     if (!res.ok) {
-      setError(body.error ?? "Could not start weekly sessions.");
+      setError(body.error ?? "Could not start recurring sessions.");
       return;
     }
     setPanel(null);
@@ -287,7 +293,7 @@ export default function SubscriptionLifecycleClient({
 
       {panel === "start" && (
         <div className={styles.warnPanel} style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-          <p style={{ marginBottom: 8, fontWeight: 600 }}>Start weekly recurring sessions</p>
+          <p style={{ marginBottom: 8, fontWeight: 600 }}>Start recurring sessions</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
             <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className={styles.select}>
               {DAY_NAMES.map((name, i) => (
@@ -318,6 +324,14 @@ export default function SubscriptionLifecycleClient({
             >
               <option value={30}>30 min</option>
               <option value={60}>60 min</option>
+            </select>
+            <select
+              value={cadence}
+              onChange={(e) => setCadence(e.target.value as "weekly" | "biweekly")}
+              className={styles.select}
+            >
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
             </select>
             <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               Starting
