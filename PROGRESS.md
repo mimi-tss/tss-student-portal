@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now edit a session credit's expiry, or delete one (2026-08-31)
+
+You asked for this on the student detail page's "Session credits"
+panel — previously pure display plus a "Book" link (that link is a
+concurrent session's own recent addition, preserved untouched here).
+
+**Delete needed a new migration** —
+[0081_admin_delete_makeup_credits.sql](supabase/migrations/0081_admin_delete_makeup_credits.sql):
+admin had view/insert/update on `makeup_credits` (0060) but no delete
+policy ever existed, so a delete attempt would've silently 0-row-
+filtered under RLS rather than erroring — same class of gotcha as the
+entitlements-delete fix earlier today (0079), coach exercise unassign,
+and staff-notes pinning before that. Edit didn't need one — the
+existing "admins can update all makeup credits" policy already covers
+it.
+
+New [update-credit-expiry](app/api/admin/update-credit-expiry/route.ts)
+and [delete-credit](app/api/admin/delete-credit/route.ts) routes, both
+scoped server-side to `used = false` — a redeemed credit is real
+history tied to whatever session consumed it, not something an expiry
+edit or delete should touch (this page's own credits query already
+only ever fetches unused ones, so the UI never offers this on a used
+credit anyway; the server-side scope is defense-in-depth, not a new
+restriction). Both report a 404 on a 0-row result rather than a false
+"success" — the same RLS-silently-filters-instead-of-erroring gotcha
+the migration comment above already flags.
+
+[session-credits-list.tsx](<app/(admin)/admin/students/[studentId]/session-credits-list.tsx>)
+is the credits list pulled out of `page.tsx` into its own client
+component (was inline JSX in a server component, couldn't hold the new
+inline-edit state) — same click-to-edit pattern used elsewhere in this
+app (Change/Save/Cancel), plus a "Delete" with a `window.confirm` given
+this removes something a customer may have actually paid for. The
+existing "Book" link is untouched, still per-credit.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **New migration
+0081 not yet confirmed applied** — until it runs, "Delete" will fail
+with "Credit not found or already used" even on a real, unused credit
+(RLS has nowhere to grant the delete). Edit doesn't need it and works
+either way.
+
 ## New Needs Review kind: flag a weekly student's unbilled "5th week" as a one-off upsell (2026-08-31)
 
 You asked for this: some billing cycles naturally contain a 5th
@@ -3293,6 +3334,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0081 not yet confirmed applied** —
+`0081_admin_delete_makeup_credits.sql` adds the missing admin delete
+policy on `makeup_credits`. Until this runs, deleting a session credit
+from the student detail page will fail with "Credit not found or
+already used" even on a real, unused one — editing its expiry date
+works either way (that only needed the existing update policy).
 
 **New migration 0080 not yet confirmed applied** —
 `0080_fifth_week_attention_items.sql` adds the `occurrence_at` column,

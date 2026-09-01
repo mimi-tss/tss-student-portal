@@ -5,8 +5,7 @@ import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
 import { formatTenure, formatPlainDate } from "@/lib/format-date";
 import { renewalInfo } from "@/lib/billing/renewal";
-import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
-import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import { FormattedDateTime } from "@/components/formatted-time";
 import NotesPanel from "@/components/notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
@@ -20,6 +19,7 @@ import StudentHeaderActions from "./student-header-actions";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
 import AddCreditClient from "../../dashboard/add-credit-client";
+import SessionCreditsList from "./session-credits-list";
 import styles from "../../../admin.module.css";
 
 const TIER_LABEL: Record<string, string> = { lite: "Lite", suite: "Suite", pro: "Pro", elite: "Elite" };
@@ -439,44 +439,11 @@ export default async function AdminStudentPage({
           <h2 style={{ margin: 0 }}>Session credits</h2>
           <AddCreditClient studentId={student.id} />
         </div>
-        {credits && credits.length > 0 ? (
-          <ul className={styles.list}>
-            {credits.map((c) => (
-              <li key={c.id} className={styles.listItem}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                  <div>
-                    <p>
-                      {creditDisplayName(c.duration_minutes ?? student.session_duration_minutes ?? 30)}
-                      {" — "}
-                      {c.expires_at ? (
-                        <>
-                          expires <FormattedDate value={c.expires_at} />
-                        </>
-                      ) : (
-                        "no expiration"
-                      )}
-                    </p>
-                    <p className={styles.mutedText}>
-                      {creditTypeLabel(c.type)}
-                      {c.reason ? ` - ${c.reason}` : ""}
-                    </p>
-                  </div>
-                  {/* Every credit in this list is already unused and
-                      unexpired (the query's own filters) — always
-                      bookable. Jumps straight into the admin booking
-                      flow with this exact credit locked in, instead of
-                      the generic Book page always defaulting to
-                      whichever one expires soonest. */}
-                  <Link href={`/admin/students/${student.id}/book?creditId=${c.id}`} className={styles.linkBtnSmall}>
-                    Book
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={styles.mutedText}>None available.</p>
-        )}
+        <SessionCreditsList
+          studentId={student.id}
+          credits={credits ?? []}
+          defaultDurationMinutes={student.session_duration_minutes ?? 30}
+        />
       </div>
 
       <div className={styles.panel}>
