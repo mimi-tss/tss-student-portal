@@ -9,13 +9,12 @@ import {
   listCandidateSessions,
 } from "@/lib/admin/recording-matching";
 
-// Scans the shared Meet-recordings inbox on every load rather than on a
-// timer — this app has no scheduled-job infrastructure of its own
-// (materialize-recurring/kajabi-sync run via an external cron outside
-// this repo, not something this session can wire a new one into), and
-// an on-demand scan is simpler and gives the admin direct control over
-// when it runs. The unmatched list this returns already reflects
-// whatever the scan + auto-match pass just resolved.
+// Also scans on every load, on top of the scheduled run
+// (.github/workflows/scan-recordings.yml, every 2 hours) — gives the
+// admin a manual "check right now" as well as the background pass, and
+// the unmatched list this returns already reflects whatever the scan +
+// auto-match pass on THIS load just resolved, not just the last
+// scheduled one.
 //
 // Needs real runway: runNameMatching alone does 1-2 Drive API calls per
 // unmatched recording, sequentially — confirmed live, ~300-500ms each,

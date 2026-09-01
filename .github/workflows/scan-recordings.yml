@@ -1,0 +1,24 @@
+name: Scan and auto-match Meet recordings
+
+# Runs the Recordings page's own scan + auto-match pass unattended, so
+# a recording lands in the right student's Drive folder without an
+# admin needing to happen to open that page — same reason this runs
+# here instead of Vercel Cron as kajabi-sync/materialize-recurring
+# (see those workflows' own comments). Every 2 hours, not more often:
+# Meet's own save-to-Drive step has a confirmed multi-hour processing
+# delay (RECORDING_GRACE_HOURS in lib/admin/attention-items.ts), so
+# anything tighter just burns Drive/Gemini API calls for no benefit.
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call scan-recordings endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/scan-recordings" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
