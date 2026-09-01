@@ -2,29 +2,20 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
-import {
-  scanForNewRecordings,
-  runNameMatching,
-  runDayMatching,
-  listCandidateSessions,
-} from "@/lib/admin/recording-matching";
+import { listCandidateSessions } from "@/lib/admin/recording-matching";
 
-// Also scans on every load, on top of the scheduled run
-// (.github/workflows/scan-recordings.yml, every 2 hours) — gives the
-// admin a manual "check right now" as well as the background pass, and
-// the unmatched list this returns already reflects whatever the scan +
-// auto-match pass on THIS load just resolved, not just the last
-// scheduled one.
-//
-// Needs real runway: runNameMatching alone does 1-2 Drive API calls per
-// unmatched recording, sequentially — confirmed live, ~300-500ms each,
-// so even a few dozen recordings adds up past Vercel's default 10s
-// function timeout (a request that just silently times out, same
-// failure shape this route's own client never used to check for
-// either). Matches the same maxDuration pattern already used for
-// attention-items' own multi-query sync.
-export const maxDuration = 60;
-
+// Pure read — just shows whatever's currently in meet_recordings. Used
+// to also trigger the full scan + name-match + day-match pass inline,
+// which is exactly what was making this page unusable: confirmed live
+// that pass alone can take 10-25s+ depending on backlog size (Drive/
+// Gemini API calls, one per unmatched recording), reliably exceeding
+// this route's execution budget and failing with an empty 500 before
+// ever returning a list — so the manual picker below couldn't even
+// render, let alone be used. Scanning/matching now happens in the
+// background instead (.github/workflows/scan-recordings.yml, every 2
+// hours, hitting /api/cron/scan-recordings) — this route no longer
+// needs to do any of that work itself, so it's back to being a plain,
+// fast, always-reliable read.
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -36,15 +27,6 @@ export async function GET() {
   if (!isAdminRole(profile?.role)) return NextResponse.json({ error: "admin access only" }, { status: 403 });
 
   const admin = createAdminClient();
-  await scanForNewRecordings(admin);
-  // Name-matching first — it doesn't depend on attendance ever being
-  // marked (day+session matching does), so it resolves more real cases
-  // at this studio right now. Day+session still runs after as a
-  // fallback for whatever name-matching couldn't resolve (no Gemini
-  // notes doc, ambiguous names).
-  const { matched: nameMatched } = await runNameMatching(admin);
-  const { autoMatched: dayMatched } = await runDayMatching(admin);
-  const autoMatched = nameMatched + dayMatched;
 
   const [{ data: unmatched }, { data: matchedRows }] = await Promise.all([
     admin
@@ -86,5 +68,5 @@ export async function GET() {
     }),
   );
 
-  return NextResponse.json({ items, autoMatched });
+  return NextResponse.json({ items });
 }

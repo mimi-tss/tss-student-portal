@@ -24,28 +24,43 @@ export default function RecordingsClient() {
   const [items, setItems] = useState<RecordingItem[] | null>(null);
   const [autoMatched, setAutoMatched] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [rescanning, setRescanning] = useState(false);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
-  // No .catch before this — a slow/failed request (this route can take
-  // a while: it scans Drive, then runs name+day matching against every
-  // unmatched recording) left `items` stuck at null and the page
-  // showing "Loading…" forever, with no error and no way to retry short
-  // of a full page reload. Same fix as the Needs Review page's own
-  // identical gap.
+  // Plain read now — no more scan/match work inline, so no .catch is
+  // strictly load-bearing anymore, but kept anyway as a safety net.
   function load() {
     setItems(null);
     setError(null);
     fetch("/api/admin/meet-recordings")
       .then((res) => res.json())
-      .then((data) => {
-        setItems(data.items ?? []);
-        setAutoMatched(data.autoMatched ?? 0);
-      })
+      .then((data) => setItems(data.items ?? []))
       .catch(() => setError("Couldn't load recordings — try again."));
   }
 
   useEffect(load, []);
+
+  // The slow scan + name/day-match pass this page used to run on every
+  // load — split out so it can't block the list from ever rendering
+  // (confirmed live: that pass alone could take 10-25s+ and reliably
+  // failed outright, leaving the manual picker below unusable). Runs
+  // automatically every 2 hours in the background regardless
+  // (.github/workflows/scan-recordings.yml); this button is only for
+  // "check right now" instead of waiting for the next scheduled pass.
+  async function rescan() {
+    setRescanning(true);
+    setError(null);
+    const res = await fetch("/api/admin/meet-recordings/rescan", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setRescanning(false);
+    if (!res.ok) {
+      setError(data.error ?? "Couldn't check for new recordings — try again.");
+      return;
+    }
+    setAutoMatched(data.autoMatched ?? 0);
+    load();
+  }
 
   async function confirm(recordingId: string) {
     const sessionId = selected[recordingId];
@@ -85,10 +100,16 @@ export default function RecordingsClient() {
 
   return (
     <div className={styles.panel}>
-      <p className={styles.panelText}>
-        Recordings Meet couldn&apos;t be confidently matched to a student on its own — pick the right session, or
-        dismiss if it&apos;s not a lesson recording (an internal meeting, a personal call).
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <p className={styles.panelText}>
+          Recordings Meet couldn&apos;t be confidently matched to a student on its own — pick the right session, or
+          dismiss if it&apos;s not a lesson recording (an internal meeting, a personal call). New recordings are
+          checked automatically every 2 hours.
+        </p>
+        <button className={styles.linkBtnSmall} disabled={rescanning} onClick={rescan} style={{ flexShrink: 0 }}>
+          {rescanning ? "Checking…" : "Check now"}
+        </button>
+      </div>
       {autoMatched > 0 && (
         <p className={styles.panelText}>
           {autoMatched} recording{autoMatched === 1 ? "" : "s"} matched automatically just now.
