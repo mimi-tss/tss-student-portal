@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed the Recordings page hanging forever on "Loading…" (2026-09-01)
+
+You hit this right after the backlog cleanup above — opened
+Recordings and it never loaded anything, no error either. Two
+compounding bugs, found by timing the actual pipeline directly against
+production rather than guessing: `runNameMatching`
+([recording-matching.ts](lib/admin/recording-matching.ts)) does 1-2
+Drive API calls per unmatched recording, one at a time — measured at
+~300-500ms each, so once more than a couple dozen recordings are
+unmatched (which is now the expected steady state after the 3-day
+lookback fix — confirmed the count had already grown back to 28,
+legitimately, not a repeat of the earlier bug), that alone comfortably
+exceeds a serverless function's default duration limit. The route
+([meet-recordings/route.ts](app/api/admin/meet-recordings/route.ts))
+had no `maxDuration` set at all, unlike its siblings. On top of that,
+[recordings-client.tsx](<app/(admin)/admin/recordings/recordings-client.tsx>)'s
+fetch had no `.catch` — the same gap already fixed on Needs Review
+earlier this session — so a timeout left the page stuck on "Loading…"
+forever with nothing to show for it.
+
+Fixed both: `maxDuration = 60` on the route (matches
+`attention-items`'s own precedent), parallelized `runNameMatching`'s
+previously one-at-a-time loop via `Promise.all` to cut real wall-clock
+time rather than just raising the ceiling, and added the missing
+`.catch` + a "Try again" button to the client.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Recordings: found today's 3 missing files, then bounded the scan after a real scare (2026-09-01)
 
 You reported 3 students (Brooke Burns, Shannon von Driska, Rollins
