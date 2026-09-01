@@ -31,7 +31,7 @@ export async function GET() {
   const [{ data: unmatched }, { data: matchedRows }] = await Promise.all([
     admin
       .from("meet_recordings")
-      .select("id, coach_id, file_name, recorded_date, drive_created_at, coaches(name)")
+      .select("id, coach_id, drive_file_id, file_name, recorded_date, drive_created_at, coaches(name)")
       .eq("status", "unmatched")
       .order("recorded_date", { ascending: false }),
     admin.from("meet_recordings").select("matched_session_id").eq("status", "matched"),
@@ -58,6 +58,7 @@ export async function GET() {
         : [];
       return {
         id: rec.id,
+        driveFileId: rec.drive_file_id,
         fileName: rec.file_name,
         recordedDate: rec.recorded_date,
         driveCreatedAt: rec.drive_created_at,

@@ -12,6 +12,7 @@ interface Candidate {
 
 interface RecordingItem {
   id: string;
+  driveFileId: string;
   fileName: string;
   recordedDate: string;
   driveCreatedAt: string;
@@ -130,7 +131,14 @@ export default function RecordingsClient() {
       {items?.map((item) => (
         <div key={item.id} className={styles.naRow}>
           <div className={styles.naInfo}>
-            <div className={styles.naName}>{item.fileName}</div>
+            <a
+              href={`https://drive.google.com/file/d/${item.driveFileId}/view`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${styles.naName} ${styles.rowName}`}
+            >
+              {item.fileName}
+            </a>
             <div className={styles.naSummary}>
               {item.coachName ?? "Unrecognized coach"} · {item.recordedDate}
             </div>
