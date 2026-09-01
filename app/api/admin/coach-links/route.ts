@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
+import { sanitizeMeetLink } from "@/lib/meet-link";
 
 // Edits coaches.meet_link — not a money field, so both admin and
 // admin_finance can edit it (isAdminRole), unlike coach-rate's
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   const { data: updated, error } = await supabase
     .from("coaches")
-    .update({ meet_link: meetLink || null })
+    .update({ meet_link: sanitizeMeetLink(meetLink) })
     .eq("id", coachId)
     .select("id");
 

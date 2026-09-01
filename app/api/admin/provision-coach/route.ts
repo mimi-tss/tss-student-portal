@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { isAdminRole } from "@/lib/auth/roles";
+import { sanitizeMeetLink } from "@/lib/meet-link";
 
 // Coaches have no Kajabi counterpart at all — Kajabi only ever fires for
 // student purchases (see app/api/webhooks/kajabi/route.ts), so a coach is
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       timezone,
       hourly_rate: hourlyRate,
       working_hours: workingHours ?? {},
-      meet_link: meetLink || null,
+      meet_link: sanitizeMeetLink(meetLink),
       hidden_from_students: !!hiddenFromStudents,
     })
     .select("id")

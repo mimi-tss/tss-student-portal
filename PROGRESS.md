@@ -3,6 +3,40 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach meet links now get their tracking query params stripped on save (2026-09-01)
+
+You asked why Nikki's coach dashboard showed
+`https://meet.google.com/fyj-rnyj-hvq?pli=1&authuser=1` instead of the
+plain link. Not an app bug in the rendering — [dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>)
+just renders `coaches.meet_link` verbatim, and both places that write
+it ([coach-links/route.ts](app/api/admin/coach-links/route.ts),
+[provision-coach/route.ts](app/api/admin/provision-coach/route.ts))
+stored whatever string was submitted with no cleanup. `?pli=1` and
+`authuser=1` are exactly what Google Meet appends to the address bar
+when you copy a link straight out of an active tab while signed into
+multiple Google accounts — whoever set Nikki's link up almost certainly
+copied it that way instead of from Meet's own "Copy joining info."
+`authuser=1` isn't just clutter either: it tells Meet to use *the
+clicker's own* second Google-account slot, not the coach's, which is
+actively wrong on a link meant to be shared with every student booked
+with that coach.
+
+Added [sanitizeMeetLink](lib/meet-link.ts) (strips query string + hash
+off any parseable URL, leaves anything else untouched rather than
+rejecting it) and routed both write paths through it, so this can't
+recur regardless of which of the three UI entry points (Add Coach,
+Edit Coach, or the roster's inline `CoachLinkCell`) was used to paste a
+"dirty" link — all three already funnel into one of these two routes.
+
+**This only fixes future saves** — Nikki's existing stored value still
+has the query params until someone re-saves it. Quickest fix: Admin →
+Coaches → Edit (or the roster's inline link editor) → paste the link
+again (dirty or clean, doesn't matter now) → Save.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified
+`sanitizeMeetLink` directly against Nikki's actual reported URL — it
+correctly reduces to the plain link.
+
 ## Fixed: a working-hours window ending at midnight was unbookable everywhere (2026-09-01)
 
 You reported this concretely: coach Nikki has a real student booked
