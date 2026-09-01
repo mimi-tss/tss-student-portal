@@ -3,6 +3,73 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed: Admin Finance couldn't add/upload to a student's shared folder (2026-08-31)
+
+You hit this live — pasting a Drive link into the Shared Folder panel
+failed with "forbidden". Root cause:
+[shared-folder.ts](lib/shared-folder.ts)'s `resolveFolderAccess`
+checked `profile.role === "admin"` literally instead of this
+codebase's shared `isAdminRole()` helper
+([roles.ts](lib/auth/roles.ts)), which correctly treats
+`admin_finance` as a full admin (a superset role — everything admin
+has, plus Finance/Reports). You're logged in as Admin + Finance, so
+every shared-folder action (upload, add-shortcut, remove) has been
+silently rejecting you specifically, while a plain "admin" account
+would have worked fine. Grepped the rest of the codebase for the same
+literal-string mistake — one other hit
+([resolve-account.ts](lib/auth/resolve-account.ts)) already checked
+both roles explicitly, so this was an isolated bug, not a pattern.
+
+One-line fix: swap the literal comparison for `isAdminRole()`.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
+## Investigated: could coaches outside the US hit the same viewer-timezone
+## bug that hit Emma? No — confirmed with a real boundary test (2026-08-31)
+
+You asked, after the Emma coach-calendar timezone fix, whether coaches in
+Europe/Spain/Philippines etc. could hit the same "missing Saturday
+sessions" bug on their own dashboards, and whether admin's view and a
+coach's own view would still "match."
+
+Traced the actual code path rather than assuming: [coach-calendar.tsx](components/coach-calendar.tsx)
+is the one shared component behind both admin's coach-schedule view and
+every coach's own dashboard/schedule/payroll pages. Its fetch-window
+anchor (`anchorZone`) comes from [useTimeZone()](components/timezone-context.tsx)
+— Eastern by default for admin, or `coach?.timezone` (a DB column, see
+[app/(coach)/layout.tsx](<app/(coach)/layout.tsx>)) for a coach's own
+view — **not** the viewer's OS/browser clock at all. That's exactly the
+thing Emma's bug got wrong, and it's already fixed for this shared
+component on both sides.
+
+**Verified concretely**, not just by reading code: wrote a throwaway
+script porting `zonedTimeToUtc`/`parseDateKeyInZone` verbatim and tested
+a session at Saturday 11:45pm Eastern (the same shape that clipped
+Emma's view) against the real fetch windows for Eastern, Manila, Madrid,
+and London. Confirmed the fixed logic's windows are contiguous and
+exhaustive per zone — no session can fall into a true gap between two
+fetches, unlike the pre-fix logic (also tested side-by-side), which
+silently used whichever zone the *viewer's own machine* happened to be
+set to.
+
+**One real nuance surfaced by the same test, not a bug**: that same
+boundary session lands in a *different week* depending on which zone is
+selected — Saturday-this-week in Eastern, but Sunday-*next*-week in a
+zone ahead of Eastern (Manila/Madrid/London), since that's already
+Sunday morning their time. Asked you directly whether day/week
+boundaries should be pinned to Eastern always (identical grid for every
+viewer) or stay per-viewer-zone (current behavior, same as Google
+Calendar). **You chose to keep current per-viewer zone grouping** — no
+code change made. Worth remembering if a future report says "coach X's
+week looks different from admin's" right at a day boundary: that's this
+known, chosen behavior, not a bug, unless the discrepancy persists after
+navigating a week forward/back (which would be new).
+
+The one thing that *does* still need real data (not code) to be correct:
+each coach's `timezone` DB column, which defaults to `America/New_York`
+(migration 0008) and has to be corrected per coach — Admin → Coaches →
+Edit has a field for this. Not verified against live data (no DB access
+in this environment) — worth spot-checking for the non-US coaches.
+
 ## Fixed the Needs Review sidebar badge showing a stale count (2026-08-31)
 
 You caught this live — the sidebar showed "142" while the Needs Review
