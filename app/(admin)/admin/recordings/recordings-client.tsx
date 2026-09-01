@@ -63,40 +63,55 @@ export default function RecordingsClient() {
     load();
   }
 
+  // Neither confirm nor dismiss caught a failed fetch/non-JSON response
+  // before this — a thrown Drive-side error (now returned as a normal
+  // JSON error, see attachRecordingToStudent's own fix) or any other
+  // failure to reach/parse the response left busyId stuck and nothing
+  // visibly happening: the exact "Confirm does nothing" symptom.
   async function confirm(recordingId: string) {
     const sessionId = selected[recordingId];
     if (!sessionId) return;
     setBusyId(recordingId);
     setError(null);
-    const res = await fetch("/api/admin/meet-recordings/match", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recordingId, sessionId }),
-    });
-    const data = await res.json();
-    setBusyId(null);
-    if (!res.ok) {
-      setError(data.error ?? "Couldn't match that recording.");
-      return;
+    try {
+      const res = await fetch("/api/admin/meet-recordings/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingId, sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't match that recording.");
+        return;
+      }
+      load();
+    } catch {
+      setError("Couldn't match that recording — try again.");
+    } finally {
+      setBusyId(null);
     }
-    load();
   }
 
   async function dismiss(recordingId: string) {
     setBusyId(recordingId);
     setError(null);
-    const res = await fetch("/api/admin/meet-recordings/dismiss", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recordingId }),
-    });
-    setBusyId(null);
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/admin/meet-recordings/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingId }),
+      });
       const data = await res.json();
-      setError(data.error ?? "Couldn't dismiss that recording.");
-      return;
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't dismiss that recording.");
+        return;
+      }
+      load();
+    } catch {
+      setError("Couldn't dismiss that recording — try again.");
+    } finally {
+      setBusyId(null);
     }
-    load();
   }
 
   return (

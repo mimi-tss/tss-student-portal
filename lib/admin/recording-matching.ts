@@ -116,7 +116,17 @@ export async function attachRecordingToStudent(
     return { success: false, error: "that student has no Drive folder set up yet" };
   }
 
-  await moveFileToStudentFolder(recording.drive_file_id, MEET_RECORDINGS_INBOX_FOLDER_ID, student.drive_folder_id);
+  // Was unguarded — a thrown Drive API error (permissions, a stale
+  // file id, a transient failure) propagated straight up as an
+  // uncaught exception, which the match route also didn't catch,
+  // producing an opaque empty 500 with no error text anywhere. Now
+  // it's a normal, visible failure like every other reason this can
+  // fail.
+  try {
+    await moveFileToStudentFolder(recording.drive_file_id, MEET_RECORDINGS_INBOX_FOLDER_ID, student.drive_folder_id);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? `couldn't move the file: ${err.message}` : "couldn't move the file" };
+  }
 
   const { error } = await admin
     .from("meet_recordings")
