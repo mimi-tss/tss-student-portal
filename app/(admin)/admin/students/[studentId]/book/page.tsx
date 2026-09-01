@@ -13,10 +13,16 @@ import styles from "../../../../admin.module.css";
 // the lesson in one motion.
 export default async function AdminBookStudentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ studentId: string }>;
+  // creditId: set when admin clicked "Book" next to a specific credit
+  // on the student's own page, instead of landing here generically —
+  // locks the booking to spend that exact credit.
+  searchParams: Promise<{ creditId?: string }>;
 }) {
   const { studentId } = await params;
+  const { creditId } = await searchParams;
   const supabase = await createClient();
 
   const { data: student } = await supabase
@@ -54,6 +60,7 @@ export default async function AdminBookStudentPage({
         mode="full"
         coachId={student.assigned_coach_id}
         credits={credits ?? []}
+        initialCreditId={creditId}
         // Admin ⊇ student: admin can book a plain session on a student's
         // behalf even with no credit on file, which students can't do.
         canBookWithoutCredit

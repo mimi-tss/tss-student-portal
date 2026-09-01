@@ -59,6 +59,7 @@ export default function BookingClient({
   credits = [],
   canBookWithoutCredit = true,
   allCoaches,
+  initialCreditId,
 }: {
   studentId: string;
   mode: "full" | "trial";
@@ -73,6 +74,13 @@ export default function BookingClient({
   // students never get this prop, so they can only ever book against
   // their own assigned coach.
   allCoaches?: Coach[];
+  // Admin-only: locks the credit this booking spends to one specific
+  // row instead of always the soonest-expiring one — set when admin
+  // clicked "Book" next to a particular credit on the student's own
+  // page (app/(admin)/admin/students/[studentId]/book/page.tsx reads it
+  // from the URL). Students never get this — self-service always just
+  // uses whichever credit is about to expire first.
+  initialCreditId?: string;
 }) {
   const router = useRouter();
   const [coaches, setCoaches] = useState<Coach[]>(allCoaches ?? []);
@@ -96,7 +104,13 @@ export default function BookingClient({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [bookedWithCredit, setBookedWithCredit] = useState(false);
   const [availableCredits, setAvailableCredits] = useState(credits);
+  const [selectedCreditId, setSelectedCreditId] = useState(initialCreditId ?? credits[0]?.id ?? null);
   const [expiryWarningSlot, setExpiryWarningSlot] = useState<Slot | null>(null);
+
+  // Falls back to the soonest-expiring credit if the one this was locked
+  // onto got spent (or never existed in this list at all) — the same
+  // safe default as before this had any concept of a specific selection.
+  const selectedCredit = availableCredits.find((c) => c.id === selectedCreditId) ?? availableCredits[0];
 
   // Re-sync from the server whenever the credit list actually changes
   // identity. Without this, navigating away and back re-mounts this
@@ -150,17 +164,17 @@ export default function BookingClient({
       start: start.toISOString(),
       end: end.toISOString(),
       ...(mode === "trial" ? { trial: "true" } : {}),
-      // Slot length follows the available credit's own duration (e.g. a
+      // Slot length follows the selected credit's own duration (e.g. a
       // purchased 60-min add-on) rather than the student's default plan —
-      // a credit is always applied automatically when one exists.
-      ...(availableCredits[0] ? { creditId: availableCredits[0].id } : {}),
+      // a credit is always applied when one is selected.
+      ...(selectedCredit ? { creditId: selectedCredit.id } : {}),
     });
 
     fetch(`/api/booking/slots?${params}`)
       .then((res) => res.json())
       .then((data) => setSlots(data.slots ?? []))
       .finally(() => setLoading(false));
-  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone, availableCredits]);
+  }, [studentId, selectedCoachId, mode, viewYear, viewMonth, timezone, selectedCredit]);
 
   const slotsByDate = useMemo(() => {
     const map = new Map<string, Slot[]>();
@@ -195,17 +209,17 @@ export default function BookingClient({
           // — harmless to always send for a student, who the server
           // ignores this for.
           : { coachId: selectedCoachId }),
-        ...(applyCredit && availableCredits[0] ? { makeupCreditId: availableCredits[0].id } : {}),
+        ...(applyCredit && selectedCredit ? { makeupCreditId: selectedCredit.id } : {}),
       }),
     });
 
     if (res.ok) {
       setSlots((prev) => prev.filter((s) => s.start !== slot.start));
       if (mode === "trial") setBooked(true);
-      if (mode === "full" && applyCredit) {
+      if (mode === "full" && applyCredit && selectedCredit) {
         setErrorMsg(null);
         setBookedWithCredit(true);
-        setAvailableCredits((prev) => prev.slice(1));
+        setAvailableCredits((prev) => prev.filter((c) => c.id !== selectedCredit.id));
       }
       // Invalidate the router cache so the credit balance (and the
       // dashboard's copy of it) reflects what was just spent, rather
@@ -224,12 +238,11 @@ export default function BookingClient({
   // booking API) means a date past that point simply can't use it. A
   // credit is always applied automatically when one is available.
   function handleBook(slot: Slot) {
-    const credit = availableCredits[0];
-    if (credit?.expires_at && new Date(slot.start) > new Date(credit.expires_at)) {
+    if (selectedCredit?.expires_at && new Date(slot.start) > new Date(selectedCredit.expires_at)) {
       setExpiryWarningSlot(slot);
       return;
     }
-    proceedBooking(slot, !!credit);
+    proceedBooking(slot, !!selectedCredit);
   }
 
   if (mode === "trial" && booked) {
@@ -300,14 +313,11 @@ export default function BookingClient({
         {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
 
-      {mode === "full" && availableCredits.length > 0 && (
+      {mode === "full" && selectedCredit && (
         <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text-muted)]">
-          This booking will use a {availableCredits[0].duration_minutes ?? 30}-min session credit
+          This booking will use a {selectedCredit.duration_minutes ?? 30}-min session credit
           ({availableCredits.length} available
-          {availableCredits[0].expires_at
-            ? `, earliest expires ${formatDateInZone(availableCredits[0].expires_at, timezone)}`
-            : ""}
-          )
+          {selectedCredit.expires_at ? `, expires ${formatDateInZone(selectedCredit.expires_at, timezone)}` : ""})
         </div>
       )}
 
@@ -365,9 +375,7 @@ export default function BookingClient({
           <p className="mb-1 font-medium text-[var(--text)]">This time is past your session credit&apos;s expiry</p>
           <p className="mb-3 text-[var(--text-muted)]">
             Your session credit expires{" "}
-            {availableCredits[0]?.expires_at
-              ? formatDateInZone(availableCredits[0].expires_at, timezone)
-              : ""}
+            {selectedCredit?.expires_at ? formatDateInZone(selectedCredit.expires_at, timezone) : ""}
             , before {formatDateInZone(expiryWarningSlot.start, timezone)}.{" "}
             {canBookWithoutCredit
               ? "It won't be applied to this booking."

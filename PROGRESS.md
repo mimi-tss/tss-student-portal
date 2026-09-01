@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now book a specific session credit, not just whichever expires soonest (2026-08-31)
+
+You wanted to book a session using one of a student's purchased-addon
+credits directly from the Session Credits panel on their own page,
+picking which one — the existing admin booking page
+([app/(admin)/admin/students/[studentId]/book](<app/(admin)/admin/students/[studentId]/book/page.tsx>))
+already loaded every credit correctly, but `BookingClient`
+([booking-client.tsx](<app/(student)/student/book/booking-client.tsx>))
+only ever auto-applied `availableCredits[0]` — the soonest-expiring
+one — with no way to choose a different one.
+
+New `initialCreditId` prop locks the booking to spend one specific
+credit; a `selectedCredit` derived value (`availableCredits.find(id
+match) ?? availableCredits[0]`) replaces every direct `[0]` reference
+so the fallback still works exactly as before when nothing specific was
+requested (student self-service never passes this prop at all). Also
+had to fix `.slice(1)` → `.filter(id !== selected)` after a successful
+booking, since a non-default selection isn't necessarily at index 0.
+
+Entry point, per your own preference: a **Book** link next to each
+individual credit row in the student page's own Session Credits panel
+([students/[studentId]/page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>))
+— every credit already listed there is already confirmed unused and
+unexpired by that panel's own query, so all of them are safely
+bookable, no extra filtering needed. Links straight to
+`.../book?creditId=X`, which the book page reads and threads through.
+
+`tsc --noEmit`/`next build` clean.
+
 ## Coach schedule grid: found and fixed a real viewer-timezone bug, chasing "Emma sees fewer sessions than admin" (2026-08-31)
 
 Long back-and-forth with you today chasing why two admin-tier accounts
