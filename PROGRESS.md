@@ -3,6 +3,33 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed the Needs Review sidebar badge showing a stale count (2026-08-31)
+
+You caught this live — the sidebar showed "142" while the Needs Review
+page's own "Needs Action" tab showed 58, and the two numbers stayed
+that far apart across normal navigation. Root cause: the sidebar
+badge's count comes from
+[layout.tsx](<app/(admin)/layout.tsx>) (`getOverviewStats`), a server
+component — and per Next.js App Router's own behavior, a shared
+layout only re-runs on a hard page load, never on a soft client-side
+navigation between sibling pages under it. Clicking from a student's
+page back to Needs Review via the sidebar link is exactly a soft nav,
+so the badge stayed pinned at whatever was true when the admin section
+was first opened that session, no matter how much changed after that
+(confirmed directly: the real count at the time was 57-58, matching
+the page).
+
+[admin-nav.tsx](<app/(admin)/admin-nav.tsx>) now self-fetches the same
+`/api/admin/attention-items?status=needs_action` count the page itself
+uses — once on mount, and again on every route change — using the
+layout's server-computed value only as the fast initial number before
+the first client fetch lands. Doesn't chase full real-time (an
+in-place resolve on the Overview page's own mini-list won't refresh
+it without a navigation happening), but fixes the specific staleness
+you hit and keeps the badge honest across normal use.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## "Inactive" no longer flags a student the moment they're created (2026-08-31)
 
 You flagged this live — the Needs Review queue was flooded with
