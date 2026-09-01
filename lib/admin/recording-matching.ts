@@ -247,28 +247,27 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
   }
 
   // Pass 2: only act on notes docs uniquely paired to one recording.
-  let matched = 0;
-  const notesTextCache = new Map<string, string>();
-  for (const { recordingId, coachId, notesDocId } of resolved) {
-    if ((recordingsPerNotesDoc.get(notesDocId) ?? 0) !== 1) continue;
+  // Parallel for the same reason pass 1 is — each candidate here targets
+  // its own distinct recording/student pair, so there's nothing shared
+  // to race on. attachRecordingToStudent's own real Drive file MOVE
+  // (not just a read) made this the slower half of the two passes when
+  // it ran one at a time.
+  const eligible = resolved.filter((r) => (recordingsPerNotesDoc.get(r.notesDocId) ?? 0) === 1);
+  const outcomes = await Promise.all(
+    eligible.map(async ({ recordingId, coachId, notesDocId }) => {
+      const roster = studentsByCoach.get(coachId) ?? [];
+      if (roster.length === 0) return false;
 
-    const roster = studentsByCoach.get(coachId) ?? [];
-    if (roster.length === 0) continue;
+      const text = await exportDocText(notesDocId);
+      const studentId = findStudentNameInText(text, roster);
+      if (!studentId) return false;
 
-    let text = notesTextCache.get(notesDocId);
-    if (!text) {
-      text = await exportDocText(notesDocId);
-      notesTextCache.set(notesDocId, text);
-    }
+      const result = await attachRecordingToStudent(admin, recordingId, studentId, { method: "name_in_notes" });
+      return result.success;
+    }),
+  );
 
-    const studentId = findStudentNameInText(text, roster);
-    if (!studentId) continue;
-
-    const result = await attachRecordingToStudent(admin, recordingId, studentId, { method: "name_in_notes" });
-    if (result.success) matched++;
-  }
-
-  return { matched };
+  return { matched: outcomes.filter(Boolean).length };
 }
 
 // Attended sessions for a coach on one calendar day that don't already
