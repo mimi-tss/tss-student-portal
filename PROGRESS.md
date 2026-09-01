@@ -3425,18 +3425,16 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0082 not yet confirmed applied** —
-`0082_fix_attention_item_upserts.sql` (renumbered from an initial
-0081 — see the entry above for why) adds 4 RPC functions that fix a
-real, likely long-standing bug: every "condition-driven" Needs Review
-kind (dnc, credit_expiring, trial_unbooked, no_recurring_schedule,
-hold_ending_soon, inactive_10_days, plus the two recording kinds, plus
-the new fifth_week_available) has been silently failing to
-auto-create at all. Until this runs, that stays broken exactly as it's
-been — the 30 fifth-week items already manually pushed are unaffected
-either way (inserted directly, not through the broken path), but
-nothing new will populate for any of these 8 kinds, old or new,
-without this migration.
+**Migration 0082 confirmed applied** — detected rather than told:
+found real evidence in production that the fix is live and working —
+Rollins Anderson picked up a fresh `inactive_10_days` item and a
+second `fifth_week_available` item (they have two weekly slots) with
+timestamps matching real admin app usage, not anything I inserted by
+hand. `attention_item_upsert_condition` RPC now exists and is
+callable (confirmed directly) — it correctly rejects a service-role
+caller with "admin only" (is_admin() has no session to check), which
+is exactly the intended defense-in-depth, not a bug; a real logged-in
+admin session resolves it fine, as the new rows prove.
 
 **Migration 0081 confirmed applied** (2026-08-31) — admin can now
 delete a session credit from the student detail page.

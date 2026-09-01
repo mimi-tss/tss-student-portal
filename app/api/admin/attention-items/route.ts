@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const statusParam = req.nextUrl.searchParams.get("status");
   const status = STATUSES.includes(statusParam as AttentionStatus) ? (statusParam as AttentionStatus) : undefined;
+  const studentId = req.nextUrl.searchParams.get("studentId") ?? undefined;
 
-  const items = await getAttentionItems(supabase, status);
+  const items = await getAttentionItems(supabase, status, studentId);
   return NextResponse.json({ items });
 }

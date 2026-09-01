@@ -491,6 +491,7 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
 export async function getAttentionItems(
   supabase: SupabaseClient,
   status?: AttentionStatus,
+  studentId?: string,
 ): Promise<AttentionItem[]> {
   await syncComputedAttentionItems(supabase);
 
@@ -501,6 +502,7 @@ export async function getAttentionItems(
     )
     .order("created_at", { ascending: false });
   if (status) query = query.eq("status", status);
+  if (studentId) query = query.eq("student_id", studentId);
 
   const { data } = await query;
 

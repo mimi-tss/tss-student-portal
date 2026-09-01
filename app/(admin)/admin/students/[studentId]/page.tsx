@@ -18,6 +18,7 @@ import ReassignSessionCoach from "./reassign-session-coach";
 import StudentHeaderActions from "./student-header-actions";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
 import StaffNotesClient from "./staff-notes-client";
+import StudentAttentionItems from "./student-attention-items";
 import AddCreditClient from "../../dashboard/add-credit-client";
 import SessionCreditsList from "./session-credits-list";
 import styles from "../../../admin.module.css";
@@ -370,6 +371,8 @@ export default async function AdminStudentPage({
           <StaffNotesClient studentId={student.id} />
         </div>
       </div>
+
+      <StudentAttentionItems studentId={student.id} />
 
       <div className={styles.panel}>
         <h2>Weekly schedule</h2>

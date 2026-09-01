@@ -2,48 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { AttentionItem, AttentionKind } from "@/lib/admin/attention-items";
+import type { AttentionItem } from "@/lib/admin/attention-items";
+import { KIND_LABEL, KIND_CLASS } from "./attention-item-row";
 import styles from "../admin.module.css";
-
-const KIND_LABEL: Record<AttentionKind, string> = {
-  dnc: "DNC",
-  cancel_request: "Cancel Req",
-  trial_unbooked: "Trial",
-  credit_expiring: "Expiring",
-  upgraded_suite: "Upgraded",
-  upgraded_pro: "Upgraded",
-  upgraded_elite: "Upgraded",
-  coach_block_added: "Block",
-  no_show_1: "No-Show",
-  no_show_2: "No-Show ×2",
-  no_show_3: "No-Show ×3",
-  no_recurring_schedule: "No Schedule",
-  hold_ending_soon: "Hold Ending",
-  inactive_10_days: "Inactive",
-  recording_unmatched: "Unmatched Recording",
-  recording_missing: "Missing Recording",
-  fifth_week_available: "5th Week",
-};
-
-const KIND_CLASS: Record<AttentionKind, string> = {
-  dnc: styles.naKindDnc,
-  cancel_request: styles.naKindCancel,
-  trial_unbooked: styles.naKindTrial,
-  credit_expiring: styles.naKindCredit,
-  upgraded_suite: styles.naKindTrial,
-  upgraded_pro: styles.naKindTrial,
-  upgraded_elite: styles.naKindPause,
-  coach_block_added: styles.naKindCancel,
-  no_show_1: styles.naKindDnc,
-  no_show_2: styles.naKindDnc,
-  no_show_3: styles.naKindDnc,
-  no_recurring_schedule: styles.naKindPause,
-  hold_ending_soon: styles.naKindPause,
-  inactive_10_days: styles.naKindCancel,
-  recording_unmatched: styles.naKindCredit,
-  recording_missing: styles.naKindCredit,
-  fifth_week_available: styles.naKindTrial,
-};
 
 // Overview's compact preview — top 5 "needs action" items, each
 // resolvable with one click (no notes here; the full note/status
