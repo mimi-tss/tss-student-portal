@@ -3,6 +3,82 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Biweekly recurring schedules materialized wrong dates whenever start_date fell after the month's 1st occurrence (2026-08-31)
+
+You caught this live setting up Maryke's schedule (Mondays, biweekly,
+starting 2026-09-12) — you expected 9/14 and 9/28 (first Monday on/after
+the start date, then every other week from there), but the app
+materialized 9/7 and 9/21 instead, both computed from a pattern that
+ignores start_date almost entirely.
+
+Root cause: `occurrencesFor`'s biweekly branch
+([lib/scheduling/recurring.ts](lib/scheduling/recurring.ts)) picked
+occurrences via `monthOccurrenceNumber` — always the calendar month's
+1st and 3rd same-weekday date, a deliberate original design choice (see
+the "Biweekly recurring schedule" entry earlier in this log) that quietly
+assumed a schedule's start_date would always fall on/before the month's
+own 1st occurrence. September's Mondays are 7/14/21/28 — with
+start_date 9/12 (after the 1st Monday, before the 2nd), the *intended*
+sequence counting from start_date is 9/14 and 9/28, but
+monthOccurrenceNumber doesn't consult start_date at all, so it kept
+handing back 9/7 and 9/21 regardless. This wasn't a rare edge case:
+since a schedule's start_date defaults to *today* whenever left blank,
+this fires for any biweekly schedule created any time after the 1st
+same-weekday date of its own month — a large fraction of real-world
+cases, not a corner one, just never previously triggered/reported.
+
+Fixed by anchoring the every-other-occurrence count to the schedule's
+own `start_date` instead: new `firstOccurrenceOnOrAfter` finds the
+first matching weekday on/after start_date, then occurrences land every
+14 days from there — `occurrencesFor` gained a `scheduleStartDate`
+parameter for this, threaded through from both real callers
+(`materializeRecurringSessions`, which already had `startDate` computed
+locally, and `getHeldRecurringSlots`, whose query now also selects
+`start_date`). Falls back to the old month-anchored math only when no
+start_date is available at all (a legacy row predating that column) —
+kept as a fallback specifically so old rows don't shift under a change
+they never asked for, not because the old math was ever actually
+correct. `occurrencesFor`'s two other callers
+([lib/coach-blocks.ts](lib/coach-blocks.ts),
+[lib/group-lessons.ts](lib/group-lessons.ts)) never pass a `cadence` at
+all (always plain weekly), so this whole branch — and the new
+parameter — never applies to either; confirmed unaffected.
+
+Verified the fix's actual math directly against Maryke's real numbers
+in a throwaway script before touching anything live: start_date
+2026-09-12, day Monday → produces exactly 2026-09-14, 2026-09-28,
+2026-10-12, matching what you expected by hand. `tsc --noEmit`/`next
+build` clean.
+
+**Turned out to be much bigger than one student** — audited every
+active biweekly schedule before touching anything, and found 7 of 8
+affected (`Marii Gonxalez, Sara Couture, Nicole Gründel, Paris You,
+Nathan Robinette, Cameron Hoff, Maryke Meyer` — `Krenar Fejzullahu`'s
+start_date happened to land exactly on their month's own 1st
+occurrence, so old and new math agree for them). Subtler than "wrong
+from day one" too: most of these students' first couple of
+already-materialized sessions happened to coincidentally match the
+correct pattern, then silently drift wrong a few sessions in — the old
+logic re-anchors to "1st and 3rd of *this* calendar month" every month,
+while correct behavior holds a strict rolling 14-day cadence from
+start_date; these two only agree by coincidence in an aligned month, and
+drift apart in the next one. Confirmed exactly this pattern for e.g.
+Marii Gonxalez: Sep/Oct sessions already matched the correct dates,
+November's didn't (old: Nov 5, 19 — calendar-anchored; correct: Oct 29,
+Nov 12 — rolling from anchor).
+
+Fixed by deleting each of the 7 schedules' own future `scheduled`
+sessions (`recurring_schedule_id` match, from that schedule's own
+`start_date` onward — identical criteria the schedule-edit route
+already uses) and re-running the real, now-fixed
+`materializeRecurringSessions` via the production cron endpoint (not a
+reimplementation in a script — the actual deployed logic, hit directly)
+to regenerate every one of them fresh. Re-verified all 7 students'
+resulting sessions against the correct expected sequence afterward.
+No other student's schedule touched — every other active recurring
+schedule already materializes correctly and this run is a no-op for
+anyone whose sessions already match.
+
 ## Join button: uppercase, white text (2026-08-31)
 
 Styling tweak, same button as the two entries above.
