@@ -1,5 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay } from "@/lib/timezone";
+import { fifthWeekOccurrence } from "@/lib/scheduling/recurring";
+import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -19,7 +21,8 @@ export type AttentionKind =
   | "hold_ending_soon"
   | "inactive_10_days"
   | "recording_unmatched"
-  | "recording_missing";
+  | "recording_missing"
+  | "fifth_week_available";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
@@ -35,6 +38,10 @@ export interface AttentionItem {
   adminNote: string | null;
   createdAt: string;
   resolvedAt: string | null;
+  // Only ever set for "fifth_week_available" — the exact instant the
+  // offered one-off lesson would go at, so the "Add lesson" action can
+  // book it directly without re-deriving it.
+  occurrenceAt: string | null;
 }
 
 const MISS_STATUSES = ["no-show", "late-forfeit", "cancelled-no-notice"];
@@ -248,6 +255,81 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
   }
 
   await syncRecordingAttentionItems(supabase);
+  await syncFifthWeekAttentionItems(supabase);
+}
+
+// Weekly-cadence Pro/Elite students only — Suite has no session cap to
+// have a "5th week" against, and a biweekly schedule's own cap logic
+// (monthOccurrenceNumber, unrelated to the billing cycle) never
+// produces this situation at all. Forward-looking only, same posture
+// as the recording kinds above: only ever the CURRENT cycle's own
+// opportunity, never a backlog of cycles that already passed.
+async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
+  const now = new Date();
+
+  const { data: schedules } = await supabase
+    .from("recurring_schedules")
+    .select(
+      "student_id, coach_id, day_of_week, start_time, cadence, students(name, tier, subscription_status, billing_anniversary_date), coaches(timezone)",
+    )
+    .eq("active", true)
+    .eq("cadence", "weekly");
+
+  if (!schedules || schedules.length === 0) return;
+
+  const holidayDates = await getHolidayDateKeys(supabase);
+
+  const candidates: { studentId: string; coachId: string; studentName: string; occurrenceAt: Date }[] = [];
+  for (const s of schedules) {
+    const student = (
+      Array.isArray(s.students) ? s.students[0] : s.students
+    ) as { name: string; tier: string; subscription_status: string; billing_anniversary_date: string | null } | null;
+    if (!student) continue;
+    if (student.tier !== "pro" && student.tier !== "elite") continue;
+    if (student.subscription_status !== "active") continue;
+
+    const coach = (Array.isArray(s.coaches) ? s.coaches[0] : s.coaches) as { timezone: string } | null;
+    const occurrenceAt = fifthWeekOccurrence(
+      s.day_of_week,
+      s.start_time,
+      coach?.timezone ?? "America/New_York",
+      now,
+      student.billing_anniversary_date,
+      holidayDates,
+    );
+    if (!occurrenceAt) continue;
+
+    candidates.push({ studentId: s.student_id, coachId: s.coach_id, studentName: student.name, occurrenceAt });
+  }
+
+  if (candidates.length === 0) return;
+
+  // A session might already exist at that exact instant — admin already
+  // added it (via this same item's own action, on a previous pass) or
+  // some other path got there first. Either way, nothing left to offer.
+  const { data: existingSessions } = await supabase
+    .from("sessions")
+    .select("student_id, scheduled_at")
+    .in("student_id", candidates.map((c) => c.studentId))
+    .in("scheduled_at", candidates.map((c) => c.occurrenceAt.toISOString()));
+
+  const taken = new Set((existingSessions ?? []).map((s) => `${s.student_id}|${s.scheduled_at}`));
+
+  const rows = candidates
+    .filter((c) => !taken.has(`${c.studentId}|${c.occurrenceAt.toISOString()}`))
+    .map((c) => ({
+      kind: "fifth_week_available" as const,
+      student_id: c.studentId,
+      coach_id: c.coachId,
+      occurrence_at: c.occurrenceAt.toISOString(),
+      summary: `Has an extra lesson slot open this cycle (${c.occurrenceAt.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })}, same day/time as usual) — offer a one-off add-on`,
+    }));
+
+  if (rows.length > 0) {
+    await supabase
+      .from("attention_items")
+      .upsert(rows, { onConflict: "student_id,kind,occurrence_at", ignoreDuplicates: true });
+  }
 }
 
 // Both kinds here are deliberately forward-looking only (recorded_date/
@@ -386,7 +468,9 @@ export async function getAttentionItems(
 
   let query = supabase
     .from("attention_items")
-    .select("id, kind, status, student_id, coach_id, summary, admin_note, created_at, resolved_at, students(name), coaches(name)")
+    .select(
+      "id, kind, status, student_id, coach_id, summary, admin_note, created_at, resolved_at, occurrence_at, students(name), coaches(name)",
+    )
     .order("created_at", { ascending: false });
   if (status) query = query.eq("status", status);
 
@@ -404,6 +488,7 @@ export async function getAttentionItems(
     adminNote: item.admin_note,
     createdAt: item.created_at,
     resolvedAt: item.resolved_at,
+    occurrenceAt: item.occurrence_at,
   }));
 }
 

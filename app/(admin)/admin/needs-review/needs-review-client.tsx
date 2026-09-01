@@ -22,6 +22,7 @@ const KIND_LABEL: Record<AttentionKind, string> = {
   inactive_10_days: "Inactive",
   recording_unmatched: "Unmatched Recording",
   recording_missing: "Missing Recording",
+  fifth_week_available: "5th Week",
 };
 
 const KIND_CLASS: Record<AttentionKind, string> = {
@@ -41,6 +42,7 @@ const KIND_CLASS: Record<AttentionKind, string> = {
   inactive_10_days: styles.naKindCancel,
   recording_unmatched: styles.naKindCredit,
   recording_missing: styles.naKindCredit,
+  fifth_week_available: styles.naKindTrial,
 };
 
 const TABS: { status: AttentionStatus; label: string }[] = [
@@ -52,6 +54,43 @@ const TABS: { status: AttentionStatus; label: string }[] = [
 function Row({ item, onChanged }: { item: AttentionItem; onChanged: () => void }) {
   const [note, setNote] = useState(item.adminNote ?? "");
   const [saving, setSaving] = useState<AttentionStatus | "note" | null>(null);
+  const [addingLesson, setAddingLesson] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Books the exact same day/time the student already has weekly — no
+  // credit, no trial, same "admin can book a plain session on a
+  // student's behalf" path the admin booking page itself uses. On
+  // success, resolves this item the same way any other fix-it action
+  // here does.
+  async function addFifthWeekLesson() {
+    if (!item.studentId || !item.coachId || !item.occurrenceAt) return;
+    setAddingLesson(true);
+    setAddError(null);
+
+    const res = await fetch("/api/booking/book", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentId: item.studentId,
+        slotStart: item.occurrenceAt,
+        coachId: item.coachId,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setAddingLesson(false);
+
+    if (!res.ok) {
+      setAddError(body.error ?? "Couldn't add that lesson.");
+      return;
+    }
+
+    await fetch("/api/admin/attention-items/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId: item.id, status: "resolved", note: note.trim() || undefined }),
+    });
+    onChanged();
+  }
 
   async function setStatus(status: AttentionStatus) {
     setSaving(status);
@@ -89,6 +128,18 @@ function Row({ item, onChanged }: { item: AttentionItem; onChanged: () => void }
           )}
         </div>
         <div className={styles.naSummary}>{item.summary}</div>
+        {item.kind === "fifth_week_available" && item.status !== "resolved" && (
+          <div style={{ marginTop: 8 }}>
+            <button className={styles.linkBtnSmall} disabled={addingLesson} onClick={addFifthWeekLesson}>
+              {addingLesson ? "Adding…" : "Add lesson"}
+            </button>
+            {addError && (
+              <span className={styles.errorText} style={{ marginLeft: 8 }}>
+                {addError}
+              </span>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <input
             value={note}

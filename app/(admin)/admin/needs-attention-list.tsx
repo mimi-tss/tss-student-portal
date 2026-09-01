@@ -22,6 +22,7 @@ const KIND_LABEL: Record<AttentionKind, string> = {
   inactive_10_days: "Inactive",
   recording_unmatched: "Unmatched Recording",
   recording_missing: "Missing Recording",
+  fifth_week_available: "5th Week",
 };
 
 const KIND_CLASS: Record<AttentionKind, string> = {
@@ -41,6 +42,7 @@ const KIND_CLASS: Record<AttentionKind, string> = {
   inactive_10_days: styles.naKindCancel,
   recording_unmatched: styles.naKindCredit,
   recording_missing: styles.naKindCredit,
+  fifth_week_available: styles.naKindTrial,
 };
 
 // Overview's compact preview — top 5 "needs action" items, each

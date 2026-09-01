@@ -198,6 +198,57 @@ export function currentBillingCycleRange(
   return { start, end };
 }
 
+// The current billing cycle's own 5th same-weekday occurrence of a
+// weekly recurring slot, if this cycle happens to contain one and it
+// hasn't passed yet — the exact "week off" occurrencesFor() already
+// leaves unscheduled (CYCLE_SESSION_CAP above) rather than a gap that
+// was ever offered and skipped. Used to find a same-day/same-time
+// one-off upsell opportunity for an existing weekly student (see
+// lib/admin/attention-items.ts's "fifth_week_available" kind) — this
+// never creates or implies a real session, only identifies the date/
+// time one would go at if admin books it. Returns null if this cycle
+// has no 5th occurrence of the slot, it's already passed, or it lands
+// on a studio holiday (spec: studio closed that day, no session of any
+// kind, sellable or not).
+export function fifthWeekOccurrence(
+  dayOfWeek: number,
+  startTime: string,
+  timeZone: string,
+  from: Date,
+  billingAnniversaryDate: string | null | undefined,
+  holidayDates?: Set<string>,
+): Date | null {
+  if (!billingAnniversaryDate) return null;
+
+  const { end } = currentBillingCycleRange(billingAnniversaryDate, from);
+  const anchorDay = new Date(`${billingAnniversaryDate}T00:00:00Z`).getUTCDate();
+  const [hh, mm] = startTime.split(":").map(Number);
+  const [y, m, d] = zonedYearMonthDay(from, timeZone);
+
+  // 40 days comfortably covers a cycle's own 5th weekly occurrence
+  // (at most ~35 days out) without reaching into a later cycle's own
+  // 5th occurrence — bounded below by `end` regardless.
+  for (let i = 0; i < 40; i++) {
+    const dateOnly = new Date(Date.UTC(y, m - 1, d + i));
+    if (dateOnly.getTime() >= end.getTime()) break;
+    if (dateOnly.getUTCDay() !== dayOfWeek) continue;
+
+    const instant = zonedTimeToUtc(
+      dateOnly.getUTCFullYear(),
+      dateOnly.getUTCMonth() + 1,
+      dateOnly.getUTCDate(),
+      hh,
+      mm,
+      timeZone,
+    );
+    if (instant <= from) continue;
+    if (holidayDates && isHolidayInstant(instant, holidayDates)) continue;
+    if (cycleOccurrenceNumber(instant, anchorDay, timeZone) === 5) return instant;
+  }
+
+  return null;
+}
+
 // A recurring slot must sit inside the coach's working hours, otherwise
 // the generated sessions would be invisible on the coach calendar — that
 // grid only renders cells that fall within working hours, so an
