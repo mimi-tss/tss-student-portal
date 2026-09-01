@@ -3,6 +3,50 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## New Needs Review kind: flag a weekly student's unbilled "5th week" as a one-off upsell (2026-08-31)
+
+You asked for this: some billing cycles naturally contain a 5th
+same-weekday occurrence of a weekly student's regular slot —
+[occurrencesFor()](lib/scheduling/recurring.ts) has always deliberately
+skipped generating (or billing) a session for it, "week off" per spec
+section 4 — but that's a real open slot at the student's own usual day/
+time, not just dead air, and you want a chance to offer it as a paid
+one-off before the student loses momentum that week.
+
+New [fifthWeekOccurrence()](lib/scheduling/recurring.ts) finds the
+current billing cycle's own 5th occurrence, if it has one and it
+hasn't passed yet (traced by hand against 4 cases, then checked
+against real production data — 30 of 70 real weekly schedules
+currently qualify, all landing on September 2026's 5 Wednesdays for
+anchor-day-1 students, exactly as expected). A new
+`fifth_week_available` Needs Review kind
+([attention-items.ts](lib/admin/attention-items.ts)) surfaces it,
+scoped to weekly-cadence Pro/Elite students only (Suite has no session
+cap to have a 5th week against; biweekly's own cap logic is unrelated
+to the billing cycle, so it can't produce this situation at all). Each
+item carries an **Add lesson** action
+([needs-review-client.tsx](<app/(admin)/admin/needs-review/needs-review-client.tsx>))
+that books the session directly at that exact date/time — reuses the
+existing plain (no-credit) admin-booking path `/api/booking/book`
+already supports, just pre-filled instead of picked off a calendar —
+and resolves the item on success.
+
+Needed a new migration
+([0080_fifth_week_attention_items.sql](supabase/migrations/0080_fifth_week_attention_items.sql))
+— this kind has to recur per occurrence (this cycle's opportunity, and
+again whenever a future cycle also happens to land on 5 weeks, are two
+separate things to offer), so unlike the existing 6-kind (student_id,
+kind) dedup index from 0062, it gets its own (student_id, kind,
+occurrence_at) index — same reasoning `recording_missing` (0078)
+already established for the same "recurs per occurrence" shape.
+`occurrence_at` also doubles as exactly what the Add-lesson action
+needs to book — no separate lookup.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login (none in this environment) — the detection logic
+itself is verified as above, but the actual Add-lesson → booking →
+resolve flow isn't.
+
 ## Admin can now book a specific session credit, not just whichever expires soonest (2026-08-31)
 
 You wanted to book a session using one of a student's purchased-addon
@@ -3249,6 +3293,14 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0080 not yet confirmed applied** —
+`0080_fifth_week_attention_items.sql` adds the `occurrence_at` column,
+kind, and dedup index the new "5th week available" Needs Review item
+needs. Until this runs, that item can never actually get created (the
+insert would hit the old `attention_items_kind_check` constraint and
+fail) — the Needs Review page and Overview stats are otherwise
+unaffected either way.
 
 **Migration 0079 confirmed applied** (2026-08-31) — admin now has a
 real delete policy on `entitlements`; the "Remove" trial-lesson action
