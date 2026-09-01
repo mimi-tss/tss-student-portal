@@ -3,6 +3,33 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed: recurring-schedule slots crossing midnight wrongly rejected as outside working hours (2026-09-01)
+
+You reported: coach Nikki has working hours Thu 8:30pm-12:00am + Fri
+12:00am-12:30am (one continuous span, split into two day-keyed windows
+since storage can't cross a day boundary), but admin couldn't add a
+Thursday 11:30pm 60min class — UI said "that time falls outside the
+coach's working hours" even though 11:30pm-12:30am sits entirely
+inside that combined span.
+
+Root cause: [slotFitsWorkingHours()](lib/scheduling/recurring.ts:258)
+only ever checked a slot against its **start day's** windows — a slot
+ending after midnight (`endMin > 24*60`) was compared purely as
+minutes-since-midnight on the start day, so the tail past midnight was
+never checked against anything, and the function returned false
+regardless of Friday's window. Shared by all 3 schedule-creation call
+sites (`lib/admin/create-recurring-schedule.ts`,
+`app/api/admin/recurring-schedule/route.ts`,
+`lib/admin/provision-student.ts`), so the bug was universal.
+
+**Fixed**: when a slot's end time crosses midnight, it now splits into
+two checks — the portion up to midnight must be covered by a same-day
+window running through `"00:00"`, and the portion after midnight must
+be covered by a next-day window starting at `"00:00"`. Verified via
+`tsc --noEmit` and code trace (walked the exact Nikki example through
+the new logic by hand); no live DB/login in this environment to
+click-test.
+
 ## Fixed: a student's group-lesson (bootcamp) registration never showed on their admin profile page (2026-09-01)
 
 You caught this with a concrete example: Dalia Hyman is registered for
