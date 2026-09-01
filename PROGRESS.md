@@ -3,6 +3,99 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Overview page's "Trial lessons not yet booked" stat card is now clickable (2026-08-31)
+
+You noticed clicking the count on the Studio Overview page did nothing —
+no way to see *who* those students actually are.
+
+That count ([overview/page.tsx](<app/(admin)/admin/overview/page.tsx>))
+already comes from the same `trial_unbooked` Needs Review kind
+([attention-items.ts](lib/admin/attention-items.ts)), so the fix is
+just a link, not new data plumbing: the card is now a `<Link
+href="/admin/needs-review?kind=trial_unbooked">`. Needs Review itself
+([needs-review-client.tsx](<app/(admin)/admin/needs-review/needs-review-client.tsx>))
+had no kind-filter concept at all before this — added one, read via
+`useSearchParams` and applied client-side over whatever the active
+status tab already fetched (dataset is small — the Overview page's own
+"Needs attention" tile currently reads 30 — so no need for a new
+server-side query param). Shows a "Filtered to X — Clear filter" line
+above the tabs when present. `useSearchParams` needs a Suspense
+boundary in the App Router, so wrapped `<NeedsReviewClient />` in one
+in [needs-review/page.tsx](<app/(admin)/admin/needs-review/page.tsx>).
+Gave the card itself a `.overviewCardLink` hover style (gold border,
+matching `.rowName:hover`'s existing gold-on-hover convention) so it
+reads as clickable.
+
+Only this one stat card was in scope (that's what you pointed at) —
+the other three Overview cards (Active students, DNC, Needs attention)
+are untouched.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration
+needed — reuses the existing `attention_items` data/route as-is. Not
+click-tested against a live login (none in this environment).
+
+## Found and fixed: condition-driven Needs Review items have likely never auto-created (2026-08-31)
+
+You said "push it" for the 5th-week feature above — while doing that
+manual push, the real upsert call in `syncFifthWeekAttentionItems`
+failed with a Postgres error (`42P10`, "no unique or exclusion
+constraint matching the ON CONFLICT specification"). Traced it: every
+condition-driven `attention_items` kind in this app (`dnc`,
+`credit_expiring`, `trial_unbooked`, `no_recurring_schedule`,
+`hold_ending_soon`, `inactive_10_days`, plus the two recording kinds
+from 0078, plus `fifth_week_available` from this session) goes through
+`.upsert(...).onConflict(...)` targeting a **partial** unique index.
+Confirmed directly against the live database — with a plain script,
+not guesswork — that Postgres requires the `ON CONFLICT` clause's
+`WHERE` predicate to match a partial index's own predicate *exactly*
+for the conflict target to resolve, and Supabase's JS client has no
+way to pass that extra predicate through. Tested the OLD 6-kind index
+(migration 0062, been live for a long time) the exact same way — same
+error. None of these calls ever checked the returned error, so this
+has been failing completely silently: the Needs Review page hasn't
+been erroring, it's just never actually been auto-populating any of
+these 8 kinds. Worth being direct about this: it means "Needs Review"
+has likely never shown you anything from `syncComputedAttentionItems`
+at all, this whole time.
+
+**Fix**: four small `security definer` RPC functions
+([0082_fix_attention_item_upserts.sql](supabase/migrations/0082_fix_attention_item_upserts.sql)
+— renumbered from an initial 0081, which a concurrent session
+independently claimed first for its own already-applied
+admin-delete-makeup-credits migration),
+one per distinct partial-index shape already in the table — inside a
+function, the `ON CONFLICT` clause *can* repeat the matching `WHERE`
+predicate, which is exactly what a client-side call can't express.
+[attention-items.ts](lib/admin/attention-items.ts) now calls these via
+`.rpc(...)` instead of `.upsert(...)` everywhere — `createIfNew` for
+the 6-kind index, and the two recording-kind + fifth-week batch sites
+now run one RPC call per row via `Promise.all` (parallel, to stay
+close to the single round-trip a working batched upsert would have
+been) instead of the one multi-row upsert that never worked.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified the root
+cause and the RPC's shape are correct by direct probing against the
+real database (not just reading the code) before writing the fix.
+**Not yet exercised end-to-end** — needs migration 0082 applied before
+any of this actually inserts anything; please retest by loading Needs
+Review after confirming it, ideally on a day/student combo that should
+trigger one of the older 6 kinds (e.g. a DNC student or someone
+inactive 10+ days) to confirm those are finally populating too, not
+just the new 5th-week kind.
+
+## Flagged all 30 currently-open "5th week" opportunities right now (2026-08-31)
+
+You said "push it for all students in system right now" once migration
+0080 was confirmed. Ran the real detection logic directly against
+production (read-only computation, same as the dry run before it) and
+inserted the 30 real `fifth_week_available` items by hand — a plain
+`.insert()`, not the broken `.upsert()` above, so these 30 are real and
+already sitting in Needs Review right now regardless of whether 0082
+has been applied yet. Every future occurrence (a student's *next*
+qualifying cycle, or a newly-added weekly student) depends on 0082
+being applied first, though — the automatic sync goes through the same
+broken upsert path until then.
+
 ## Admin can now edit a session credit's expiry, or delete one (2026-08-31)
 
 You asked for this on the student detail page's "Session credits"
@@ -3331,6 +3424,19 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0082 not yet confirmed applied** —
+`0082_fix_attention_item_upserts.sql` (renumbered from an initial
+0081 — see the entry above for why) adds 4 RPC functions that fix a
+real, likely long-standing bug: every "condition-driven" Needs Review
+kind (dnc, credit_expiring, trial_unbooked, no_recurring_schedule,
+hold_ending_soon, inactive_10_days, plus the two recording kinds, plus
+the new fifth_week_available) has been silently failing to
+auto-create at all. Until this runs, that stays broken exactly as it's
+been — the 30 fifth-week items already manually pushed are unaffected
+either way (inserted directly, not through the broken path), but
+nothing new will populate for any of these 8 kinds, old or new,
+without this migration.
 
 **Migration 0081 confirmed applied** (2026-08-31) — admin can now
 delete a session credit from the student detail page.

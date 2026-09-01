@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import NeedsReviewClient from "./needs-review-client";
 import styles from "../../admin.module.css";
 
@@ -9,7 +10,9 @@ export default function AdminNeedsReviewPage() {
   return (
     <div className={styles.wrap}>
       <h1 className={styles.pageTitle}>Needs Review</h1>
-      <NeedsReviewClient />
+      <Suspense fallback={<p className={styles.mutedText}>Loading…</p>}>
+        <NeedsReviewClient />
+      </Suspense>
     </div>
   );
 }

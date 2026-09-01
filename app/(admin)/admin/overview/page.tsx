@@ -140,11 +140,11 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className={styles.overviewCard}>
+        <Link href="/admin/needs-review?kind=trial_unbooked" className={`${styles.overviewCard} ${styles.overviewCardLink}`}>
           <div className={styles.overviewCardLabel}>Trial lessons not yet booked</div>
           <div className={styles.overviewCardValue}>{stats.unbookedTrials}</div>
           <div className={styles.overviewCardSub}>Suite members who upgraded but haven&apos;t scheduled</div>
-        </div>
+        </Link>
 
         <div className={styles.overviewCard}>
           <div className={styles.overviewCardLabel}>DNC — payment hold / failed</div>

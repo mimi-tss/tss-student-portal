@@ -739,6 +739,15 @@
   border-radius: 14px;
   padding: 16px 18px;
 }
+.overviewCardLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+.overviewCardLink:hover {
+  border-color: var(--gold);
+}
 .overviewCardLabel {
   font-size: 10px;
   color: var(--text-muted);

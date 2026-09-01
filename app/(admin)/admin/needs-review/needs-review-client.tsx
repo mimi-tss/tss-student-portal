@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { AttentionItem, AttentionKind, AttentionStatus } from "@/lib/admin/attention-items";
 import styles from "../../admin.module.css";
 
@@ -173,6 +174,8 @@ function Row({ item, onChanged }: { item: AttentionItem; onChanged: () => void }
 }
 
 export default function NeedsReviewClient() {
+  const searchParams = useSearchParams();
+  const kindFilter = searchParams.get("kind") as AttentionKind | null;
   const [tab, setTab] = useState<AttentionStatus>("needs_action");
   const [items, setItems] = useState<AttentionItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -215,8 +218,18 @@ export default function NeedsReviewClient() {
     loadCounts();
   }
 
+  const visibleItems = kindFilter ? (items ?? []).filter((item) => item.kind === kindFilter) : items;
+
   return (
     <div>
+      {kindFilter && (
+        <p className={styles.mutedText} style={{ marginBottom: 12 }}>
+          Filtered to &ldquo;{KIND_LABEL[kindFilter] ?? kindFilter}&rdquo;.{" "}
+          <Link href="/admin/needs-review" className={styles.linkBtnSmall}>
+            Clear filter
+          </Link>
+        </p>
+      )}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {TABS.map((t) => (
           <button
@@ -239,9 +252,13 @@ export default function NeedsReviewClient() {
             </button>
           </p>
         )}
-        {!loadError && items === null && <p className={styles.mutedText}>Loading…</p>}
-        {!loadError && items && items.length === 0 && <p className={styles.emptyState}>Nothing here.</p>}
-        {!loadError && items && items.map((item) => <Row key={item.id} item={item} onChanged={handleChanged} />)}
+        {!loadError && visibleItems === null && <p className={styles.mutedText}>Loading…</p>}
+        {!loadError && visibleItems && visibleItems.length === 0 && (
+          <p className={styles.emptyState}>Nothing here.</p>
+        )}
+        {!loadError &&
+          visibleItems &&
+          visibleItems.map((item) => <Row key={item.id} item={item} onChanged={handleChanged} />)}
       </div>
     </div>
   );
