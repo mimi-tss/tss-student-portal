@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings now scan + auto-match on a schedule, not just on page load (2026-09-01)
+
+Direct follow-up to today's Recordings investigation — you asked how
+to make it automatic instead of depending on someone opening the
+admin page. It used to only ever run then; today's own incident
+(3 students' recordings sitting unmatched for hours until you
+happened to check) is exactly the real-world cost of that.
+
+New [scan-recordings](app/api/cron/scan-recordings/route.ts) route
+runs the identical scan + name-match + day-match pass the admin
+Recordings page already triggers, plus a
+[GitHub Actions workflow](.github/workflows/scan-recordings.yml)
+calling it every 2 hours — the same pattern this repo already
+established for `kajabi-sync` and `materialize-recurring` (Vercel
+Hobby only allows one project-level cron via `vercel.json`, and that
+slot's already spoken for). Reuses the existing `CRON_SECRET` — no new
+secret to add anywhere. 2 hours, not tighter: Meet's own save-to-Drive
+step has a confirmed multi-hour delay, so anything more frequent would
+just burn Drive/Gemini API calls for nothing. The admin page's own
+on-load scan is untouched — still gives a manual "check right now" on
+top of the background pass.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **Not yet
+running** — GitHub Actions cron schedules only activate once the
+workflow file is on the repo's default branch (this push does that),
+but please confirm you see it firing on schedule (Actions tab →
+"Scan and auto-match Meet recordings") over the next couple hours.
+
 ## Fixed the Recordings page hanging forever on "Loading…" (2026-09-01)
 
 You hit this right after the backlog cleanup above — opened
