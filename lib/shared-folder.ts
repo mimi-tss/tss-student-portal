@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/auth/roles";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -30,7 +31,7 @@ export async function resolveFolderAccess(
     .eq("id", userId)
     .maybeSingle();
 
-  if (profile?.role === "admin") {
+  if (isAdminRole(profile?.role)) {
     return { allowed: true, folderId: student.drive_folder_id };
   }
 
