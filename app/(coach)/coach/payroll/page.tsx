@@ -2,12 +2,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeCoachPayroll } from "@/lib/payroll/calculate";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import PayrollRangePicker from "./payroll-range-picker";
 import styles from "../../coach.module.css";
 
 // Coach's own payroll summary (TSS_App_Spec_1.md section 8). Default
-// view is calendar-month-to-date, same UTC-month convention already used
-// by lib/booking/cancel-session.ts's cap windows — adjustable to any
+// view is calendar-month-to-date, anchored to the studio's own Eastern
+// midnight (not UTC — a UTC month boundary starts 4-5 hours before
+// Eastern midnight, which could silently shift an evening session near
+// the edge of the month into the wrong pay period) — adjustable to any
 // range via PayrollRangePicker, which re-queries app/api/coach/payroll.
 // Accepts ?start=&end= so the dashboard's "new payroll" banner can deep-
 // link straight to the actual generated period (admin generates for the
@@ -33,9 +37,9 @@ export default async function CoachPayrollPage({
     .single();
   if (!coach) redirect("/login");
 
-  const now = new Date();
-  const defaultStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const defaultEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  const [nowYear, nowMonth] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
+  const defaultStart = zonedTimeToUtc(nowYear, nowMonth, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
+  const defaultEnd = zonedTimeToUtc(nowYear, nowMonth + 1, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
   const periodStart = startParam ?? defaultStart;
   const periodEnd = endParam ?? defaultEnd;
 

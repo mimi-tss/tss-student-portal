@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import styles from "../../admin.module.css";
 
 interface Coach {
@@ -87,11 +89,16 @@ function ModalOverlay({ onClose, children }: { onClose: () => void; children: Re
 // Payroll always runs on the 1st for the *previous* full calendar
 // month (e.g. running it Sep 1 reviews Aug 1–31) — not month-to-date,
 // which was the old default before this was a monthly-close workflow.
+// "Today" here is the studio's own Eastern date, not the admin's own
+// browser/OS date — matters right around midnight UTC, when those two
+// can disagree on what "today" even is.
 function previousMonthRange() {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  const [year, month] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const start = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+  const end = `${year}-${String(month).padStart(2, "0")}-01`;
+  return { start, end };
 }
 
 function money(n: number) {
@@ -196,8 +203,17 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [addingAdjustment, setAddingAdjustment] = useState(false);
   const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
 
-  const periodStart = new Date(`${startDate}T00:00:00Z`).toISOString();
-  const periodEnd = new Date(`${endDate}T00:00:00Z`).toISOString();
+  // Eastern midnight, not UTC midnight — a UTC boundary starts 4-5 hours
+  // before the studio's own day actually turns over, which could shift
+  // an evening session near the edge of the range into the wrong period.
+  const periodStart = (() => {
+    const [y, m, d] = startDate.split("-").map(Number);
+    return zonedTimeToUtc(y, m, d, 0, 0, DEFAULT_TIMEZONE).toISOString();
+  })();
+  const periodEnd = (() => {
+    const [y, m, d] = endDate.split("-").map(Number);
+    return zonedTimeToUtc(y, m, d, 0, 0, DEFAULT_TIMEZONE).toISOString();
+  })();
 
   function loadRollup() {
     fetch(`/api/admin/payroll/rollup?start=${periodStart}&end=${periodEnd}`)

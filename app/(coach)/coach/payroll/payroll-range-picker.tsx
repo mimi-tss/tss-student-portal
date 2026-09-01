@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import { zonedTimeToUtc } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import styles from "../../coach.module.css";
 
 interface PayableSession {
@@ -61,8 +63,12 @@ export default function PayrollRangePicker({
 
   async function handleApply() {
     setLoading(true);
-    const startIso = new Date(`${start}T00:00:00Z`).toISOString();
-    const endIso = new Date(`${end}T00:00:00Z`).toISOString();
+    // Eastern midnight, not UTC midnight — a UTC boundary starts 4-5
+    // hours before the studio's own day actually turns over.
+    const [sy, sm, sd] = start.split("-").map(Number);
+    const [ey, em, ed] = end.split("-").map(Number);
+    const startIso = zonedTimeToUtc(sy, sm, sd, 0, 0, DEFAULT_TIMEZONE).toISOString();
+    const endIso = zonedTimeToUtc(ey, em, ed, 0, 0, DEFAULT_TIMEZONE).toISOString();
     const res = await fetch(`/api/coach/payroll?start=${startIso}&end=${endIso}`);
     if (res.ok) {
       const data = await res.json();

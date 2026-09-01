@@ -3,6 +3,58 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Payroll and cancellation-cap period boundaries now anchor to Eastern midnight, not UTC midnight (2026-09-01)
+
+You stated the intended model plainly: payroll (and "everything" like
+it) should be anchored in Eastern Time, while coaches/students can
+*view* their schedule in their own timezone. Checked that against the
+actual code rather than assuming it already held, and found a real gap:
+three places built pay-period/cap-window boundaries from raw UTC
+(`Date.UTC(...)`, `T00:00:00Z`) instead of Eastern.
+
+Since Eastern is UTC-4/UTC-5, a UTC month boundary starts 4-5 hours
+*before* Eastern midnight — proved the concrete consequence with a
+throwaway script before touching anything: a session at 11:30pm Eastern
+on August 31 is already `2026-09-01T03:30Z` in UTC, so the old
+UTC-anchored "August" period (`...T00:00Z` to `...T00:00Z`) excluded it
+entirely — that real August-Eastern session would've been silently
+counted toward September's payroll instead. The Eastern-anchored period
+correctly keeps it in August.
+
+**Fixed, all three, per your go-ahead** (only forward-looking — no
+existing `payroll_entries` rows touched):
+- [finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>) —
+  admin's actual "Generate run" default period (`previousMonthRange`)
+  and the date-picker's `periodStart`/`periodEnd`, which the
+  rollup/generate/export/history calls all already shared as one source,
+  so fixing it here fixed all of them at once.
+- [coach/payroll/page.tsx](<app/(coach)/coach/payroll/page.tsx>) and
+  [payroll-range-picker.tsx](<app/(coach)/coach/payroll/payroll-range-picker.tsx>) —
+  same convention, coach-facing estimate view's default period and
+  date-picker.
+- [cancel-session.ts](lib/booking/cancel-session.ts) — the student
+  monthly/yearly free-cancellation cap window (1/month, 6/year) had the
+  identical UTC-anchored pattern; same fix, same reasoning.
+
+All three now go through the existing `zonedTimeToUtc`/
+`zonedYearMonthDay` helpers (`lib/timezone.ts`) anchored to
+`DEFAULT_TIMEZONE`, the same helpers the earlier coach-calendar
+timezone fix already established — no new date-math approach
+introduced.
+
+This is separate from (and doesn't change) the coach-calendar
+day/week-grouping behavior discussed the same session — that one stays
+per-viewer-zone by your choice; this one is about the underlying
+Eastern-anchored *money* and *cap* boundaries, which were never
+supposed to follow any zone but the studio's own.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **Not verified
+against real production data** — no live login/DB access in this
+environment, so I can't check whether any *already-generated* payroll
+run was actually affected by the old UTC boundary (would need someone
+with DB access to check for coach evening sessions within ~5 hours of a
+month edge in past finalized runs, if that's worth auditing).
+
 ## Fixed: Admin Finance couldn't add/upload to a student's shared folder (2026-08-31)
 
 You hit this live — pasting a Drive link into the Shared Folder panel

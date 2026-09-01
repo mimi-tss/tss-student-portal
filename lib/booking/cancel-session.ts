@@ -1,5 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 const NOTICE_HOURS = 24;
 const CREDIT_EXPIRY_DAYS = 30;
@@ -56,9 +58,13 @@ export async function applyCancellationCredit(
     return { creditGranted: false, creditReinstated: false, creditExpiresAt: null };
   }
 
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
+  // Cap windows are anchored to the studio's own Eastern day/month/year
+  // boundaries, not UTC's — a UTC boundary starts 4-5 hours before
+  // Eastern midnight, which would silently misassign an evening session
+  // near a month or year edge to the wrong cap window.
+  const [nowYear, nowMonth] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
+  const monthStart = zonedTimeToUtc(nowYear, nowMonth, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
+  const yearStart = zonedTimeToUtc(nowYear, 1, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
 
   const [{ count: monthlyCount }, { count: yearlyCount }] = await Promise.all([
     supabase
