@@ -13,6 +13,7 @@ import {
 } from "@/lib/timezone";
 import { resolveWorkingHoursForDate } from "@/lib/scheduling/working-hours";
 import { isHolidayInstant } from "@/lib/scheduling/holidays";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { useTimeZone } from "./timezone-context";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -91,6 +92,36 @@ function toDateKey(d: Date): string {
 function parseDateKey(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+// Midnight for `key`, as a real UTC instant in `timeZone` — unlike
+// parseDateKey (a plain `new Date(y, m-1, d)`, implicitly midnight in
+// the VIEWER's own OS/browser timezone), this is what actually has to
+// bound the server query below. Two viewers on the same day-key can be
+// in genuinely different system timezones; parseDateKey's local
+// midnight silently shifts the UTC boundary sent to the API by however
+// far their OS clock differs from `timeZone`, which can drop real
+// sessions off either edge of the fetched range (caught live: a
+// coach's own late-Saturday sessions missing entirely for one admin
+// account, present for another, both looking at the identical week —
+// their system timezone, not any permission difference, was clipping
+// the query window). parseDateKey itself stays as-is for pure date-key
+// arithmetic (navigation, labels) — that round-trips symmetrically
+// through the same local zone on both ends, so it stays zone-neutral;
+// it's only the one-way conversion to a real instant that needs
+// anchoring to a fixed zone instead of whatever the OS happens to be.
+function parseDateKeyInZone(key: string, timeZone: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return zonedTimeToUtc(y, m, d, 0, 0, timeZone);
+}
+
+// "Today"'s date-key in `timeZone` — same reasoning as
+// parseDateKeyInZone above, just the inverse direction (a real instant,
+// `new Date()`, read back as a Y-M-D key in a fixed zone instead of the
+// viewer's own OS zone).
+function todayKeyInZone(timeZone: string): string {
+  const [y, m, d] = zonedYearMonthDay(new Date(), timeZone);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function addDaysToKey(key: string, delta: number): string {
@@ -214,8 +245,14 @@ export default function CoachCalendar({
   onGroupLessonCancelClick?: (groupLesson: GroupLesson) => void;
 }) {
   const { timeZone: displayTimeZone } = useTimeZone();
+  // Anchors "today"/the fetch window to the grid's own display zone
+  // (Eastern by default for admin, per useTimeZone's own default —
+  // never the viewer's raw OS timezone) rather than to whatever
+  // zone the coach's own record turns out to be in, since that isn't
+  // known until the first fetch resolves.
+  const anchorZone = displayTimeZone || DEFAULT_TIMEZONE;
   const [view, setView] = useState<"day" | "week" | "month">("week");
-  const [anchorKey, setAnchorKey] = useState(() => toDateKey(new Date()));
+  const [anchorKey, setAnchorKey] = useState(() => todayKeyInZone(anchorZone));
   const [data, setData] = useState<ScheduleData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -252,22 +289,22 @@ export default function CoachCalendar({
 
   useEffect(() => {
     setLoading(true);
-    const startDate = parseDateKey(rangeStartKey);
-    const endDate = parseDateKey(addDaysToKey(rangeStartKey, numDays));
+    const startDate = parseDateKeyInZone(rangeStartKey, anchorZone);
+    const endDate = parseDateKeyInZone(addDaysToKey(rangeStartKey, numDays), anchorZone);
     const sep = scheduleEndpoint.includes("?") ? "&" : "?";
     fetch(`${scheduleEndpoint}${sep}start=${startDate.toISOString()}&end=${endDate.toISOString()}`)
       .then((res) => res.json())
       .then(setData)
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleEndpoint, rangeStartKey, numDays, refreshTick, refreshSignal]);
+  }, [scheduleEndpoint, rangeStartKey, numDays, refreshTick, refreshSignal, anchorZone]);
 
   useEffect(() => {
-    const startDate = parseDateKey(rangeStartKey);
-    const endDate = parseDateKey(addDaysToKey(rangeStartKey, numDays));
+    const startDate = parseDateKeyInZone(rangeStartKey, anchorZone);
+    const endDate = parseDateKeyInZone(addDaysToKey(rangeStartKey, numDays), anchorZone);
     onRangeChange?.(startDate, endDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeStartKey, numDays]);
+  }, [rangeStartKey, numDays, anchorZone]);
 
   const coachTimeZone = data?.coach.timezone ?? "America/New_York";
   const gridTimeZone = displayTimeZone ?? coachTimeZone;
@@ -639,7 +676,7 @@ export default function CoachCalendar({
             ←
           </button>
           <button
-            onClick={() => setAnchorKey(toDateKey(new Date()))}
+            onClick={() => setAnchorKey(todayKeyInZone(anchorZone))}
             className="rounded border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]"
           >
             Today

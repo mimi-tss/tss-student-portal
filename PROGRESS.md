@@ -3,6 +3,72 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach schedule grid: found and fixed a real viewer-timezone bug, chasing "Emma sees fewer sessions than admin" (2026-08-31)
+
+Long back-and-forth with you today chasing why two admin-tier accounts
+(Emma/admin_finance, info@/admin) saw different content on the same
+coach's same week — genuinely hard to pin down since it kept looking
+like different things each time you checked (a "Reserved (paused)" vs.
+"Scheduled" rendering gap that resolved on its own, then specific
+sessions/a group lesson missing entirely for one account). Ruled out,
+with real evidence, in order: RLS/role (verified `is_admin()` treats
+admin and admin_finance identically on every relevant table — see the
+"Coach schedule shows less to admin" investigation earlier in this same
+session's history), browser cache (survived incognito + Chrome + Edge),
+and the Kajabi cross-origin iframe (your last test hit
+`portal.tarasimonstudios.com` directly, no iframe involved, and the gap
+was still there).
+
+**What I actually found while digging**: [coach-calendar.tsx](components/coach-calendar.tsx)
+(shared by the coach's own dashboard and every admin coach-schedule
+view) computed the server-bound `start`/`end` query params via
+`new Date(y, m-1, d).toISOString()` — that constructor builds *midnight
+in the browser's own OS/system timezone*, not the studio's Eastern zone
+and not even the app's own "display timezone" selector (which already
+correctly defaults to Eastern for admin — confirmed by reading
+[timezone-context.tsx](components/timezone-context.tsx) directly, that
+part was never the problem). Two viewers with different system
+timezones requesting the identical week get genuinely different UTC
+boundaries sent to the API — real sessions near either edge of the week
+(a late Saturday session is exactly the shape of thing this would
+clip) can silently fall outside one viewer's fetched range while
+sitting fine inside another's, with no error, no auth failure, nothing
+in RLS or the network tab to point at — because the browser itself
+already threw away the "why" the moment it built that Date object one
+way instead of the other.
+
+Fixed: new `parseDateKeyInZone`/`todayKeyInZone` helpers
+(`zonedTimeToUtc`/`zonedYearMonthDay`, already used elsewhere in this
+file for the same class of problem) replace every place a date-key
+became a real server-bound instant — the fetch boundaries, the
+`onRangeChange` report to parent pages (My Schedule's payroll summary,
+the Coaches page's week-range state), and the "Today" button — all now
+anchored to the grid's own display timezone instead of whatever the
+viewer's OS happens to be set to. The pure date-key arithmetic
+(`parseDateKey`, `addDaysToKey`, navigation, labels) is untouched — that
+already round-trips symmetrically through the same local zone on both
+ends, so it was never actually the problem, only the one-way
+conversion to a real instant was.
+
+**Honest caveat**: I can't be certain this is *the* explanation for
+what you and Emma were seeing — this is a real, live, actively-used
+system, and the specific gap (which sessions were missing) seemed to
+shift between your tests in ways that also fit "the underlying data
+itself changed between checks," not just a timezone bug. What I can say
+confidently: this was a genuine bug regardless of whether it's THE
+cause here, worth fixing on its own merits, and it's the kind of bug
+that produces exactly this signature (inconsistent, survives cache-
+clearing, no permission/auth trace) if a viewer's system clock is set
+to a different timezone than the studio's own. **The single fact that
+would confirm or rule this out**: what timezone is Emma's (and info@'s,
+if it's a different machine) computer's system clock actually set to?
+If either is anything other than Eastern, this was very likely it.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration
+needed. Please retest once this deploys — same coach, same week, ideally
+with Emma's system timezone confirmed one way or the other so we know
+whether to keep looking.
+
 ## Admin can now reschedule a session, not just cancel it (2026-08-31)
 
 You pointed at the student detail page's session lists (Next session +
