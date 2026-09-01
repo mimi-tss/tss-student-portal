@@ -1,3 +1,6 @@
+-- (renumbered from an initial 0081 — a concurrent session independently
+-- claimed that number for admin_delete_makeup_credits, already applied)
+--
 -- Every "condition-driven" attention_items upsert in this app targets a
 -- PARTIAL unique index (0062's 6-kind index, 0078's two recording
 -- indexes, 0080's new fifth-week index) via supabase-js's

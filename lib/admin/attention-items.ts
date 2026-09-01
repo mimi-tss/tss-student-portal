@@ -103,7 +103,7 @@ export async function createAttentionItem(
 // per 0035's own header comment. Relies on the partial unique index
 // from migration 0062 (student_id, kind) scoped to just these 6 kinds.
 // Goes through the attention_item_upsert_condition() RPC (migration
-// 0081), not a plain .upsert() — Postgres requires an ON CONFLICT
+// 0082), not a plain .upsert() — Postgres requires an ON CONFLICT
 // clause's WHERE predicate to match a partial index's own predicate
 // exactly, and supabase-js's onConflict option has no way to express
 // that extra WHERE clause, so a direct .upsert() against this index
@@ -334,7 +334,7 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
     }));
 
   // Per-row RPC calls (attention_item_upsert_fifth_week, migration
-  // 0081), run in parallel — same reasoning as createIfNew's own
+  // 0082), run in parallel — same reasoning as createIfNew's own
   // comment above: a plain .upsert() can't match this partial index's
   // WHERE predicate at all. Parallel keeps this close to the single
   // batched round-trip a working .upsert() would have been, rather than
@@ -378,7 +378,7 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
     // Dedups on recording_id, not student_id like createIfNew above — a
     // recording rarely has a known student_id (that's the whole reason
     // it needs review), so it can't use that index. Per-row RPC calls
-    // (attention_item_upsert_recording_unmatched, migration 0081), run
+    // (attention_item_upsert_recording_unmatched, migration 0082), run
     // in parallel — a plain .upsert() can't match this partial index's
     // WHERE predicate at all, same reasoning as createIfNew's own
     // comment above.
@@ -471,7 +471,7 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   // Dedups on session_id, not student_id — a student missing their
   // recording two different weeks are two separate things to review,
   // unlike e.g. "inactive" which is one ongoing condition. Per-row RPC
-  // calls (attention_item_upsert_recording_missing, migration 0081),
+  // calls (attention_item_upsert_recording_missing, migration 0082),
   // run in parallel — a plain .upsert() can't match this partial
   // index's WHERE predicate at all, same reasoning as createIfNew's
   // own comment above.
