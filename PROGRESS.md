@@ -3,6 +3,17 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings picker: filename now opens the file in Drive (2026-09-01)
+
+Small follow-up once the picker was actually loading — you wanted to
+preview a recording before picking its student instead of matching
+blind off the filename/timestamp. Each unmatched item's filename is
+now a link (`https://drive.google.com/file/d/{driveFileId}/view`,
+opens in a new tab) — useful right now for exactly the ambiguous
+same-day-multiple-files case surfaced earlier (Nikki's back-to-back
+students sharing one continuous notes doc). `npx tsc --noEmit -p .`
+and `next build` both clean.
+
 ## Recordings picker: fixed for real by dropping its inline scan (2026-09-01)
 
 You asked "can't I do it in app?" after I kept pointing at Drive as a
