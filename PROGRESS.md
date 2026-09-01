@@ -3,6 +3,32 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## "Inactive" no longer flags a student the moment they're created (2026-08-31)
+
+You flagged this live — the Needs Review queue was flooded with
+"INACTIVE / Never logged in" for dozens of students, because you're
+migrating a batch of real students in starting tomorrow and of course
+none of them have logged in yet. Root cause:
+[attention-items.ts](lib/admin/attention-items.ts)'s inactive check
+flagged a student with no `streak_last_active_date` the instant they
+existed — no grace period at all for "hasn't had a chance to log in
+yet" vs. "went quiet." Confirmed the scale of it directly: 80 of the
+83 active students in the system were created in the last 10 days,
+and all 80 had been flagged.
+
+Fixed: a student with no login yet now gets the same 10-day grace
+period as everyone else, just measured from `created_at` instead of
+`streak_last_active_date`. Cleaned up the 80 existing false-positive
+items directly (service-role delete, same one-off-fix posture as
+earlier data corrections this session) — verified first that all 80
+were genuinely within the grace period and zero were real long-stale
+accounts before removing anything.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified the
+fixed query directly against production before shipping: the old
+query matched 80, the new one matches 0 (correct — no genuinely
+overdue student exists right now).
+
 ## Overview page's "Trial lessons not yet booked" stat card is now clickable (2026-08-31)
 
 You noticed clicking the count on the Studio Overview page did nothing —
