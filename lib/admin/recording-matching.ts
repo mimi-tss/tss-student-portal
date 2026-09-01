@@ -186,12 +186,25 @@ export function findStudentNameInText(text: string, students: StudentForMatching
 // EACH file and confidently (and wrongly) attaches both files to that
 // one known student. A notes doc shared across multiple still-unmatched
 // files is itself the signal that it can't be trusted for any of them.
+// Caps how many recordings one invocation processes — confirmed live
+// this route was hitting an execution ceiling (empty 500 at ~20-26s
+// every time, despite the actual API work measuring only ~5-10s
+// directly) that maxDuration alone didn't fix; parallelizing both
+// passes helped but didn't guarantee headroom against a backlog spike
+// like the one that created this need in the first place. Oldest
+// first, so a bounded per-call budget still sweeps the whole backlog
+// forward across the cron's own repeated 2-hour runs rather than
+// getting stuck reprocessing the same newest items every time.
+const NAME_MATCH_BATCH_SIZE = 15;
+
 export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
   const { data: unmatched } = await admin
     .from("meet_recordings")
     .select("id, coach_id, file_name, drive_created_at")
     .eq("status", "unmatched")
-    .not("coach_id", "is", null);
+    .not("coach_id", "is", null)
+    .order("drive_created_at", { ascending: true })
+    .limit(NAME_MATCH_BATCH_SIZE);
 
   if (!unmatched?.length) return { matched: 0 };
 
