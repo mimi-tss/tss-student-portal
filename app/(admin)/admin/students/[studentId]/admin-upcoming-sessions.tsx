@@ -94,6 +94,7 @@ export default function AdminUpcomingSessions({
               </p>
               <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
                 <AdminCancelButtons
+                  studentId={studentId}
                   sessionId={s.id}
                   scheduledAt={s.scheduled_at}
                   isMakeup={s.is_makeup}

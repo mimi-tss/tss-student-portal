@@ -7,6 +7,7 @@ import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
 import styles from "../../../admin.module.css";
 
 export default function AdminCancelButtons({
+  studentId,
   sessionId,
   scheduledAt,
   isMakeup,
@@ -14,6 +15,7 @@ export default function AdminCancelButtons({
   yearlyCreditsUsed,
   onSuccess,
 }: {
+  studentId: string;
   sessionId: string;
   scheduledAt: string;
   isMakeup: boolean;
@@ -23,6 +25,12 @@ export default function AdminCancelButtons({
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<null | "confirm-regular" | "staff-reason">(null);
+  // "Reschedule" reuses the exact same cancel (credit-issuing, same
+  // notice rule as a student's own cancellation) — the only difference
+  // is where it lands afterward: back on this page vs. straight into
+  // the booking calendar to pick the new time in one motion, rather
+  // than making admin cancel, then separately hunt for "Book a session".
+  const [intent, setIntent] = useState<"cancel" | "reschedule">("cancel");
   const [reason, setReason] = useState("");
   // Defaults to on (the original always-credits behavior). Unchecked for
   // a DNC / non-paying cancellation — the studio's stand-in for
@@ -53,9 +61,15 @@ export default function AdminCancelButtons({
       return;
     }
 
-    setMessage(body.message);
     setMode(null);
     setReason("");
+
+    if (intent === "reschedule") {
+      router.push(`/admin/students/${studentId}/book`);
+      return;
+    }
+
+    setMessage(body.message);
     router.refresh();
     onSuccess?.();
   }
@@ -149,12 +163,13 @@ export default function AdminCancelButtons({
     return (
       <div className={styles.panel} style={{ background: "var(--surface-2)", marginTop: 8, marginBottom: 0, padding: 12 }}>
         <p style={{ marginBottom: 4, fontWeight: 600 }}>
-          Cancel the <FormattedDateTime value={scheduledAt} /> session?
+          {intent === "reschedule" ? "Reschedule" : "Cancel"} the <FormattedDateTime value={scheduledAt} /> session?
         </p>
         <p className={styles.panelText} style={{ marginBottom: 8 }}>
           Cancels exactly like the student&apos;s own self-service cancellation — a session
           credit is issued only with 24+ hours notice, and it counts against their
           monthly/yearly cap.
+          {intent === "reschedule" && " You'll land on the booking page to pick the new time right after."}
         </p>
         {!isMakeup && (
           <p className={styles.mutedText} style={{ marginBottom: 8, fontWeight: 600 }}>
@@ -176,7 +191,7 @@ export default function AdminCancelButtons({
             disabled={loading || !reason.trim()}
             className={styles.dangerBtn}
           >
-            {loading ? "Cancelling…" : "Confirm cancel"}
+            {loading ? "Cancelling…" : intent === "reschedule" ? "Confirm & pick new time" : "Confirm cancel"}
           </button>
           <button
             onClick={() => {
@@ -197,7 +212,22 @@ export default function AdminCancelButtons({
     <div>
       {error && <p className={styles.errorText} style={{ marginBottom: 4 }}>{error}</p>}
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <button onClick={() => setMode("confirm-regular")} className={styles.linkBtnSmall}>
+        <button
+          onClick={() => {
+            setIntent("reschedule");
+            setMode("confirm-regular");
+          }}
+          className={styles.linkBtnSmall}
+        >
+          Reschedule
+        </button>
+        <button
+          onClick={() => {
+            setIntent("cancel");
+            setMode("confirm-regular");
+          }}
+          className={styles.linkBtnSmall}
+        >
           Cancel
         </button>
         <button onClick={() => setMode("staff-reason")} className={styles.dangerLink}>

@@ -1615,6 +1615,7 @@ function CancelSessionPanel({
       </div>
       {caps ? (
         <AdminCancelButtons
+          studentId={studentId}
           sessionId={sessionId}
           scheduledAt={scheduledAt}
           isMakeup={isMakeup}

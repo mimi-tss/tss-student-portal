@@ -406,6 +406,7 @@ export default async function AdminStudentPage({
             <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
               <AdminCancelButtons
                 key={nextSession.id}
+                studentId={student.id}
                 sessionId={nextSession.id}
                 scheduledAt={nextSession.scheduled_at}
                 isMakeup={nextSession.is_makeup}
