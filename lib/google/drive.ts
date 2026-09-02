@@ -315,41 +315,6 @@ export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
 }
 
-// Moves a file from the shared inbox into a student's own Drive
-// folder once a recording is confirmed matched. NOT a plain parent
-// swap (files.update addParents/removeParents) — confirmed live that
-// fails with "The user does not have sufficient permissions for this
-// file" every time, because the inbox lives in the admin account's own
-// My Drive (individually owned) while student folders live inside a
-// Shared Drive. Google's Drive API doesn't allow a straight reparent
-// across that boundary — it would require transferring the file's
-// ownership to the Shared Drive, which a simple addParents/removeParents
-// call can't do — so this copies the file into the student's folder
-// (a copy created directly inside a Shared Drive is natively owned by
-// it, no ownership-transfer restriction), then PERMANENTLY deletes the
-// original from the inbox — not trashed. Copying doesn't dedupe
-// storage: right after the copy, both files count fully against quota,
-// and Workspace trash keeps counting against it too (doesn't free
-// anything until trash is emptied, which doesn't happen on its own for
-// up to 30 days by default) — for real recording-sized video files,
-// leaving the original in trash would double this studio's actual
-// storage usage for a month per recording moved. The copy is already
-// confirmed to exist in the right place before this runs, so there's
-// nothing left worth keeping a recovery window for.
-export async function moveFileToStudentFolder(fileId: string, toFolderId: string): Promise<void> {
-  const drive = getDriveClient();
-  const original = await drive.files.get({ fileId, fields: "name", supportsAllDrives: true });
-  await drive.files.copy({
-    fileId,
-    supportsAllDrives: true,
-    requestBody: {
-      name: original.data.name ?? undefined,
-      parents: [toFolderId],
-    },
-  });
-  await drive.files.delete({ fileId, supportsAllDrives: true });
-}
-
 // A recording's own filename time (parsed separately) tells us when the
 // *meeting* happened; Gemini's notes doc for that same meeting is what
 // actually names the student, so pairing the two is what makes

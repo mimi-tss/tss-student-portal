@@ -1,7 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   listMeetRecordingsInbox,
-  moveFileToStudentFolder,
+  createDriveShortcut,
   findGeminiNotesForRecording,
   exportDocText,
 } from "@/lib/google/drive";
@@ -115,16 +115,25 @@ export async function attachRecordingToStudent(
     return { success: false, error: "that student has no Drive folder set up yet" };
   }
 
-  // Was unguarded — a thrown Drive API error (permissions, a stale
-  // file id, a transient failure) propagated straight up as an
-  // uncaught exception, which the match route also didn't catch,
-  // producing an opaque empty 500 with no error text anywhere. Now
-  // it's a normal, visible failure like every other reason this can
-  // fail.
+  // A shortcut, not a copy or a reparent — confirmed live that a plain
+  // reparent (addParents/removeParents) fails outright ("insufficient
+  // permissions"), since the inbox lives in the admin account's own My
+  // Drive while student folders live in a Shared Drive, and Drive
+  // won't let a reparent cross that boundary without an ownership
+  // transfer. A copy-then-delete works around that too, but doubles
+  // real video-file storage the moment it runs (Workspace trash still
+  // counts against quota until emptied, and even a hard delete means
+  // briefly holding two full copies) — a shortcut costs next to
+  // nothing and needs no ownership change at all, since it's just a
+  // small pointer object created fresh inside the student's folder.
+  // Same createDriveShortcut() the "paste a Drive link" quick-add
+  // already uses. Wrapped in try/catch — was unguarded before,
+  // producing an opaque uncaught-exception 500 with no error text
+  // anywhere on any failure.
   try {
-    await moveFileToStudentFolder(recording.drive_file_id, student.drive_folder_id);
+    await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
   } catch (err) {
-    return { success: false, error: err instanceof Error ? `couldn't move the file: ${err.message}` : "couldn't move the file" };
+    return { success: false, error: err instanceof Error ? `couldn't link the file: ${err.message}` : "couldn't link the file" };
   }
 
   const { error } = await admin
