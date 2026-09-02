@@ -326,9 +326,16 @@ export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
 // ownership to the Shared Drive, which a simple addParents/removeParents
 // call can't do — so this copies the file into the student's folder
 // (a copy created directly inside a Shared Drive is natively owned by
-// it, no ownership-transfer restriction) and then trashes the
-// original from the inbox, rather than leaving both copies around
-// forever.
+// it, no ownership-transfer restriction), then PERMANENTLY deletes the
+// original from the inbox — not trashed. Copying doesn't dedupe
+// storage: right after the copy, both files count fully against quota,
+// and Workspace trash keeps counting against it too (doesn't free
+// anything until trash is emptied, which doesn't happen on its own for
+// up to 30 days by default) — for real recording-sized video files,
+// leaving the original in trash would double this studio's actual
+// storage usage for a month per recording moved. The copy is already
+// confirmed to exist in the right place before this runs, so there's
+// nothing left worth keeping a recovery window for.
 export async function moveFileToStudentFolder(fileId: string, toFolderId: string): Promise<void> {
   const drive = getDriveClient();
   const original = await drive.files.get({ fileId, fields: "name", supportsAllDrives: true });
@@ -340,16 +347,7 @@ export async function moveFileToStudentFolder(fileId: string, toFolderId: string
       parents: [toFolderId],
     },
   });
-  // Trashed (recoverable within Workspace's retention window), not
-  // permanently deleted outright — same reversibility posture as
-  // everything else in this app that removes something real. Trashing
-  // alone is enough to drop it from future inbox scans/listings
-  // (listMeetRecordingsInbox already filters trashed = false).
-  await drive.files.update({
-    fileId,
-    requestBody: { trashed: true },
-    supportsAllDrives: true,
-  });
+  await drive.files.delete({ fileId, supportsAllDrives: true });
 }
 
 // A recording's own filename time (parsed separately) tells us when the
