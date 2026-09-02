@@ -35,6 +35,29 @@ migration needed — pure route logic change, nothing in the data model
 changed. Should stop as soon as this deploys; if you still see new
 emails arriving after that, let me know and I'll dig further.
 
+## Fixed: admin Coaches page roster showing "No coaches yet." (2026-09-02)
+
+You caught this live, screenshot in hand: the day-by-day schedule grid at
+the top of Coaches was rendering real sessions for real coaches fine, but
+the roster table below it said "No coaches yet."
+
+Root cause: [page.tsx](<app/(admin)/admin/coaches/page.tsx>)'s `coaches`
+select included `own_join_suffix` (migration `0084`, a concurrent
+session's own-join-link-suffix feature) and `slack_webhook_url`
+(migration `0083`, this session's notifications work, see entry below) —
+**neither migration is confirmed applied** to the live DB yet. A select
+referencing a column that doesn't exist fails the *entire* query (not
+just those two fields), so `coaches` came back empty and every real coach
+vanished from the roster — while the schedule grid above kept working
+fine, since it's fetched by a completely separate query that never
+touches either column.
+
+Fixed by dropping both columns from the select/mapping until their
+migrations are confirmed — the roster is back, and the two new edit-panel
+fields (own join link extra, Slack webhook URL) will just show empty
+until then. Once **both** 0083 and 0084 are confirmed applied, both
+fields should be added back to this select.
+
 ## Added notifications: student email/SMS/in-app, coach Slack, staff Slack (2026-09-02)
 
 New feature, not a bug fix — the studio had almost no proactive outreach
