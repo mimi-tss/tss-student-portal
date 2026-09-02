@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found and fixed the real cause: recordings can't move into a Shared Drive by reparenting (2026-09-01)
+
+Direct follow-up — once the previous fix made the real error visible,
+it turned out to be: "The user does not have sufficient permissions
+for this file." Confirmed the actual structural cause directly against
+the real files (not guesswork): the shared Meet-recordings inbox and
+every recording in it live in the studio admin account's own **My
+Drive** (individually owned by `info@tarasimonstudios.com`), but
+student folders live inside a **Shared Drive**. Google's Drive API
+doesn't allow a plain reparent (`addParents`/`removeParents`, what
+[moveFileToStudentFolder](lib/google/drive.ts) always did) to move a
+file across that boundary — it would require transferring the file's
+ownership to the Shared Drive, which a simple parent swap can't do,
+regardless of `supportsAllDrives: true` already being set.
+
+Fixed by copying instead of reparenting — a copy created directly
+inside a Shared Drive folder is natively owned by that Shared Drive
+from the start, so it never hits the ownership-transfer restriction.
+The original gets trashed from the inbox afterward (recoverable within
+Workspace's retention window, not a permanent delete — same
+reversibility posture as everything else in this app that removes
+something real). **Verified this actually resolves it** by running
+the real copy against the real failing file
+(`fyj-rnyj-hvq (2026-09-01 10:33 GMT-4)` → Brooke Burns' folder)
+before writing this up — it succeeded — then cleaned up that test
+copy so the real Confirm click does the whole thing cleanly, once.
+
+`npx tsc --noEmit -p .` and `next build` both clean. This should be
+the actual end of today's Recordings saga — please retry Confirm on
+Brooke Burns and Shannon von Driska's recordings now.
+
 ## Fixed "Confirm does nothing" on the Recordings picker (2026-09-01)
 
 You reported Confirm just silently didn't work after picking a
