@@ -31,6 +31,19 @@ const SLOT_MINUTES = 30;
 const DEFAULT_ROW_START_MIN = 7 * 60; // 7:00 AM — only used when nobody visible has any working hours set yet
 const DEFAULT_ROW_END_MIN = 20 * 60; // 8:00 PM
 
+// Same marks components/coach-calendar.tsx already shows on a coach's
+// own schedule — this grid's session cells never had them at all
+// (confirmed: never in this file's history), even though `status` was
+// already right there in the data, just surfaced only in the hover
+// title. Admin scanning a whole day across every coach couldn't tell
+// attended from no-show from scheduled at a glance without hovering
+// each name one at a time.
+const STATUS_LABEL: Record<string, string> = {
+  attended: "✓",
+  "no-show": "✗",
+  "late-forfeit": "L",
+};
+
 interface CoachRow {
   id: string;
   name: string;
@@ -604,13 +617,24 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                     : "var(--text-muted)";
                   const label =
                     state.type === "session" && state.isStart ? (
-                      <Link
-                        href={`/admin/students/${state.session.studentId}`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ color: "inherit", textDecoration: "underline" }}
-                      >
-                        {state.session.studentName}
-                      </Link>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, overflow: "hidden" }}>
+                        <Link
+                          href={`/admin/students/${state.session.studentId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            color: "inherit",
+                            textDecoration: "underline",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {state.session.studentName}
+                        </Link>
+                        {STATUS_LABEL[state.session.status] && (
+                          <span style={{ flexShrink: 0 }}>{STATUS_LABEL[state.session.status]}</span>
+                        )}
+                      </span>
                     )
                     : state.type === "group" && state.isStart ? `${state.groupLesson.topic || "Group"} (${state.groupLesson.attendees.length})`
                     : state.type === "held" && state.isStart ? state.reason

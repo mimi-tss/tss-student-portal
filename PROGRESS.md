@@ -3,6 +3,30 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin's "All coaches" day grid now shows attendance marks (✓/✗/L) on each session (2026-09-02)
+
+You said checkmarks weren't showing on this page anymore. Checked the
+actual history of [all-coaches-day-client.tsx](<app/(admin)/admin/coaches/all-coaches-day-client.tsx>)
+before assuming — this grid never rendered a per-session attendance
+mark, in any commit; only the coach's own schedule
+([coach-calendar.tsx](components/coach-calendar.tsx), "My Schedule")
+has ever had the ✓/✗/L `STATUS_LABEL` treatment. So this wasn't a
+regression to chase, but a real, reasonable gap worth closing either
+way: this admin grid already had each session's `status` in its data
+(used for cancelled/paused/holiday coloring, and mentioned in the hover
+tooltip), just never surfaced as a visible mark — you'd have had to
+hover every single name to tell attended from no-show from
+still-scheduled.
+
+Added the same `STATUS_LABEL` map coach-calendar.tsx already uses, next
+to the student name on a session's start cell — small, low-risk, and
+consistent with the existing pattern rather than inventing a new one.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login (none in this environment) — please confirm the
+marks show up as expected once this deploys, especially that they don't
+crowd out the student name in a narrow day column.
+
 ## Performance pass, part 2: Shared Folder now fetches its own recordings instead of every page load/action paying for it (2026-09-02)
 
 You confirmed the plan flagged in part 1 below — moved
