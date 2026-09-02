@@ -32,10 +32,16 @@ export default async function CoachDashboardPage({
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, name, timezone, meet_link")
+    .select("id, name, timezone, meet_link, own_join_suffix")
     .eq("profile_id", user.id)
     .single();
   if (!coach) redirect("/login");
+
+  // Appended only here, to this coach's own join link — never to
+  // anything a student sees (meet_link itself stays the clean, shared
+  // URL). See migration 0083's own comment for why this can't just go
+  // back into meet_link.
+  const ownMeetLink = coach.meet_link ? `${coach.meet_link}${coach.own_join_suffix ?? ""}` : coach.meet_link;
 
   const timeZone = coach.timezone ?? DEFAULT_TIMEZONE;
 
@@ -109,7 +115,7 @@ export default async function CoachDashboardPage({
     <main className={styles.wrap}>
       <DashboardClient
         coachName={coach.name}
-        meetLink={coach.meet_link}
+        meetLink={ownMeetLink}
         currentProfileId={user.id}
         today={today}
         todayGroupLessons={todayGroupLessons}

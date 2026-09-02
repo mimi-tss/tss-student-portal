@@ -57,6 +57,8 @@ interface CoachRow {
   active: boolean;
   meetLink: string | null;
   driveFolderId: string | null;
+  ownJoinSuffix: string | null;
+  slackWebhookUrl: string | null;
 }
 
 interface Session {
@@ -210,6 +212,8 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
         hiddenFromStudents: boolean;
         meetLink: string | null;
         driveFolderId: string | null;
+        ownJoinSuffix: string | null;
+        slackWebhookUrl: string | null;
         workingHours: Record<string, [string, string][]>;
         pendingEffectiveDate: string | null;
       }
@@ -944,6 +948,8 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                           hiddenFromStudents: c.hiddenFromStudents,
                           meetLink: c.meetLink,
                           driveFolderId: c.driveFolderId,
+                          ownJoinSuffix: c.ownJoinSuffix,
+                          slackWebhookUrl: c.slackWebhookUrl,
                           workingHours: c.workingHours,
                           pendingEffectiveDate: c.pendingEffectiveDate,
                         })
@@ -986,6 +992,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             initialHiddenFromStudents={panel.hiddenFromStudents}
             initialMeetLink={panel.meetLink}
             initialDriveFolderId={panel.driveFolderId}
+            initialOwnJoinSuffix={panel.ownJoinSuffix}
             initialWorkingHours={panel.workingHours}
             pendingEffectiveDate={panel.pendingEffectiveDate}
             onClose={() => setPanel(null)}
@@ -1176,6 +1183,7 @@ function EditCoachPanel({
   initialHiddenFromStudents,
   initialMeetLink,
   initialDriveFolderId,
+  initialOwnJoinSuffix,
   initialWorkingHours,
   pendingEffectiveDate,
   onClose,
@@ -1188,6 +1196,7 @@ function EditCoachPanel({
   initialHiddenFromStudents: boolean;
   initialMeetLink: string | null;
   initialDriveFolderId: string | null;
+  initialOwnJoinSuffix: string | null;
   initialWorkingHours: Record<string, [string, string][]>;
   pendingEffectiveDate: string | null;
   onClose: () => void;
@@ -1199,6 +1208,7 @@ function EditCoachPanel({
   const [hiddenFromStudents, setHiddenFromStudents] = useState(initialHiddenFromStudents);
   const [meetLink, setMeetLink] = useState(initialMeetLink ?? "");
   const [driveFolderId, setDriveFolderId] = useState(initialDriveFolderId ?? "");
+  const [ownJoinSuffix, setOwnJoinSuffix] = useState(initialOwnJoinSuffix ?? "");
   const [hours, setHours] = useState<Record<string, [string, string][]>>(() => {
     const copy: Record<string, [string, string][]> = {};
     for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
@@ -1225,6 +1235,7 @@ function EditCoachPanel({
           timezone,
           hiddenFromStudents,
           driveFolderId: driveFolderId.trim() || null,
+          ownJoinSuffix: ownJoinSuffix.trim() || null,
         }),
       }),
       fetch("/api/admin/coach-links", {
@@ -1295,6 +1306,20 @@ function EditCoachPanel({
         Copy the ID from the coach&apos;s subfolder URL under &quot;TSS Student Drives&quot;
         (drive.google.com/drive/folders/<strong>THIS PART</strong>). Left blank, new students assigned to this coach
         won&apos;t get a Drive folder created at all.
+      </p>
+      <div className={styles.field} style={{ minWidth: 260, marginTop: 10 }}>
+        <label>Own join link extra (optional)</label>
+        <input
+          placeholder="e.g. ?pli=1&authuser=1"
+          value={ownJoinSuffix}
+          onChange={(e) => setOwnJoinSuffix(e.target.value)}
+          className={styles.input}
+        />
+      </div>
+      <p className={styles.mutedText} style={{ marginTop: -6, marginBottom: 10, fontSize: 12 }}>
+        Appended only to THIS coach&apos;s own &quot;Open my meeting room&quot; button — never sent to students, and
+        never saved into the meeting link above. Use this if the coach&apos;s recording isn&apos;t working because
+        her browser opens the room as the wrong signed-in Google account.
       </p>
       <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
         <input

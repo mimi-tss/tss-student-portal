@@ -1,0 +1,21 @@
+-- (renumbered from an initial 0083 — a concurrent session independently
+-- claimed that number for its own notifications migration)
+--
+-- coaches.meet_link is shared broadly — every student's own "Join"
+-- button uses the exact same URL as the coach's — and 0.meet-link.ts's
+-- sanitizeMeetLink() deliberately strips query params like
+-- ?pli=1&authuser=1 on save for exactly that reason: authuser=1 tells
+-- Meet "use the CLICKER's own second Google account", which is
+-- meaningless or actively wrong for a student, not the coach.
+--
+-- But a coach can genuinely need exactly that param when opening her
+-- OWN room, if her browser's default Google account isn't the one
+-- actually granted durable co-host / recording rights on this
+-- persistent room (confirmed live: Nikki's sessions weren't
+-- recording, and the fix was her own browser needing
+-- ?pli=1&authuser=1 specifically). That's personal-to-one-coach's-own-
+-- browser-session data, never meant for students, so it can't just go
+-- back into meet_link — a separate, coach-only field, appended only
+-- to the coach's own "Open my meeting room" link, never to anything a
+-- student sees.
+alter table coaches add column own_join_suffix text;

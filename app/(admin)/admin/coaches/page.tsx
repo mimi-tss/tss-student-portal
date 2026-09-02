@@ -12,7 +12,7 @@ export default async function AdminCoachesPage() {
     supabase
       .from("coaches")
       .select(
-        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id",
+        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id, own_join_suffix, slack_webhook_url",
       )
       .order("name"),
     supabase.from("students").select("assigned_coach_id").not("assigned_coach_id", "is", null),
@@ -37,6 +37,8 @@ export default async function AdminCoachesPage() {
     active: c.active,
     meetLink: c.meet_link as string | null,
     driveFolderId: c.drive_folder_id as string | null,
+    ownJoinSuffix: c.own_join_suffix as string | null,
+    slackWebhookUrl: c.slack_webhook_url as string | null,
   }));
 
   return (
