@@ -3,6 +3,51 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Performance pass, part 2: Shared Folder now fetches its own recordings instead of every page load/action paying for it (2026-09-02)
+
+You confirmed the plan flagged in part 1 below — moved
+[SharedFolderPanel](components/shared-folder-panel.tsx) from taking its
+file list as a server prop (`initialFiles`, computed via
+`listStudentRecordings` — a live Google Drive API call, the slowest
+kind of request this app makes) to fetching it itself on mount, via a
+new [GET /api/shared-folder/list](app/api/shared-folder/list/route.ts)
+(reuses the existing `resolveFolderAccess` helper the upload/shortcut/
+remove routes already share, so access rules can't drift).
+
+Removed the Drive call entirely from all three places it was baked into
+a server render:
+- [admin student-detail page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>) —
+  every Cancel, Reassign coach, Add/Edit/Delete credit, schedule change,
+  and all 8 subscription-lifecycle actions call `router.refresh()`,
+  which was re-running this Drive call every time regardless of whether
+  the action had anything to do with recordings.
+- [student dashboard page.tsx](<app/(student)/student/dashboard/page.tsx>) —
+  same pattern.
+- [coach dashboard](<app/(coach)/coach/dashboard/page.tsx>) — this one
+  was worse: the Drive call was bundled into
+  [/api/coach/student-snapshot](app/api/coach/student-snapshot/route.ts),
+  which fires *every time a coach clicks a different student* in their
+  roster, and *again* every time `refreshAssignedExercises` runs after
+  assigning an exercise (a second redundant fetch of the same snapshot,
+  Drive call included, just to get one updated list) — the exact
+  "action takes a while after clicking" complaint, and the exact same
+  shape of redundant-refetch as the Needs Review fix in part 1.
+
+Net effect: switching students on the coach dashboard, and every
+mutation on the admin student page and student dashboard that
+refreshes, no longer waits on a Drive round-trip they never needed.
+The Shared Folder panel itself now shows its own brief "Loading…" on
+mount instead of being pre-rendered — the one real trade-off, and a
+small one against removing a live external API call from ~15 unrelated
+action buttons' critical path.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Grepped for any
+stale reference to the removed `initialFiles`/`initialFolderFiles`
+props afterward — none left. Not measured against real timing (no live
+login here) — please have a coach click through a few different
+students and confirm it feels snappier, especially right after
+assigning an exercise.
+
 ## Performance pass, part 1: Needs Review was re-running its full sync 4x per page load (2026-09-02)
 
 You asked generally how to make the app faster. Started auditing —

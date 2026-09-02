@@ -21,12 +21,6 @@ const TIER_LABEL: Record<string, string> = {
   elite: "Elite",
 };
 
-interface FolderFile {
-  id: string;
-  name: string;
-  webViewLink?: string | null;
-  isShortcut?: boolean;
-}
 interface AssignedExercise {
   id: string;
   exerciseId: string | null;
@@ -90,7 +84,6 @@ export default function DashboardClient({
   catalog,
   initialStudentId,
   initialSnapshot,
-  initialFolderFiles,
   initialAssignedExercises,
   initialDriveFolderId,
   newPayroll,
@@ -105,7 +98,6 @@ export default function DashboardClient({
   catalog: { id: string; title: string }[];
   initialStudentId: string | null;
   initialSnapshot: StudentSnapshot | null;
-  initialFolderFiles: FolderFile[];
   initialAssignedExercises: AssignedExercise[];
   initialDriveFolderId: string | null;
   newPayroll: { total: number; count: number; periodStart: string; periodEnd: string } | null;
@@ -118,7 +110,6 @@ export default function DashboardClient({
   const [selectedId, setSelectedId] = useState(initialStudentId);
   const [selectedGroupLessonId, setSelectedGroupLessonId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState(initialSnapshot);
-  const [folderFiles, setFolderFiles] = useState(initialFolderFiles);
   const [driveFolderId, setDriveFolderId] = useState(initialDriveFolderId);
   const [assignedExercises, setAssignedExercises] = useState(initialAssignedExercises);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
@@ -136,7 +127,6 @@ export default function DashboardClient({
         .then((res) => res.json())
         .then((data) => {
           setSnapshot(data.snapshot ?? null);
-          setFolderFiles(data.folderFiles ?? []);
           setDriveFolderId(data.driveFolderId ?? null);
           setAssignedExercises(data.assignedExercises ?? []);
         })
@@ -560,7 +550,7 @@ export default function DashboardClient({
               <div className={styles.panel}>
                 <h2>Shared Folder</h2>
                 {driveFolderId ? (
-                  <SharedFolderPanel studentId={snapshot.id} initialFiles={folderFiles} />
+                  <SharedFolderPanel studentId={snapshot.id} />
                 ) : (
                   <p className={styles.panelText}>No shared folder yet for this student.</p>
                 )}

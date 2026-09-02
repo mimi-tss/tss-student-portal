@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
 import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
 import { renewalInfo } from "@/lib/billing/renewal";
@@ -148,8 +147,7 @@ export default async function StudentDashboardPage() {
 
   const spotlightNote = spotlightNotes?.[0] ?? null;
 
-  const [recordings, assignedExercises, upcomingGroupLessons] = await Promise.all([
-    student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
+  const [assignedExercises, upcomingGroupLessons] = await Promise.all([
     listAssignedExercises(supabase, student.id),
     getStudentUpcomingGroupLessons(supabase, student.id),
   ]);
@@ -344,7 +342,7 @@ export default async function StudentDashboardPage() {
         <h2>Shared folder</h2>
       </div>
       {student.drive_folder_id ? (
-        <SharedFolderPanel studentId={student.id} initialFiles={recordings} />
+        <SharedFolderPanel studentId={student.id} />
       ) : (
         <p className={styles.panelText}>
           Your shared folder will appear here once your coach records a session.

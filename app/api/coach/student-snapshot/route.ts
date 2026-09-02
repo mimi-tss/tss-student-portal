@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStudentSnapshot } from "@/lib/coach/dashboard-data";
-import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
 
 // Lazy per-student fetch for the coach dashboard's detail panel — called
 // when the coach selects a different student, rather than preloading
-// every student's snapshot/notes/folder up front.
+// every student's snapshot/notes up front. driveFolderId is just the
+// student's drive_folder_id column, not a Drive API call — the shared
+// folder's actual file listing is fetched separately by
+// SharedFolderPanel itself (GET /api/shared-folder/list), not bundled
+// in here, so switching students doesn't pay for a Drive round-trip it
+// doesn't need.
 export async function GET(req: NextRequest) {
   const studentId = req.nextUrl.searchParams.get("studentId");
   if (!studentId) return NextResponse.json({ error: "studentId required" }, { status: 400 });
@@ -37,15 +41,11 @@ export async function GET(req: NextRequest) {
     .eq("id", studentId)
     .maybeSingle();
 
-  const [folderFiles, assignedExercises] = await Promise.all([
-    student?.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
-    listAssignedExercises(supabase, studentId),
-  ]);
+  const assignedExercises = await listAssignedExercises(supabase, studentId);
 
   return NextResponse.json({
     snapshot,
     driveFolderId: student?.drive_folder_id ?? null,
-    folderFiles,
     assignedExercises,
   });
 }

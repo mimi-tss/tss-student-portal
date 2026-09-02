@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface DriveFile {
   id: string;
@@ -21,19 +21,34 @@ type PendingAction = null | "link";
 // download link is exposed by this UI; Drive's own copy/download
 // affordances are additionally disabled server-side on upload/shortcut
 // creation (copyRequiresWriterPermission), best-effort not airtight.
-export default function SharedFolderPanel({
-  studentId,
-  initialFiles,
-}: {
-  studentId: string;
-  initialFiles: DriveFile[];
-}) {
-  const [files, setFiles] = useState(initialFiles);
+//
+// Fetches its own file list on mount rather than taking it as a server
+// prop — this used to be `initialFiles`, computed server-side via
+// listStudentRecordings (a live Drive API call, the slowest thing this
+// app does) on every page that renders this panel. That meant every
+// unrelated action on those pages (Cancel, Add credit, assign an
+// exercise, switching which student a coach has selected, ...) paid for
+// a Drive round-trip it didn't need, every time it triggered a
+// server-side refresh/refetch. Self-fetching here means only this panel
+// pays that cost, once, on its own.
+export default function SharedFolderPanel({ studentId }: { studentId: string }) {
+  const [files, setFiles] = useState<DriveFile[]>([]);
+  const [loading, setLoading] = useState(true);
   const [driveLink, setDriveLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/shared-folder/list?studentId=${studentId}`)
+      .then((res) => res.json())
+      .then((data) => setFiles(data.files ?? []))
+      .catch(() => setError("Couldn't load the shared folder."))
+      .finally(() => setLoading(false));
+  }, [studentId]);
 
   async function refreshAfter(action: () => Promise<Response>) {
     setBusy(true);
@@ -142,7 +157,9 @@ export default function SharedFolderPanel({
 
       {error && <p className="px-5 pt-2 text-xs text-[var(--coral)]">{error}</p>}
 
-      {files.length === 0 ? (
+      {loading ? (
+        <p className="p-5 text-sm text-[var(--text-muted)]">Loading…</p>
+      ) : files.length === 0 ? (
         <p className="p-5 text-sm text-[var(--text-muted)]">Nothing shared yet.</p>
       ) : (
         <div className="max-h-[270px] overflow-y-auto p-2">

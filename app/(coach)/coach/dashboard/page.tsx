@@ -9,7 +9,6 @@ import {
   getBirthdaysThisWeek,
   getStudentSnapshot,
 } from "@/lib/coach/dashboard-data";
-import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
 import DashboardClient from "./dashboard-client";
 import styles from "../../coach.module.css";
@@ -89,7 +88,6 @@ export default async function CoachDashboardPage({
     null;
 
   let initialSnapshot = null;
-  let initialFolderFiles: Awaited<ReturnType<typeof listStudentRecordings>> = [];
   let initialAssignedExercises: Awaited<ReturnType<typeof listAssignedExercises>> = [];
   let initialDriveFolderId: string | null = null;
 
@@ -101,9 +99,8 @@ export default async function CoachDashboardPage({
       .maybeSingle();
     initialDriveFolderId = studentRow?.drive_folder_id ?? null;
 
-    [initialSnapshot, initialFolderFiles, initialAssignedExercises] = await Promise.all([
+    [initialSnapshot, initialAssignedExercises] = await Promise.all([
       getStudentSnapshot(supabase, coach.id, defaultStudentId),
-      initialDriveFolderId ? listStudentRecordings(initialDriveFolderId) : Promise.resolve([]),
       listAssignedExercises(supabase, defaultStudentId),
     ]);
   }
@@ -122,7 +119,6 @@ export default async function CoachDashboardPage({
         catalog={catalog.data ?? []}
         initialStudentId={defaultStudentId}
         initialSnapshot={initialSnapshot}
-        initialFolderFiles={initialFolderFiles}
         initialAssignedExercises={initialAssignedExercises}
         initialDriveFolderId={initialDriveFolderId}
       />

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listStudentRecordings } from "@/lib/google/drive";
 import { listAssignedExercises } from "@/lib/exercises";
 import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
 import { formatTenure, formatPlainDate } from "@/lib/format-date";
@@ -162,8 +161,7 @@ export default async function AdminStudentPage({
       .maybeSingle(),
   ]);
 
-  const [recordings, exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
-    student.drive_folder_id ? listStudentRecordings(student.drive_folder_id) : Promise.resolve([]),
+  const [exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
     supabase.from("exercises").select("id, title").eq("active", true).order("title"),
     listAssignedExercises(supabase, student.id),
     getStudentUpcomingGroupLessons(supabase, student.id),
@@ -503,7 +501,7 @@ export default async function AdminStudentPage({
       <div className={styles.panel}>
         <h2>Shared folder</h2>
         {student.drive_folder_id ? (
-          <SharedFolderPanel studentId={student.id} initialFiles={recordings} />
+          <SharedFolderPanel studentId={student.id} />
         ) : (
           <p className={styles.mutedText}>No shared folder yet for this student.</p>
         )}
