@@ -993,6 +993,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
             initialMeetLink={panel.meetLink}
             initialDriveFolderId={panel.driveFolderId}
             initialOwnJoinSuffix={panel.ownJoinSuffix}
+            initialSlackWebhookUrl={panel.slackWebhookUrl}
             initialWorkingHours={panel.workingHours}
             pendingEffectiveDate={panel.pendingEffectiveDate}
             onClose={() => setPanel(null)}
@@ -1184,6 +1185,7 @@ function EditCoachPanel({
   initialMeetLink,
   initialDriveFolderId,
   initialOwnJoinSuffix,
+  initialSlackWebhookUrl,
   initialWorkingHours,
   pendingEffectiveDate,
   onClose,
@@ -1197,6 +1199,7 @@ function EditCoachPanel({
   initialMeetLink: string | null;
   initialDriveFolderId: string | null;
   initialOwnJoinSuffix: string | null;
+  initialSlackWebhookUrl: string | null;
   initialWorkingHours: Record<string, [string, string][]>;
   pendingEffectiveDate: string | null;
   onClose: () => void;
@@ -1209,6 +1212,7 @@ function EditCoachPanel({
   const [meetLink, setMeetLink] = useState(initialMeetLink ?? "");
   const [driveFolderId, setDriveFolderId] = useState(initialDriveFolderId ?? "");
   const [ownJoinSuffix, setOwnJoinSuffix] = useState(initialOwnJoinSuffix ?? "");
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState(initialSlackWebhookUrl ?? "");
   const [hours, setHours] = useState<Record<string, [string, string][]>>(() => {
     const copy: Record<string, [string, string][]> = {};
     for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
@@ -1224,7 +1228,7 @@ function EditCoachPanel({
     }
     setSaving(true);
     setError(null);
-    const [infoRes, linksRes, hoursRes] = await Promise.all([
+    const [infoRes, linksRes, slackRes, hoursRes] = await Promise.all([
       fetch("/api/admin/coach-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1243,6 +1247,11 @@ function EditCoachPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coachId, meetLink: meetLink.trim() || null }),
       }),
+      fetch("/api/admin/coach-slack-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coachId, slackWebhookUrl: slackWebhookUrl.trim() || null }),
+      }),
       fetch("/api/admin/coach-working-hours", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1250,7 +1259,7 @@ function EditCoachPanel({
       }),
     ]);
     setSaving(false);
-    const failed = [infoRes, linksRes, hoursRes].find((r) => !r.ok);
+    const failed = [infoRes, linksRes, slackRes, hoursRes].find((r) => !r.ok);
     if (failed) {
       const body = await failed.json().catch(() => ({}));
       setError(body.error ?? "Could not save that coach.");
@@ -1320,6 +1329,20 @@ function EditCoachPanel({
         Appended only to THIS coach&apos;s own &quot;Open my meeting room&quot; button — never sent to students, and
         never saved into the meeting link above. Use this if the coach&apos;s recording isn&apos;t working because
         her browser opens the room as the wrong signed-in Google account.
+      </p>
+      <div className={styles.field} style={{ minWidth: 260, marginTop: 10 }}>
+        <label>Slack webhook URL (optional)</label>
+        <input
+          type="url"
+          placeholder="https://hooks.slack.com/services/…"
+          value={slackWebhookUrl}
+          onChange={(e) => setSlackWebhookUrl(e.target.value)}
+          className={styles.input}
+        />
+      </div>
+      <p className={styles.mutedText} style={{ marginTop: -6, marginBottom: 10, fontSize: 12 }}>
+        This coach&apos;s own Slack channel — their session-starting-soon and recording-ready pings post here. Left
+        blank, this coach simply gets no Slack notifications (never falls back to the shared staff channel).
       </p>
       <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
         <input

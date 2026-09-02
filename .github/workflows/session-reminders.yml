@@ -1,0 +1,21 @@
+name: Session reminders
+
+# Session-starting-soon and 24hr-before reminders, checked every 10
+# minutes (matches the window width in app/api/cron/session-reminders —
+# see that route's own comment). Runs via GitHub Actions rather than
+# Vercel Cron for the same reason as kajabi-sync — see that workflow's
+# comment.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call session-reminders endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/session-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

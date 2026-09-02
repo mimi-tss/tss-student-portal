@@ -1,0 +1,21 @@
+name: Makeup credit nudges
+
+# Daily nudge for a student with an unused, unscheduled makeup credit
+# (any type, any expiry — see lib/makeup-credits/unscheduled.ts for how
+# this differs from the existing expiry-gated credit_expiring flow).
+# Runs via GitHub Actions for the same reason as kajabi-sync — see that
+# workflow's comment.
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # 13:00 UTC daily (~9am ET)
+  workflow_dispatch: {}
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call makeup-nudges endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/makeup-nudges" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

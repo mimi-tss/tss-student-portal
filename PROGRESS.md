@@ -3,6 +3,72 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added notifications: student email/SMS/in-app, coach Slack, staff Slack (2026-09-02)
+
+New feature, not a bug fix — the studio had almost no proactive outreach
+(magic-link/login emails only, plus two manual admin "nudge" buttons for
+trial-unbooked/credit-expiring). This closes that gap with automated
+notifications split by audience, worked out over a long back-and-forth
+this session on cost, GHL vs. native, and channel design:
+
+- **Students** get email/SMS/in-app, with **two independently-toggleable
+  preference groups** (self-service, on their dashboard): "digest"
+  (weekly summary) and "alerts" (session-starting-soon, 24hr reminder,
+  recording-ready, unscheduled-makeup-credit nudge). Email+SMS route
+  through a **GHL webhook** (`GHL_WEBHOOK_URL`,
+  [lib/ghl/notify.ts](lib/ghl/notify.ts)) rather than Resend — GHL is
+  already the studio's primary comms platform (marketing/nurture/SMS),
+  and its usage-based cost at this volume (~$0.675/1000 emails,
+  ~$0.011-0.013/SMS segment) is trivial versus forcing Resend onto a
+  paid tier. **The GHL side (workflow(s) that actually consume this
+  webhook payload) still needs to be built in GHL's own dashboard** —
+  this app's side fires `{event, studentId, email, phone, channels,
+  data}` but nothing reaches a student until a matching GHL workflow
+  exists. In-app notifications are fully native (new `notifications`
+  table, bell icon in the student header,
+  [components/notification-bell.tsx](components/notification-bell.tsx)) —
+  refresh-on-load, no realtime, since GHL can't write into this app and
+  this codebase has no websocket usage anywhere else.
+- **Coaches** get Slack only, to their own individual channel —
+  `coaches.slack_webhook_url`, admin-settable per coach (Coaches → Edit
+  → "Slack webhook URL"). Deliberately does NOT fall back to the shared
+  staff channel when unset — a coach with no webhook configured just
+  gets no Slack pings, rather than an unconfigured coach's personal
+  notifications landing somewhere wrong.
+- **Staff/admin** get Slack only, the existing shared `SLACK_WEBHOOK_URL`
+  channel — a weekly ops summary (sessions this week, Needs Review
+  backlog) and a real-time "recording needs manual review" ping (this
+  used to be a silent Needs Review row nobody got pinged about).
+- New `notification_log` table is this app's first delivery/audit log of
+  any kind — dedups every automated send (any channel, any recipient)
+  so a cron re-run or overlapping window can never double-send. Its
+  unique index is plain (not partial), so unlike `attention_items`
+  (0082's fix) this needed no RPC — a caught Postgres `23505` on insert
+  is enough.
+- Considered and explicitly ruled out Kajabi's own in-app push
+  notifications (you asked): confirmed via Kajabi's help docs and public
+  API repo that push notifications there are admin-composed broadcasts
+  from Kajabi's own dashboard only — no send API exists — so it was
+  never a real option here.
+
+**New cron routes** (GitHub Actions + `CRON_SECRET`, same pattern as
+`kajabi-sync`/`materialize-recurring`/`scan-recordings`): `session-reminders`
+(every 10 min), `makeup-nudges` (daily ~9am ET), `weekly-digest` (Monday
+~8am ET, also does the coach + staff sends). `scan-recordings` gained the
+recording-needs-manual-review Slack ping inline; `attachRecordingToStudent`
+([lib/admin/recording-matching.ts](lib/admin/recording-matching.ts)) gained
+the recording-ready student+coach notification.
+
+Verified via `npx tsc --noEmit -p .` and `next build` (both clean) and by
+tracing the dedup/preference logic against the schema — no live login/DB
+in this environment, so none of this was click-tested. Also worth
+flagging: partway through this build, a concurrent session's own commit
+(`285a0c8`, coach-own-join-link-suffix) swept up my then-uncommitted edit
+to `app/(admin)/admin/coaches/page.tsx` (the `slack_webhook_url` column
+addition to that page's select/mapping) — the content is correct and
+already live on `origin/main`, just filed under an unrelated commit
+message. Nothing lost, just noting it for the record.
+
 ## Coach-only join-link suffix, to fix Nikki's sessions not recording (2026-09-02)
 
 You reported Nikki's sessions aren't recording, and she says her own
@@ -4247,6 +4313,18 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0083 not yet confirmed applied** —
+`0083_notifications.sql` adds the 6 `notify_*` preference columns on
+`students`, `coaches.slack_webhook_url`, and the new `notifications` /
+`notification_log` tables (see entry above). Also needed before any of
+this actually reaches a student: `GHL_WEBHOOK_URL` set in Vercel env vars,
+and a GHL workflow built to consume that webhook's payload — the app side
+is done, the GHL side is a separate, manual step. Once the migration is
+confirmed, the 4 new GitHub Actions secrets/workflows
+(`session-reminders`, `makeup-nudges`, `weekly-digest`, plus the
+`scan-recordings` change) start running on their existing schedules
+automatically — nothing else to flip on.
 
 **New migration 0084 not yet confirmed applied** —
 `0084_coach_own_join_suffix.sql` (renumbered from an initial 0083 — a

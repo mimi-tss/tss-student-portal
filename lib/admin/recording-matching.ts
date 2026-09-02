@@ -7,6 +7,7 @@ import {
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
+import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
 
 interface CoachForMatching {
   id: string;
@@ -102,7 +103,7 @@ export async function attachRecordingToStudent(
 ): Promise<{ success: boolean; error?: string }> {
   const { data: recording } = await admin
     .from("meet_recordings")
-    .select("drive_file_id, status")
+    .select("drive_file_id, status, coach_id")
     .eq("id", recordingId)
     .single();
 
@@ -110,7 +111,11 @@ export async function attachRecordingToStudent(
     return { success: false, error: "recording not found or already resolved" };
   }
 
-  const { data: student } = await admin.from("students").select("drive_folder_id").eq("id", studentId).single();
+  const { data: student } = await admin
+    .from("students")
+    .select("drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
+    .eq("id", studentId)
+    .single();
   if (!student?.drive_folder_id) {
     return { success: false, error: "that student has no Drive folder set up yet" };
   }
@@ -149,6 +154,32 @@ export async function attachRecordingToStudent(
 
   if (error) return { success: false, error: error.message };
   await resolveAttentionItemsForRecording(admin, recordingId);
+
+  await notifyStudent(admin, {
+    studentId,
+    email: student.email,
+    phone: student.phone,
+    group: "alerts",
+    kind: "recording_ready",
+    dedupKey: `student:${studentId}:recording_ready:${recordingId}`,
+    title: "Your recording is ready",
+    body: "Your session recording has been added to your shared folder.",
+    linkUrl: "/student/dashboard",
+    ghlData: { recordingId },
+    channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+  });
+
+  if (recording.coach_id) {
+    const { data: coach } = await admin.from("coaches").select("slack_webhook_url").eq("id", recording.coach_id).maybeSingle();
+    await notifyCoach(admin, {
+      coachId: recording.coach_id,
+      coachSlackWebhookUrl: coach?.slack_webhook_url ?? null,
+      kind: "recording_ready",
+      dedupKey: `coach:${recording.coach_id}:recording_ready:${recordingId}`,
+      text: "A recording was matched and moved to a student's folder.",
+    });
+  }
+
   return { success: true };
 }
 
