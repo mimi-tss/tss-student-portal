@@ -3,6 +3,57 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Investigated: an assigned exercise wasn't playing for a student — 2 real risks fixed, root cause still unconfirmed (2026-09-01)
+
+You reported a coach assigned an exercise and it wouldn't play for the
+student. Traced the whole delivery path — assign
+([exercises.ts](lib/exercises.ts)) → the streaming proxy
+([app/api/exercises/[id]/audio](<app/api/exercises/[id]/audio/route.ts>))
+→ Google Drive ([lib/google/drive.ts](lib/google/drive.ts)) → the
+player ([exercise-player.tsx](components/exercise-player.tsx)) — since
+this environment has no live login to reproduce it directly.
+
+**Couldn't confirm the actual root cause** — the player gave zero
+feedback on failure (silently did nothing), so there was no error, no
+status code, nothing to trace against. Found two real, concrete risks
+along the way and fixed both regardless of which (if either) is the
+actual cause here:
+
+- **No execution-time budget on the one route that proxies real file
+  bytes.** Every other Drive-touching route in this app only fetches
+  metadata and explicitly sets `maxDuration = 60`
+  (`meet-recordings/rescan`, `scan-recordings`, etc.) — this is the only
+  route that streams an actual file's full bytes through the function,
+  which counts the whole transfer against execution time, not just
+  setup, and it had no override at all (platform default). A longer
+  exercise recording could plausibly get cut off mid-stream. Added the
+  same `maxDuration = 60` here too.
+- **The player swallowed every failure silently.** Added an `onError`
+  handler to [ExercisePlayer](components/exercise-player.tsx) that
+  re-fetches the same URL to surface the real HTTP status (403 = not
+  actually assigned this one; 404/500 = the underlying Drive file is
+  missing or the proxy failed) as a visible message under the controls,
+  instead of a player that just does nothing when clicked. This is also
+  what makes the actual cause diagnosable going forward — next time this
+  happens, whatever message shows up there is the real answer.
+
+**One more risk, flagged but not touched — a data/workflow gap, not a
+code bug**: the exercise catalog is managed by hand-editing a shared
+Drive folder, matched by Drive file id
+([syncExercisesFromDrive](lib/exercises.ts)). If the studio ever
+deletes-and-re-uploads a file with the same name (a natural way to
+"replace" a recording), Drive assigns it a *new* file id — the sync
+correctly adds the new one and deactivates the old, but any assignment
+made *before* the swap still points at the old, now-dead Drive file id,
+which would 404 forever. Worth checking if that's what happened here:
+does this specific exercise still show as active/available in the
+assign picker, or does the assign picker for this exercise's title show
+a *different* one from what's actually assigned to this student?
+
+`npx tsc --noEmit -p .` and `next build` both clean. Genuinely
+unconfirmed — please have the student try again once this deploys; if
+it still fails, the message under the player now says why.
+
 ## Found and fixed the real cause: recordings can't move into a Shared Drive by reparenting (2026-09-01)
 
 Direct follow-up — once the previous fix made the real error visible,

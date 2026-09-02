@@ -35,6 +35,7 @@ export default function ExercisePlayer({ src }: { src: string }) {
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(100);
   const [volume, setVolume] = useState(100);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
   // Popovers render position: fixed, computed from the trigger button's
   // on-screen position — the exercise list's rounded-corner container
@@ -98,6 +99,26 @@ export default function ExercisePlayer({ src }: { src: string }) {
     }
   }
 
+  // The <audio> element's own error event carries no HTTP status — a
+  // student reporting "it just doesn't play" previously had nothing more
+  // specific to go on, and neither did whoever they told. A plain fetch
+  // of the same same-origin, cookie-authed URL surfaces the actual
+  // status (403 = not really assigned this one, 404/500 = the Drive
+  // file behind it is missing or the streaming proxy failed) right in
+  // the player instead of requiring anyone to open devtools.
+  async function handleAudioError() {
+    try {
+      const res = await fetch(src);
+      setPlaybackError(
+        res.ok
+          ? "Couldn't play this recording — try reloading the page."
+          : `Couldn't play this recording (error ${res.status}). Let your coach or admin know.`,
+      );
+    } catch {
+      setPlaybackError("Couldn't play this recording — check your connection and try again.");
+    }
+  }
+
   function handleSeek(value: number) {
     setCurrentTime(value);
     if (audioRef.current) audioRef.current.currentTime = value;
@@ -118,11 +139,15 @@ export default function ExercisePlayer({ src }: { src: string }) {
       <audio
         ref={audioRef}
         src={src}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          setPlaybackError(null);
+        }}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onError={handleAudioError}
       />
       <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5">
         <button
@@ -194,6 +219,7 @@ export default function ExercisePlayer({ src }: { src: string }) {
           {speed / 100}×
         </button>
       </div>
+      {playbackError && <p className="mt-1 text-xs text-[var(--coral)]">{playbackError}</p>}
       {openPopover === "speed" && (
         <div
           className="fixed z-10 flex w-48 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 shadow-lg"
