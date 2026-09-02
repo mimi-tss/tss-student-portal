@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed a real, active email loop hitting a real student's inbox (2026-09-02)
+
+You flagged this live — Krtistel Herrera's inbox stuck getting a
+fresh "verification code"/"portal link" email roughly every 15-25
+minutes, indefinitely, from the moment she was provisioned. Traced it
+to a real, well-known class of bug, not anything Kajabi- or
+data-related — checked her actual student/audit records first and
+confirmed there was no repeated real activity on her account, ruling
+that out.
+
+Root cause: `GET /api/auth/kajabi/login` (the link emailed for the
+student portal) consumed the one-time token AND — per
+`issueAndSendLoginLink`'s own "rotate on use" comment — immediately
+minted and emailed a fresh replacement, on *every single hit*, with
+no way to tell a real click from an automated one. Many email
+providers and corporate mail-security scanners automatically fetch
+every link inside an incoming email to check for phishing, before a
+human ever opens it. That GET request alone was enough to consume the
+link and trigger sending a new one — which then got scanned too. Fully
+self-sustaining, no human involved anywhere in the loop.
+
+Fix: GET now only ever renders a static confirmation page (an "Open my
+portal" button) — nothing stateful happens on GET at all anymore. The
+actual token consumption, session creation, and rotate-and-resend
+moved to a new POST handler that only fires from a real click
+submitting that form. An automated scanner fetches the GET page's
+HTML; it has no reason to submit a form, so it can't trigger the loop
+anymore. `npx tsc --noEmit -p .` and `next build` both clean. No
+migration needed — pure route logic change, nothing in the data model
+changed. Should stop as soon as this deploys; if you still see new
+emails arriving after that, let me know and I'll dig further.
+
 ## Added notifications: student email/SMS/in-app, coach Slack, staff Slack (2026-09-02)
 
 New feature, not a bug fix — the studio had almost no proactive outreach
