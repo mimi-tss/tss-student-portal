@@ -3,6 +3,30 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Dropped coach recording-ready Slack ping; confirmed chat/booking pings already show student+content (2026-09-02)
+
+After live-testing the coach Slack webhook (fired a real test message to
+Coach Celine's channel, confirmed delivered), you decided the
+recording-ready ping would be annoying and asked for it gone. Removed
+the coach-facing `notifyCoach` call from
+[attachRecordingToStudent](lib/admin/recording-matching.ts) — the
+student-facing recording-ready notification (email/SMS/in-app) is
+untouched, this only drops the coach's Slack copy.
+
+You also asked that chat notifications preview which student messaged,
+and that booking/cancellation pings show the student and the date/time —
+both were already built that way from the start (nothing to change):
+chat reads `"New message from {student name}: \"{preview}\""`
+([app/api/chat/messages/route.ts](app/api/chat/messages/route.ts)), and
+booking/cancel reads `"New session booked: {student name} at {date},
+{time}"` / `"Session cancelled: ..."`
+([lib/notifications/session-events.ts](lib/notifications/session-events.ts),
+via `formatDateTimeInZone`).
+
+Final coach Slack notification set: booked / cancelled (covers
+reschedule as its natural cancel+book pair) / chat message. No recording,
+no reminders, no weekly digest.
+
 ## Narrowed coach Slack notifications to booked/cancelled/rescheduled + chat + recording-ready (2026-09-02)
 
 You cut the coach notification list down after seeing the full set —

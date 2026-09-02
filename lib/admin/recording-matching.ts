@@ -7,7 +7,7 @@ import {
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
-import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
+import { notifyStudent } from "@/lib/notifications/create";
 
 interface CoachForMatching {
   id: string;
@@ -103,7 +103,7 @@ export async function attachRecordingToStudent(
 ): Promise<{ success: boolean; error?: string }> {
   const { data: recording } = await admin
     .from("meet_recordings")
-    .select("drive_file_id, status, coach_id")
+    .select("drive_file_id, status")
     .eq("id", recordingId)
     .single();
 
@@ -168,17 +168,6 @@ export async function attachRecordingToStudent(
     ghlData: { recordingId },
     channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
   });
-
-  if (recording.coach_id) {
-    const { data: coach } = await admin.from("coaches").select("slack_webhook_url").eq("id", recording.coach_id).maybeSingle();
-    await notifyCoach(admin, {
-      coachId: recording.coach_id,
-      coachSlackWebhookUrl: coach?.slack_webhook_url ?? null,
-      kind: "recording_ready",
-      dedupKey: `coach:${recording.coach_id}:recording_ready:${recordingId}`,
-      text: "A recording was matched and moved to a student's folder.",
-    });
-  }
 
   return { success: true };
 }
