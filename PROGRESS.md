@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Performance pass, part 1: Needs Review was re-running its full sync 4x per page load (2026-09-02)
+
+You asked generally how to make the app faster. Started auditing —
+found this concretely, not by guessing: `getAttentionItems`
+([attention-items.ts](lib/admin/attention-items.ts)) unconditionally
+calls `syncComputedAttentionItems` (6+ condition-driven kinds, plus the
+batched recording-matching pass) on *every* call, regardless of the
+`status` filter passed in. [needs-review-client.tsx](<app/(admin)/admin/needs-review/needs-review-client.tsx>)'s
+old `load()` + `loadCounts()` pair fired 4 separate fetches on every
+page load — 1 for the active tab, 3 more inside `loadCounts` (one per
+status, just to get counts) — each one redundantly re-running that
+entire sync from scratch. Switching tabs fired yet another one on top.
+
+Fixed by fetching every status once (`getAttentionItems` already
+supports an unfiltered call — no server change needed) and deriving
+both the visible list and the tab counts from that single result
+client-side. Cuts page load from 4 syncs to 1, and switching tabs is
+now instant (filters already-loaded data) instead of triggering another
+full sync over the network.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not measured
+against real timing (no live login here) — this removes 3 of 4
+redundant heavy operations by construction, so the win is real
+regardless of exact numbers, but I can't quote a before/after figure.
+
+**Bigger thing found while looking, not yet touched — asked you before
+starting**: the admin student-detail page's `page.tsx` calls
+`listStudentRecordings` (a live Google Drive API request — the slowest
+kind of call in this app) as part of its own server-side data fetch.
+Every mutation on that page that calls `router.refresh()` — Cancel,
+Reassign coach, Edit note, Add/Edit/Delete credit, change recurring
+schedule, all 8 subscription-lifecycle actions — re-runs the *entire*
+page's server component, including that Drive call, even though almost
+none of those actions touch recordings at all. Same pattern exists on
+the coach and student dashboards. Converting the recordings panel to
+fetch client-side (own `useEffect`, not a server prop) would remove a
+live external API call from every one of those ~15 action buttons'
+critical path — a real, broad win, but touches a component shared
+across all three route groups, so flagging it for a decision rather
+than just doing it.
+
 ## Fixed: assigning an exercise could get stuck on "Assigning…" forever (2026-09-02)
 
 You showed a screenshot: a coach had assigned 2 exercises fine, but a

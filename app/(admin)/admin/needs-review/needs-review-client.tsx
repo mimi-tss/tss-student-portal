@@ -11,48 +11,43 @@ export default function NeedsReviewClient() {
   const searchParams = useSearchParams();
   const kindFilter = searchParams.get("kind") as AttentionKind | null;
   const [tab, setTab] = useState<AttentionStatus>("needs_action");
-  const [items, setItems] = useState<AttentionItem[] | null>(null);
+  const [allItems, setAllItems] = useState<AttentionItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [counts, setCounts] = useState<Record<AttentionStatus, number>>({
-    needs_action: 0,
-    in_progress: 0,
-    resolved: 0,
-  });
 
-  // Neither fetch had a .catch before this — a failed request (a 500,
-  // a timeout, anything that doesn't come back as parseable JSON) left
-  // `items` stuck at null and the page showing "Loading…" forever, with
-  // no error and no way to retry short of a full page reload.
+  // One unfiltered fetch, not one per tab. `getAttentionItems` re-runs
+  // the full condition-driven sync (6+ kinds, including the batched
+  // recording-matching pass) on every call regardless of the status
+  // filter — the previous load()+loadCounts() pair fired 4 separate
+  // fetches on every page load (1 for the active tab, 3 more inside
+  // loadCounts for all three tabs' counts), each redundantly re-running
+  // that entire sync. Fetching every status once and deriving both the
+  // visible list and the tab counts from it client-side cuts that to 1
+  // sync per load, and makes switching tabs instant (no network round
+  // trip) instead of triggering yet another one.
   function load() {
-    setItems(null);
+    setAllItems(null);
     setLoadError(null);
-    fetch(`/api/admin/attention-items?status=${tab}`)
+    fetch(`/api/admin/attention-items`)
       .then((res) => res.json())
-      .then((data) => setItems(data.items ?? []))
+      .then((data) => setAllItems(data.items ?? []))
       .catch(() => setLoadError("Couldn't load this list."));
   }
 
-  function loadCounts() {
-    Promise.all(
-      STATUS_TABS.map((t) =>
-        fetch(`/api/admin/attention-items?status=${t.status}`)
-          .then((res) => res.json())
-          .then((data) => [t.status, (data.items ?? []).length] as const),
-      ),
-    )
-      .then((results) => setCounts(Object.fromEntries(results) as Record<AttentionStatus, number>))
-      .catch(() => {});
-  }
-
-  useEffect(load, [tab]);
-  useEffect(loadCounts, []);
+  useEffect(load, []);
 
   function handleChanged() {
     load();
-    loadCounts();
   }
 
-  const visibleItems = kindFilter ? (items ?? []).filter((item) => item.kind === kindFilter) : items;
+  const counts: Record<AttentionStatus, number> = {
+    needs_action: 0,
+    in_progress: 0,
+    resolved: 0,
+  };
+  for (const item of allItems ?? []) counts[item.status]++;
+
+  const tabItems = allItems ? allItems.filter((item) => item.status === tab) : null;
+  const visibleItems = kindFilter ? (tabItems ?? []).filter((item) => item.kind === kindFilter) : tabItems;
 
   return (
     <div>
