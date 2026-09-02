@@ -86,24 +86,35 @@ export default function AssignExercisePanel({
     setAssigning(true);
     setDone(false);
     setError(null);
-    const res = await fetch("/api/exercises/assign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ exerciseId: selectedId, studentId }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setAssigning(false);
-    if (res.ok) {
-      setDone(true);
-      setQuery("");
-      setSelectedId(null);
-      // The assigned-exercises list below this panel is rendered by the
-      // parent server component from data fetched at page load — without
-      // this it stays on the pre-assign snapshot until a manual reload.
-      router.refresh();
-      onAssigned?.();
-    } else {
-      setError(body.error ?? "Assign failed.");
+    // The fetch itself (not just a non-2xx response) previously had no
+    // error handling — a dropped connection or timeout left `assigning`
+    // stuck true forever, with the button reading "Assigning…"
+    // indefinitely and no way to tell what happened or retry short of a
+    // page reload. Same class of bug already fixed on the Needs Review
+    // page for the same reason.
+    try {
+      const res = await fetch("/api/exercises/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exerciseId: selectedId, studentId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      setAssigning(false);
+      if (res.ok) {
+        setDone(true);
+        setQuery("");
+        setSelectedId(null);
+        // The assigned-exercises list below this panel is rendered by the
+        // parent server component from data fetched at page load — without
+        // this it stays on the pre-assign snapshot until a manual reload.
+        router.refresh();
+        onAssigned?.();
+      } else {
+        setError(body.error ?? "Assign failed.");
+      }
+    } catch {
+      setAssigning(false);
+      setError("Couldn't reach the server. Check your connection and try again.");
     }
   }
 

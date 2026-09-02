@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed: assigning an exercise could get stuck on "Assigning…" forever (2026-09-02)
+
+You showed a screenshot: a coach had assigned 2 exercises fine, but a
+3rd ("Improv Vibes") was stuck on "Assigning…" with the button
+disabled and no error.
+
+Root cause, found in [assign-exercise-panel.tsx](components/assign-exercise-panel.tsx)'s
+`handleAssign`: the `fetch()` call itself had no error handling — only
+`res.json()` did (`.catch(() => ({}))`). If the request never cleanly
+resolves (a dropped connection, a timeout, anything that makes `fetch`
+itself reject rather than return a response), the whole function throws
+uncaught, `setAssigning(false)` never runs, and the button is stuck
+disabled on "Assigning…" indefinitely — no error, no way to retry short
+of reloading the page. Nothing specific to a "3rd exercise" — whichever
+attempt happens to hit a flaky moment gets stuck this way. Same class of
+bug already fixed once before in this codebase, on the Needs Review
+page, for the identical reason (missing `.catch()` on a fetch, not just
+on its response parsing).
+
+Wrapped the fetch in a try/catch: on a genuine network failure,
+`assigning` now resets and a real, visible error shows ("Couldn't reach
+the server. Check your connection and try again.") instead of hanging
+forever. The existing non-2xx-response handling (e.g. a real 409 from
+the migration-0052 duplicate-assignment constraint) is unchanged.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested
+against a live login (none in this environment) — the original stuck
+state itself couldn't be reproduced here either, so this fixes the one
+concrete gap the code showed, but isn't a confirmed match to this exact
+incident. Please retry assigning a 3rd exercise once this deploys; if it
+still gets stuck, that's a different bug and I'll need whatever the
+browser's Network tab shows for the `/api/exercises/assign` request.
+
 ## Recordings: switched to a shortcut, not copy+delete — you caught the real problem with the first fix (2026-09-01)
 
 You asked directly: "this would quickly make my storage full if its
