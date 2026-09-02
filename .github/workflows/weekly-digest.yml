@@ -1,10 +1,10 @@
 name: Weekly digest
 
-# Student personal digest (email/sms/in-app per their own preference),
-# coach weekly Slack digest, and staff weekly ops summary — all in one
-# run, Monday morning ET (fixed UTC hour, small DST drift accepted, same
-# precedent as materialize-recurring.yml). Runs via GitHub Actions for the
-# same reason as kajabi-sync — see that workflow's comment.
+# Student personal digest (email/sms/in-app per their own preference) and
+# staff weekly ops summary — no coach digest, coaches get event-driven
+# Slack pings instead. Monday morning ET (fixed UTC hour, small DST drift
+# accepted, same precedent as materialize-recurring.yml). Runs via GitHub
+# Actions for the same reason as kajabi-sync — see that workflow's comment.
 
 on:
   schedule:

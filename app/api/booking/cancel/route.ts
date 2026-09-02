@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
 import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
 import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
+import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
 // Self-service cancellation (spec section 5/6) — see
 // lib/booking/cancel-session.ts for the actual notice/credit rules,
@@ -80,6 +81,10 @@ export async function POST(req: NextRequest) {
   if (!outcome.creditGranted) {
     await flagConsecutiveMisses(createAdminClient(), student.id, student.name);
   }
+
+  notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
+    console.error(`cancellation notification failed for session ${session.id}`, err),
+  );
 
   return NextResponse.json({ ...outcome, message: cancellationMessage(outcome) });
 }

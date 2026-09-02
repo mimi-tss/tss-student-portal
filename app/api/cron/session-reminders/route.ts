@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatTimeInZone } from "@/lib/timezone";
-import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
+import { notifyStudent } from "@/lib/notifications/create";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -9,6 +8,10 @@ import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
 // once as it crosses into the window; notification_log's per-session
 // dedup key is the real safety net either way — a slightly-misaligned
 // run can never double-send.
+//
+// Student-only — coaches don't get a Slack ping for these (see
+// lib/notifications/session-events.ts for what coaches actually get:
+// booked/cancelled events and chat messages, not time-based reminders).
 const STARTING_SOON_MIN_MINUTES = 15;
 const STARTING_SOON_MAX_MINUTES = 25;
 const REMINDER_24H_MIN_HOURS = 23.5;
@@ -18,10 +21,10 @@ interface SessionRow {
   id: string;
   scheduled_at: string;
   duration_minutes: number;
-  student_id: string;
-  actual_coach_id: string;
-  students: { id: string; name: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean } | { id: string; name: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean }[] | null;
-  coaches: { id: string; name: string; timezone: string; slack_webhook_url: string | null } | { id: string; name: string; timezone: string; slack_webhook_url: string | null }[] | null;
+  students:
+    | { id: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean }
+    | { id: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean }[]
+    | null;
 }
 
 function unwrap<T>(v: T | T[] | null): T | null {
@@ -32,9 +35,8 @@ async function sessionsInWindow(admin: ReturnType<typeof createAdminClient>, win
   const { data } = await admin
     .from("sessions")
     .select(
-      "id, scheduled_at, duration_minutes, student_id, actual_coach_id, " +
-        "students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
-        "coaches(id, name, timezone, slack_webhook_url)",
+      "id, scheduled_at, duration_minutes, " +
+        "students(id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp)",
     )
     .eq("status", "scheduled")
     .gte("scheduled_at", windowStart.toISOString())
@@ -64,13 +66,12 @@ export async function GET(req: NextRequest) {
 
   let notified = 0;
 
-  for (const [sessions, kind, title, studentBody, coachTextPrefix] of [
-    [startingSoon, "session_starting_soon", "Your session starts soon", "Your session starts in about 15-25 minutes.", "Starting soon"],
-    [reminder24h, "session_reminder_24h", "Session tomorrow", "You have a session scheduled in about 24 hours.", "Tomorrow"],
+  for (const [sessions, kind, title, studentBody] of [
+    [startingSoon, "session_starting_soon", "Your session starts soon", "Your session starts in about 15-25 minutes."],
+    [reminder24h, "session_reminder_24h", "Session tomorrow", "You have a session scheduled in about 24 hours."],
   ] as const) {
     for (const s of sessions) {
       const student = unwrap(s.students);
-      const coach = unwrap(s.coaches);
       if (!student) continue;
 
       await notifyStudent(admin, {
@@ -87,17 +88,6 @@ export async function GET(req: NextRequest) {
         channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
       });
       notified++;
-
-      if (coach) {
-        const time = formatTimeInZone(s.scheduled_at, coach.timezone);
-        await notifyCoach(admin, {
-          coachId: coach.id,
-          coachSlackWebhookUrl: coach.slack_webhook_url,
-          kind,
-          dedupKey: `coach:${coach.id}:${kind}:${s.id}`,
-          text: `${coachTextPrefix}: ${student.name} at ${time}`,
-        });
-      }
     }
   }
 

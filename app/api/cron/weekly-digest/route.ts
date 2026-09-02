@@ -2,19 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { zonedYearMonthDay, zonedTimeToUtc } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
-import { notifyStudent, notifyCoach, notifyStaff } from "@/lib/notifications/create";
-import { getCoachStudents, getMakeupsExpiringSoon, getBirthdaysThisWeek } from "@/lib/coach/dashboard-data";
+import { notifyStudent, notifyStaff } from "@/lib/notifications/create";
 import { getAttentionItems } from "@/lib/admin/attention-items";
 
 export const maxDuration = 60;
 
 // Monday ~8am ET (.github/workflows/weekly-digest.yml, fixed UTC hour —
 // same no-DST-awareness precedent as materialize-recurring.yml). Sends
-// three things in one run: the student personal digest (email/sms/in-app
-// per their own preference), the coach weekly Slack digest (their own
-// channel), and the staff weekly ops summary (shared channel). All three
-// dedup on the same Monday date key, so a re-run within the day is a
-// no-op.
+// two things in one run: the student personal digest (email/sms/in-app
+// per their own preference) and the staff weekly ops summary (shared
+// channel). No coach digest — coaches get event-driven Slack pings
+// instead (booked/cancelled, recording ready, chat messages — see
+// lib/notifications/session-events.ts and app/api/chat/messages/route.ts),
+// not a weekly summary. Both dedup on the same Monday date key, so a
+// re-run within the day is a no-op.
 function unwrap<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v;
 }
@@ -57,31 +58,28 @@ export async function GET(req: NextRequest) {
   // dot-path filters on an embedded to-one resource filter which rows of
   // the *embedding* show up, not which parent registrations match —
   // unreliable to lean on here without a live DB to confirm against.
-  const [{ data: students }, { data: sessions }, { data: registrations }, { data: credits }, { data: coaches }] =
-    await Promise.all([
-      admin
-        .from("students")
-        .select("id, name, email, phone, notify_digest_email, notify_digest_sms, notify_digest_inapp")
-        .eq("archived", false)
-        .neq("tier", "lite"),
-      admin
-        .from("sessions")
-        .select("id, student_id, actual_coach_id, scheduled_at, duration_minutes")
-        .eq("status", "scheduled")
-        .gte("scheduled_at", weekStart.toISOString())
-        .lt("scheduled_at", weekEnd.toISOString())
-        .returns<SessionRow[]>(),
-      admin.from("group_lesson_registrations").select("student_id, group_lessons(id, scheduled_at, cancelled_at)"),
-      admin
-        .from("makeup_credits")
-        .select("student_id")
-        .eq("used", false)
-        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`),
-      admin.from("coaches").select("id, name, timezone, slack_webhook_url").eq("active", true),
-    ]);
+  const [{ data: students }, { data: sessions }, { data: registrations }, { data: credits }] = await Promise.all([
+    admin
+      .from("students")
+      .select("id, name, email, phone, notify_digest_email, notify_digest_sms, notify_digest_inapp")
+      .eq("archived", false)
+      .neq("tier", "lite"),
+    admin
+      .from("sessions")
+      .select("id, student_id, actual_coach_id, scheduled_at, duration_minutes")
+      .eq("status", "scheduled")
+      .gte("scheduled_at", weekStart.toISOString())
+      .lt("scheduled_at", weekEnd.toISOString())
+      .returns<SessionRow[]>(),
+    admin.from("group_lesson_registrations").select("student_id, group_lessons(id, scheduled_at, cancelled_at)"),
+    admin
+      .from("makeup_credits")
+      .select("student_id")
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`),
+  ]);
 
   const sessionsByStudent = groupBy(sessions ?? [], (s) => s.student_id);
-  const sessionsByCoach = groupBy(sessions ?? [], (s) => s.actual_coach_id);
 
   const groupLessonCountByStudent = new Map<string, number>();
   for (const r of registrations ?? []) {
@@ -135,36 +133,6 @@ export async function GET(req: NextRequest) {
     studentsNotified++;
   }
 
-  let coachesNotified = 0;
-  for (const coach of coaches ?? []) {
-    const coachSessions = (sessionsByCoach.get(coach.id) ?? []).slice().sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-    const coachStudents = await getCoachStudents(admin, coach.id);
-    const studentIds = coachStudents.map((s) => s.id);
-    const [expiringMakeups, birthdays] = await Promise.all([
-      getMakeupsExpiringSoon(admin, studentIds),
-      getBirthdaysThisWeek(admin, studentIds),
-    ]);
-
-    if (coachSessions.length === 0 && expiringMakeups.length === 0 && birthdays.length === 0) continue;
-
-    const lines = [`*Your week ahead* — ${coachSessions.length} session${coachSessions.length === 1 ? "" : "s"}`];
-    if (expiringMakeups.length > 0) {
-      lines.push(`${expiringMakeups.length} student makeup credit${expiringMakeups.length === 1 ? "" : "s"} expiring soon`);
-    }
-    if (birthdays.length > 0) {
-      lines.push(`Birthdays this week: ${birthdays.map((b) => b.studentName).join(", ")}`);
-    }
-
-    await notifyCoach(admin, {
-      coachId: coach.id,
-      coachSlackWebhookUrl: coach.slack_webhook_url,
-      kind: "weekly_digest",
-      dedupKey: `coach:${coach.id}:weekly_digest:${weekKey}`,
-      text: lines.join("\n"),
-    });
-    coachesNotified++;
-  }
-
   const backlog = await getAttentionItems(admin, "needs_action");
   const totalSessions = sessions?.length ?? 0;
   const opsText = [
@@ -179,5 +147,5 @@ export async function GET(req: NextRequest) {
     text: opsText,
   });
 
-  return NextResponse.json({ studentsNotified, coachesNotified, weekKey });
+  return NextResponse.json({ studentsNotified, weekKey });
 }

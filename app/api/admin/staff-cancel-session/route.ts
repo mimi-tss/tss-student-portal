@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
 // Staff-initiated cancellation — studio-side reasons (coach emergency,
 // scheduling error, goodwill), not the student's fault: by default issues
@@ -106,6 +107,10 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
+    console.error(`cancellation notification failed for session ${session.id}`, err),
+  );
 
   const message = creditReinstated
     ? "Session cancelled — the session credit used to book this has been given back."

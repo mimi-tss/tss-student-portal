@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
+import { notifySlack } from "@/lib/slack/notify";
 
 const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 
@@ -12,12 +13,12 @@ const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 // recipient per thread per 15 minutes rather than a true
 // active/inactive check — a deliberate simplification, not full spec
 // compliance (see the plan's flagged assumptions).
-async function notifyRecipient(threadId: string, senderIsCoach: boolean) {
+async function notifyRecipient(threadId: string, senderIsCoach: boolean, bodyPreview?: string | null) {
   const admin = createAdminClient();
   const { data: thread } = await admin
     .from("chat_threads")
     .select(
-      "student_id, coach_id, student_last_notified_at, coach_last_notified_at, students(name, email), coaches(name, email)",
+      "student_id, coach_id, student_last_notified_at, coach_last_notified_at, students(name, email), coaches(name, email, slack_webhook_url)",
     )
     .eq("id", threadId)
     .single();
@@ -34,18 +35,29 @@ async function notifyRecipient(threadId: string, senderIsCoach: boolean) {
 
   const recipient = senderIsCoach
     ? (thread.students as unknown as { name: string; email: string } | null)
-    : (thread.coaches as unknown as { name: string; email: string } | null);
+    : (thread.coaches as unknown as { name: string; email: string; slack_webhook_url: string | null } | null);
   const senderName = senderIsCoach
     ? (thread.coaches as unknown as { name: string } | null)?.name
     : (thread.students as unknown as { name: string } | null)?.name;
 
-  if (!recipient?.email) return;
+  if (recipient?.email) {
+    await sendEmail(
+      recipient.email,
+      "New message on Tara Simon Studios",
+      `<p>You have a new message from ${senderName ?? "your coach"} — log in to view and reply.</p>`,
+    );
+  }
 
-  await sendEmail(
-    recipient.email,
-    "New message on Tara Simon Studios",
-    `<p>You have a new message from ${senderName ?? "your coach"} — log in to view and reply.</p>`,
-  );
+  // Coach-facing Slack ping, same throttle as the email above — a coach
+  // messaged by a student gets both; a student messaged by their coach
+  // still only ever gets the email (students don't have a Slack channel).
+  if (!senderIsCoach) {
+    const coach = recipient as { slack_webhook_url: string | null } | null;
+    if (coach?.slack_webhook_url) {
+      const preview = bodyPreview?.trim() ? `: "${bodyPreview.trim().slice(0, 200)}"` : "";
+      await notifySlack(`New message from ${senderName ?? "a student"}${preview}`, coach.slack_webhook_url);
+    }
+  }
 
   await admin.from("chat_threads").update({ [throttleColumn]: now.toISOString() }).eq("id", threadId);
 }
@@ -165,7 +177,7 @@ export async function POST(req: NextRequest) {
 
   // Fire-and-forget — a notification-email hiccup shouldn't fail the
   // message send itself.
-  notifyRecipient(thread.id, !!senderCoach).catch((err) =>
+  notifyRecipient(thread.id, !!senderCoach, message.body).catch((err) =>
     console.error(`chat notification failed for thread ${thread.id}`, err),
   );
 

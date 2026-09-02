@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
+import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -241,6 +242,10 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  notifyCoachSessionEvent(session.id, "session_booked").catch((err) =>
+    console.error(`booking notification failed for session ${session.id}`, err),
+  );
 
   return NextResponse.json({ success: true });
 }

@@ -3,6 +3,59 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Narrowed coach Slack notifications to booked/cancelled/rescheduled + chat + recording-ready (2026-09-02)
+
+You cut the coach notification list down after seeing the full set —
+dropped session-starting-soon, 24hr-reminder, and the weekly coach
+digest entirely; kept only booking/cancel/reschedule events, chat
+messages, and recording-ready.
+
+- **New**: [lib/notifications/session-events.ts](lib/notifications/session-events.ts)
+  — `notifyCoachSessionEvent(sessionId, "session_booked" | "session_cancelled")`,
+  self-contained (own admin client/lookups, never throws) so call sites
+  don't need their own `sessions`/`students` selects touched. Wired into
+  all 4 places a session gets booked or cancelled:
+  [app/api/booking/book/route.ts](app/api/booking/book/route.ts) (student
+  self-book + admin book-on-behalf-of, covers makeups and trials too),
+  [app/api/booking/cancel/route.ts](app/api/booking/cancel/route.ts)
+  (student self-cancel),
+  [app/api/admin/cancel-session/route.ts](app/api/admin/cancel-session/route.ts)
+  (admin regular cancel),
+  [app/api/admin/staff-cancel-session/route.ts](app/api/admin/staff-cancel-session/route.ts)
+  (staff override cancel). Deliberately did NOT touch
+  `materialize-recurring`'s bulk session inserts (a recurring schedule's
+  nightly top-up can generate dozens of rows across many students in one
+  run — that's routine materialization of an already-set-up schedule, not
+  a discrete booking action, and would just be Slack spam) or
+  `reassign-session-coach` (coach swap, not book/cancel/reschedule — out
+  of the list you gave).
+- **Reschedule** isn't a single DB event in this app — admin's reschedule
+  flow ([admin-cancel-buttons.tsx](<app/(admin)/admin/students/[studentId]/admin-cancel-buttons.tsx>))
+  is a cancel (via `cancel-session`) followed by a separate booking
+  request once admin picks a new slot, two independent HTTP requests with
+  no shared server-side link. Rather than thread extra state through to
+  combine them into one message, a reschedule now just shows up as its
+  two real, honest events — "Session cancelled" then "New session
+  booked" — via the hooks above. No extra code needed for it specifically.
+- **Chat**: [app/api/chat/messages/route.ts](app/api/chat/messages/route.ts)'s
+  existing `notifyRecipient` (previously email-only, both directions)
+  now also Slacks the coach when a *student* messages them — same
+  existing 15-minute throttle (`coach_last_notified_at`), so no new dedup
+  state. Coach→student stays email-only (students have no Slack channel).
+- **Removed**: coach-facing calls in
+  [app/api/cron/session-reminders/route.ts](app/api/cron/session-reminders/route.ts)
+  (student side untouched — students still get starting-soon/24hr
+  reminders) and the entire coach loop in
+  [app/api/cron/weekly-digest/route.ts](app/api/cron/weekly-digest/route.ts)
+  (student digest + staff ops summary untouched).
+- No new migration — `notification_log.kind` was already unconstrained
+  text (only `notifications.kind`, the in-app student table, has a check
+  constraint, and no new student-facing kind was added here).
+
+Verified via `npx tsc --noEmit -p .` and `next build` (both clean); no
+live login/DB here, so not click-tested — traced the dedup/throttle logic
+against the schema instead.
+
 ## Double-checked Nikki's join-link fix — caught a stale guard about to wipe it (2026-09-02)
 
 You asked me to double-check the fix only applies to Nikki, since it's

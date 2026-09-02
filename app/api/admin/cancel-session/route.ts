@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
 import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
 // Admin-triggered version of the student's own self-service cancel — same
 // rules either way (see lib/booking/cancel-session.ts), just reachable
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest) {
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
+
+  notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
+    console.error(`cancellation notification failed for session ${session.id}`, err),
+  );
 
   return NextResponse.json({ ...outcome, message: cancellationMessage(outcome) });
 }
