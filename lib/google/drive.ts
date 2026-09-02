@@ -316,15 +316,38 @@ export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
 }
 
 // Moves a file from the shared inbox into a student's own Drive
-// folder once a recording is confirmed matched — a real move (parent
-// swap), not a copy, so the inbox doesn't accumulate every recording
-// forever alongside the now-organized copy.
-export async function moveFileToStudentFolder(fileId: string, fromFolderId: string, toFolderId: string): Promise<void> {
+// folder once a recording is confirmed matched. NOT a plain parent
+// swap (files.update addParents/removeParents) — confirmed live that
+// fails with "The user does not have sufficient permissions for this
+// file" every time, because the inbox lives in the admin account's own
+// My Drive (individually owned) while student folders live inside a
+// Shared Drive. Google's Drive API doesn't allow a straight reparent
+// across that boundary — it would require transferring the file's
+// ownership to the Shared Drive, which a simple addParents/removeParents
+// call can't do — so this copies the file into the student's folder
+// (a copy created directly inside a Shared Drive is natively owned by
+// it, no ownership-transfer restriction) and then trashes the
+// original from the inbox, rather than leaving both copies around
+// forever.
+export async function moveFileToStudentFolder(fileId: string, toFolderId: string): Promise<void> {
   const drive = getDriveClient();
+  const original = await drive.files.get({ fileId, fields: "name", supportsAllDrives: true });
+  await drive.files.copy({
+    fileId,
+    supportsAllDrives: true,
+    requestBody: {
+      name: original.data.name ?? undefined,
+      parents: [toFolderId],
+    },
+  });
+  // Trashed (recoverable within Workspace's retention window), not
+  // permanently deleted outright — same reversibility posture as
+  // everything else in this app that removes something real. Trashing
+  // alone is enough to drop it from future inbox scans/listings
+  // (listMeetRecordingsInbox already filters trashed = false).
   await drive.files.update({
     fileId,
-    addParents: toFolderId,
-    removeParents: fromFolderId,
+    requestBody: { trashed: true },
     supportsAllDrives: true,
   });
 }

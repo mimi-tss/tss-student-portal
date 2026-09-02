@@ -4,7 +4,6 @@ import {
   moveFileToStudentFolder,
   findGeminiNotesForRecording,
   exportDocText,
-  MEET_RECORDINGS_INBOX_FOLDER_ID,
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
@@ -123,7 +122,7 @@ export async function attachRecordingToStudent(
   // it's a normal, visible failure like every other reason this can
   // fail.
   try {
-    await moveFileToStudentFolder(recording.drive_file_id, MEET_RECORDINGS_INBOX_FOLDER_ID, student.drive_folder_id);
+    await moveFileToStudentFolder(recording.drive_file_id, student.drive_folder_id);
   } catch (err) {
     return { success: false, error: err instanceof Error ? `couldn't move the file: ${err.message}` : "couldn't move the file" };
   }
