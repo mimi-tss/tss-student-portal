@@ -3,6 +3,42 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings: switched to a shortcut, not copy+delete — you caught the real problem with the first fix (2026-09-01)
+
+You asked directly: "this would quickly make my storage full if its
+duplicated?" — right call, and it killed the copy+delete approach from
+the previous fix outright. Copying a file into the student's Shared
+Drive folder doesn't dedupe storage: the moment the copy exists, both
+files count fully against Workspace quota. Deleting the original
+afterward (what that fix did, switched from trash specifically to
+avoid the 30-day trash-retention version of this same problem) still
+means briefly holding two full copies of a real recording-sized video
+file — better than trashing, but still real duplicated storage for
+however long the copy step takes.
+
+You then suggested the actual right fix yourself: a shortcut. A
+shortcut is a small pointer object, not a copy — effectively free
+storage-wise — and creating one fresh inside the student's Shared
+Drive folder needs no ownership change at all, sidestepping the
+My-Drive-to-Shared-Drive restriction entirely instead of working
+around it with a copy. Reused the exact `createDriveShortcut()` the
+"paste a Drive link" quick-add already uses
+([drive.ts](lib/google/drive.ts)) — removed the now-dead
+`moveFileToStudentFolder` (copy+delete) entirely, no callers left.
+
+Verified directly against the real failing file/folder pairing again
+before committing (same rigor as the copy fix) — shortcut created
+successfully, then cleaned up the test shortcut. One known tradeoff,
+worth knowing: the original recording file now stays in the shared
+inbox permanently once matched (a shortcut doesn't move anything) —
+no storage cost since it's one copy either way, but the inbox folder
+itself will accumulate every matched original over time rather than
+emptying out. Not fixed here — a separate, lower-priority cosmetic
+concern, not the storage-duplication problem this was actually about.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Please retry
+Confirm on Brooke Burns and Shannon von Driska's recordings now.
+
 ## Investigated: an assigned exercise wasn't playing for a student — 2 real risks fixed, root cause still unconfirmed (2026-09-01)
 
 You reported a coach assigned an exercise and it wouldn't play for the
