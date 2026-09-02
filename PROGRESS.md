@@ -3,6 +3,45 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach-only join-link suffix, to fix Nikki's sessions not recording (2026-09-02)
+
+You reported Nikki's sessions aren't recording, and she says her own
+link needs `?pli=1&authuser=1` — almost certainly because her browser
+defaults to a Google account that isn't the one actually granted
+durable co-host / recording rights on her persistent room, so Meet
+doesn't recognize her as authorized to record.
+
+Couldn't just add that back to `coaches.meet_link` directly — a
+concurrent session added `sanitizeMeetLink()`
+([meet-link.ts](lib/meet-link.ts)) earlier today specifically to strip
+params like this on save, because `meet_link` is shared: every one of
+a coach's students uses the exact same URL for their own "Join"
+button, and `authuser=1` tells Meet to use the *clicker's* own second
+Google account — meaningless or actively wrong for a student. Asked
+you how to resolve the conflict; you chose scoping the fix to Nikki's
+own join button only, not the shared link.
+
+New `coaches.own_join_suffix`
+([0084_coach_own_join_suffix.sql](supabase/migrations/0084_coach_own_join_suffix.sql)
+— renumbered from an initial 0083, which a concurrent session
+independently claimed first for its own notifications migration) —
+appended only when building the coach's own "Open my meeting room"
+link on her dashboard, never touching `meet_link` itself or anything a
+student sees. Admin-editable from the coach Edit panel (Coaches page),
+same pattern as the existing Drive-folder-ID field — new field labeled
+"Own join link extra (optional)".
+
+`npx tsc --noEmit -p .` and `next build` both clean (full build,
+alongside the concurrent session's own in-progress notifications
+work — no conflicts). **Not yet set for Nikki** — needs migration 0084
+applied first; once confirmed, go to Coaches → Edit on Nikki Hollins →
+"Own join link extra" → enter `?pli=1&authuser=1` → Save. Please also
+retest that her next session actually records once that's in place —
+this is a reasonable, well-supported hypothesis (matches how Meet's
+`authuser` param works, and matches the durable-co-host recording
+setup this app's own spec describes), but not something confirmable
+without her actually testing it live.
+
 ## Admin's "All coaches" day grid now shows attendance marks (✓/✗/L) on each session (2026-09-02)
 
 You said checkmarks weren't showing on this page anymore. Checked the
@@ -4208,6 +4247,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0084 not yet confirmed applied** —
+`0084_coach_own_join_suffix.sql` (renumbered from an initial 0083 — a
+concurrent session independently claimed that number first for its
+own notifications migration) adds `coaches.own_join_suffix`, needed
+for Nikki's recording fix (see entry above). Once confirmed, set it
+for her via Coaches → Edit → "Own join link extra" → `?pli=1&authuser=1`.
 
 **Migration 0082 confirmed applied** — detected rather than told:
 found real evidence in production that the fix is live and working —
