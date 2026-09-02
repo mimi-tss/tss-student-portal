@@ -1213,6 +1213,8 @@ function EditCoachPanel({
   const [driveFolderId, setDriveFolderId] = useState(initialDriveFolderId ?? "");
   const [ownJoinSuffix, setOwnJoinSuffix] = useState(initialOwnJoinSuffix ?? "");
   const [slackWebhookUrl, setSlackWebhookUrl] = useState(initialSlackWebhookUrl ?? "");
+  const [testingSlack, setTestingSlack] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const [hours, setHours] = useState<Record<string, [string, string][]>>(() => {
     const copy: Record<string, [string, string][]> = {};
     for (const day of DAY_KEYS) copy[day] = (initialWorkingHours[day] ?? []).map((w) => [...w] as [string, string]);
@@ -1266,6 +1268,23 @@ function EditCoachPanel({
       return;
     }
     onSaved();
+  }
+
+  async function handleSendTest() {
+    setTestingSlack(true);
+    setTestResult(null);
+    const res = await fetch("/api/admin/coach-slack-webhook/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coachId }),
+    });
+    setTestingSlack(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setTestResult(body.error ?? "Could not send that test.");
+      return;
+    }
+    setTestResult("Test sent — check the coach's Slack channel.");
   }
 
   return (
@@ -1332,18 +1351,34 @@ function EditCoachPanel({
       </p>
       <div className={styles.field} style={{ minWidth: 260, marginTop: 10 }}>
         <label>Slack webhook URL (optional)</label>
-        <input
-          type="url"
-          placeholder="https://hooks.slack.com/services/…"
-          value={slackWebhookUrl}
-          onChange={(e) => setSlackWebhookUrl(e.target.value)}
-          className={styles.input}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="url"
+            placeholder="https://hooks.slack.com/services/…"
+            value={slackWebhookUrl}
+            onChange={(e) => setSlackWebhookUrl(e.target.value)}
+            className={styles.input}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className={styles.linkBtnSmall}
+            onClick={handleSendTest}
+            disabled={testingSlack || !initialSlackWebhookUrl}
+          >
+            {testingSlack ? "Sending…" : "Send test"}
+          </button>
+        </div>
       </div>
-      <p className={styles.mutedText} style={{ marginTop: -6, marginBottom: 10, fontSize: 12 }}>
-        This coach&apos;s own Slack channel — their session-starting-soon and recording-ready pings post here. Left
-        blank, this coach simply gets no Slack notifications (never falls back to the shared staff channel).
+      <p className={styles.mutedText} style={{ marginTop: -6, marginBottom: 4, fontSize: 12 }}>
+        This coach&apos;s own Slack channel — a session/makeup being booked, cancelled, or rescheduled, and a student
+        chat message, post here. Left blank, this coach simply gets no Slack notifications (never falls back to the
+        shared staff channel). &quot;Send test&quot; sends through the app&apos;s own saved value — save first if you
+        just changed this field.
       </p>
+      {testResult && (
+        <p className={styles.mutedText} style={{ marginTop: 0, marginBottom: 10, fontSize: 12 }}>{testResult}</p>
+      )}
       <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, margin: "12px 0" }}>
         <input
           type="checkbox"

@@ -3,6 +3,36 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added a "Send test" button for a coach's Slack webhook (2026-09-02)
+
+You pointed out a real gap: manually curling a raw webhook URL (what we
+did for Celine earlier) only proves Slack itself works at that URL — it
+says nothing about whether the *app* correctly reads a coach's saved
+`slack_webhook_url` back out of the database and fires it through the
+real notification code on a real event. I have no live login in this
+environment to trigger a real booking/cancel/chat and watch Slack
+myself, so this closes that gap with a button instead.
+
+- New [app/api/admin/coach-slack-webhook/test/route.ts](app/api/admin/coach-slack-webhook/test/route.ts) —
+  admin-only, takes `{coachId}`, fetches that coach's `slack_webhook_url`
+  fresh from the DB (not whatever's typed in the edit form), and sends
+  through the exact same `notifyCoach` helper every real event uses
+  ([lib/notifications/create.ts](lib/notifications/create.ts)) — so a
+  successful test genuinely proves the real pipeline, not just the raw
+  URL. Errors clearly if no webhook is saved yet, rather than silently
+  no-op'ing. `dedupKey` includes a timestamp so `notification_log`'s
+  dedup can never block a deliberate re-test.
+- **Admin → Coaches → Edit** now has a "Send test" button next to the
+  Slack webhook URL field (disabled until a webhook has actually been
+  saved — tests the saved value, so save first if you just edited the
+  field). Also corrected that field's description text, which still
+  said "session-starting-soon and recording-ready" from before those
+  were dropped for coaches.
+
+No live login here to click-test this myself — verified via `tsc`/`next
+build` (both clean) and a local dev-server boot with no runtime errors,
+not an actual logged-in click-through.
+
 ## Dropped coach recording-ready Slack ping; confirmed chat/booking pings already show student+content (2026-09-02)
 
 After live-testing the coach Slack webhook (fired a real test message to
