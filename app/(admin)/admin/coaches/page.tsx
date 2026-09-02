@@ -12,7 +12,15 @@ export default async function AdminCoachesPage() {
     supabase
       .from("coaches")
       .select(
-        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id, own_join_suffix, slack_webhook_url",
+        // own_join_suffix (migration 0084) and slack_webhook_url (0083)
+        // deliberately left out of this select — neither migration is
+        // confirmed applied to the live DB yet (PROGRESS.md), and
+        // referencing a column that doesn't exist yet fails this whole
+        // query (not just those fields), which is what emptied the
+        // roster table below ("No coaches yet.") while the schedule grid
+        // above kept working fine (separate query, doesn't touch either
+        // column). Restore both here once both migrations are confirmed.
+        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id",
       )
       .order("name"),
     supabase.from("students").select("assigned_coach_id").not("assigned_coach_id", "is", null),
@@ -37,8 +45,10 @@ export default async function AdminCoachesPage() {
     active: c.active,
     meetLink: c.meet_link as string | null,
     driveFolderId: c.drive_folder_id as string | null,
-    ownJoinSuffix: c.own_join_suffix as string | null,
-    slackWebhookUrl: c.slack_webhook_url as string | null,
+    // Not selected above yet — see comment on the query. Both edit panels
+    // will just show these two fields empty until their migrations land.
+    ownJoinSuffix: null as string | null,
+    slackWebhookUrl: null as string | null,
   }));
 
   return (
