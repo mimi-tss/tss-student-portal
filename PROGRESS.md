@@ -4393,17 +4393,20 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0083 not yet confirmed applied** —
-`0083_notifications.sql` adds the 6 `notify_*` preference columns on
-`students`, `coaches.slack_webhook_url`, and the new `notifications` /
-`notification_log` tables (see entry above). Also needed before any of
-this actually reaches a student: `GHL_WEBHOOK_URL` set in Vercel env vars,
-and a GHL workflow built to consume that webhook's payload — the app side
-is done, the GHL side is a separate, manual step. Once the migration is
-confirmed, the 4 new GitHub Actions secrets/workflows
-(`session-reminders`, `makeup-nudges`, `weekly-digest`, plus the
-`scan-recordings` change) start running on their existing schedules
-automatically — nothing else to flip on.
+**Migration 0083 confirmed applied** (2026-09-02) — adds the 6
+`notify_*` preference columns on `students`, `coaches.slack_webhook_url`,
+and the new `notifications` / `notification_log` tables (see entry
+above). Restored `slack_webhook_url` to the admin Coaches page's select
+now that the column exists — set each coach's Slack webhook URL from
+Coaches → Edit. Two things still needed before this actually reaches a
+student by email/SMS: `GHL_WEBHOOK_URL` set in Vercel env vars, and a GHL
+workflow built to consume that webhook's payload — the app side is done,
+the GHL side is a separate, manual step. The 4 new GitHub Actions
+workflows (`session-reminders`, `makeup-nudges`, `weekly-digest`, plus
+the `scan-recordings` change) are now live on their schedules — coach
+Slack pings and in-app notifications will start firing as soon as a
+coach has a `slack_webhook_url` set / a student has sessions this week,
+independent of the GHL piece.
 
 **Migration 0084 confirmed applied** (2026-09-02) — set Nikki
 Hollins's `own_join_suffix` to `?pli=1&authuser=1` directly (her own

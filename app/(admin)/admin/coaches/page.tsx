@@ -12,16 +12,7 @@ export default async function AdminCoachesPage() {
     supabase
       .from("coaches")
       .select(
-        // slack_webhook_url (migration 0083) still deliberately left out
-        // of this select — that migration isn't confirmed applied to the
-        // live DB yet (PROGRESS.md), and referencing a column that
-        // doesn't exist fails this whole query (not just that field),
-        // which is what emptied the roster table below ("No coaches
-        // yet.") while the schedule grid above kept working fine
-        // (separate query, doesn't touch either column). own_join_suffix
-        // (migration 0084) is back — that one's confirmed applied.
-        // Restore slack_webhook_url too once 0083 is confirmed.
-        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id, own_join_suffix",
+        "id, name, email, timezone, hidden_from_students, working_hours, pending_working_hours, pending_effective_date, active, meet_link, drive_folder_id, own_join_suffix, slack_webhook_url",
       )
       .order("name"),
     supabase.from("students").select("assigned_coach_id").not("assigned_coach_id", "is", null),
@@ -47,9 +38,7 @@ export default async function AdminCoachesPage() {
     meetLink: c.meet_link as string | null,
     driveFolderId: c.drive_folder_id as string | null,
     ownJoinSuffix: c.own_join_suffix as string | null,
-    // Not selected above yet — see comment on the query. Its own edit
-    // field will show empty until migration 0083 is confirmed applied.
-    slackWebhookUrl: null as string | null,
+    slackWebhookUrl: c.slack_webhook_url as string | null,
   }));
 
   return (
