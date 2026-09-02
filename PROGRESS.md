@@ -3,6 +3,30 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Double-checked Nikki's join-link fix — caught a stale guard about to wipe it (2026-09-02)
+
+You asked me to double-check the fix only applies to Nikki, since it's
+specific to her own Chrome. Verified two things directly against the
+live database: the code only ever reads `own_join_suffix` when
+building the coach's own "Open my meeting room" link
+(`app/(coach)/coach/dashboard/page.tsx`) — never anywhere a student
+sees; and querying every coach's row confirmed only Nikki Hollins has
+it set (`?pli=1&authuser=1`), everyone else is `null`. Both correct.
+
+Caught a real, live risk in the process:
+[coaches/page.tsx](<app/(admin)/admin/coaches/page.tsx>) still had
+`own_join_suffix` hardcoded to `null` — a guard a concurrent session
+added *before* migration 0084 was confirmed, to stop a not-yet-
+existing column from breaking the whole coaches roster query. Left in
+place now that 0084 is actually confirmed, opening ANY coach's Edit
+panel would show that field empty regardless of the real value, and
+hitting Save would silently overwrite it with `null` — including
+Nikki's, the one just set. Restored it to the real select/mapping.
+`slack_webhook_url` (migration 0083, not yet confirmed) stays guarded
+out for the same original reason — untouched.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Fixed a real, active email loop hitting a real student's inbox (2026-09-02)
 
 You flagged this live — Krtistel Herrera's inbox stuck getting a
