@@ -4381,12 +4381,12 @@ confirmed, the 4 new GitHub Actions secrets/workflows
 `scan-recordings` change) start running on their existing schedules
 automatically — nothing else to flip on.
 
-**New migration 0084 not yet confirmed applied** —
-`0084_coach_own_join_suffix.sql` (renumbered from an initial 0083 — a
-concurrent session independently claimed that number first for its
-own notifications migration) adds `coaches.own_join_suffix`, needed
-for Nikki's recording fix (see entry above). Once confirmed, set it
-for her via Coaches → Edit → "Own join link extra" → `?pli=1&authuser=1`.
+**Migration 0084 confirmed applied** (2026-09-02) — set Nikki
+Hollins's `own_join_suffix` to `?pli=1&authuser=1` directly (her own
+"Open my meeting room" button now opens
+`https://meet.google.com/fyj-rnyj-hvq?pli=1&authuser=1`; her students'
+Join buttons are untouched, still the clean shared link). Please have
+her confirm her next session actually records.
 
 **Migration 0082 confirmed applied** — detected rather than told:
 found real evidence in production that the fix is live and working —
