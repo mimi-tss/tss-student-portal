@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed login looping forever for students inside Kajabi's embedded portal (2026-09-02)
+
+You reported William Newstad and Liv Hatfield (Coach Tara's students,
+logging in as "Addie" via her mother's email) couldn't get past the
+verification-code screen — entering the right code just bounced them
+back to enter another one, endlessly. Checked
+[login_codes](lib/auth/login-code.ts) directly for both: every single
+attempt had `used_at` set, meaning the code was correct and verified
+successfully server-side every time. The failure was happening after
+that — the session cookie the app sets on success was never actually
+sticking in their browser. Confirmed with you they were both opening
+the portal from inside Kajabi (embedded), not the app's own direct
+link.
+
+Root cause: Safari blocks third-party/cross-site cookies by default,
+no matter how the cookie is set — and Kajabi framing this app in an
+iframe is exactly a third-party context from the top-level page's
+point of view. This is the same underlying class of problem
+`verify-login-code`'s own comment already documents fixing once for
+the magic-link flow specifically, showing up again for the code flow
+inside the Kajabi frame. You were explicit that opening a separate tab
+isn't the right fix — this needs to work as one seamless app, and is
+meant to become a native app rather than a web app leaning on browser
+workarounds.
+
+Fix: the [Storage Access API](<app/login/login-form.tsx>), the actual
+standards-track mechanism for this exact situation — an embedded page
+requesting the browser treat its own storage as first-party. Has to be
+called from within a real user gesture to have any chance of being
+honored, so it's awaited at the top of every submit handler (send
+code, resend, verify), not on page load. A deliberate no-op when the
+page isn't iframed or the browser doesn't support the API at all — a
+tested-live check confirmed the ordinary top-level login flow is
+completely unaffected, no crash, no behavior change.
+
+`npx tsc --noEmit -p .` and `next build` both clean; the normal
+(non-embedded) login flow was click-tested directly in this
+environment. **The actual Safari-inside-Kajabi-iframe case could not
+be tested here** (no real Safari, no real Kajabi embed available) —
+please have William or Addie retry from inside Kajabi and confirm
+this actually gets them in.
+
 ## Added a "Send test" button for a coach's Slack webhook (2026-09-02)
 
 You pointed out a real gap: manually curling a raw webhook URL (what we
