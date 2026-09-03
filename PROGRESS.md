@@ -36,10 +36,10 @@ insert failure — now logs the real error server-side and shows a plain
 "couldn't send, try again" instead, so a future slow query (of any
 cause) never surfaces database internals to a coach or student again.
 
-`npx tsc --noEmit -p .` and `next build` both clean. Flagged below —
-**this migration is not yet confirmed applied.** Once it is, please
-have Nikita retry a message during a real session and confirm the
-timeout is gone.
+`npx tsc --noEmit -p .` and `next build` both clean. Migration
+confirmed applied 2026-09-03 (see Action needed below) — still waiting
+on Nikita actually retrying a message during a real session to confirm
+the timeout itself is gone.
 
 ## Kajabi login-loop fix: Kristel confirmed working, Addie/William pending (2026-09-02)
 
@@ -4706,12 +4706,13 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New migration 0085 not yet confirmed applied** —
-`0085_rls_hot_path_indexes.sql` adds 7 missing indexes (see entry
+**Migration 0085 confirmed applied** (2026-09-03) —
+`0085_rls_hot_path_indexes.sql` added 7 missing indexes (see entry
 above) that fix a real chat-send timeout ("canceling statement due to
 statement timeout") and should meaningfully speed up RLS checks
-app-wide, not just chat — purely additive, no behavior change, just
-faster. Please apply and confirm.
+app-wide, not just chat. Please have Nikita retry a message during a
+real session with Katie to confirm the timeout itself is actually
+gone, not just that the migration ran.
 
 **Migration 0083 confirmed applied** (2026-09-02) — adds the 6
 `notify_*` preference columns on `students`, `coaches.slack_webhook_url`,
