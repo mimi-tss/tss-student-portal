@@ -5018,56 +5018,25 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0089 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
-`0089_no_show_attention_item_dedup.sql` adds a partial unique index +
-`attention_item_upsert_no_show` RPC so re-marking a session no-show/
-late-forfeit can never again create a duplicate Needs Review card (see
-entry below — this is the Jazmynn Hernandez 6-duplicate-cards fix), plus
-a one-time cleanup collapsing existing exact-duplicate open no_show_*
-rows down to one. **Please run this migration in Supabase, glance at the
-Resolved tab to confirm nothing real got swept into it, and reply
-"successful" once applied.** Until then, no-show/late-forfeit marking
-still works fine, but the new RPC call fails silently (function doesn't
-exist yet) and falls through — meaning no_show_1/2/3 Needs Review cards
-just won't get created at all in the meantime, not that duplicates would
-continue. Nothing crashes either way.
-
-**Migration 0088 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
-`0088_attention_item_upsert_cron.sql` lets the `attention_item_upsert_*`
-RPCs (0082) accept a service-role caller (`auth.role() = 'service_role'`)
-in addition to a real logged-in admin session — needed so the
-scan-recordings cron (now also running `syncComputedAttentionItems`,
-see entry below) can actually write Needs Review items instead of every
-call silently failing its own `is_admin()` check. **Please run this
-migration in Supabase and reply "successful" once applied.** Until then
-the new cron wiring is a harmless no-op — Needs Review still works
-exactly as before, just without the every-2-hours auto-refresh.
-
-**Migration 0087 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
-`0087_group_lesson_recording_matching.sql` adds
-`meet_recordings.matched_group_lesson_id` and extends
-`meet_recordings_match_method_check` with a new `group_lesson` value.
-See the entry below for what this powers. **Please run this migration
-in Supabase and reply "successful" once applied.** Harmless if left
-unapplied for now — the new "match to a group class" option on the
-Recordings page just fails with a normal error message until then, same
-no-op-not-a-crash posture as every other unconfirmed migration here.
-
-**Migration 0086 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
-`0086_group_lesson_credits.sql` adds `group_lessons.cancel_reason`, the
-new `group_lesson_credits` table + RLS, and extends both
-`attention_items_kind_check` (new `group_lesson_understaffed` kind) and
-`notifications_kind_check` (new `group_lesson_cancelled` kind). See the
-entry below for what this powers. **Please run this migration in
-Supabase and reply "successful" once applied** — per the standing
-convention, nothing here is assumed applied until you confirm. The new
-`.github/workflows/group-lesson-understaffed.yml` cron (every 15 min)
-will start hitting `/api/cron/group-lesson-understaffed` regardless of
-migration status, but it no-ops harmlessly (query errors, logged not
-thrown by the underlying `.from()` calls returning `null` data) until
-the table/columns actually exist — no rush, but don't leave it
-unconfirmed indefinitely since group classes will just silently stop
-getting auto-cancelled/credited until then.
+**Migrations 0086, 0087, 0088, and 0089 confirmed applied** (2026-09-03)
+— user replied "migrations succesful" covering all four then-outstanding
+ones in one go:
+- **0086** — `group_lessons.cancel_reason`, the new `group_lesson_credits`
+  table + RLS, and the `group_lesson_understaffed`/`group_lesson_cancelled`
+  kind additions are live. The 15-min `group-lesson-understaffed` cron
+  should now be writing real rows instead of no-oping.
+- **0087** — `meet_recordings.matched_group_lesson_id` exists; the
+  Recordings page's "match to a group class" option is live.
+- **0088** — the `attention_item_upsert_*` RPCs now accept the cron's
+  service-role caller; `syncComputedAttentionItems` running inside
+  scan-recordings (every 2h) should actually be writing/resolving Needs
+  Review items now, not silently failing `is_admin()`.
+- **0089** — the no-show/late-forfeit dedup index + RPC exist; re-marking
+  a session no-show can no longer spawn duplicate Needs Review cards
+  (the Jazmynn Hernandez case). Worth a glance at the Resolved tab
+  sometime to confirm the one-time duplicate-cleanup didn't sweep up
+  anything real — not urgent, just flagging since nobody's actually
+  looked yet.
 
 **Migration 0085 confirmed applied AND live-retested** (2026-09-03) —
 `0085_rls_hot_path_indexes.sql` added 7 missing indexes (see entry
