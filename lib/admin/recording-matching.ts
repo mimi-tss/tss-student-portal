@@ -494,54 +494,57 @@ export async function listCandidateSessions(
     }));
 }
 
-// How far back the manual picker looks for an outstanding session/group
-// lesson to match against — generous on purpose. A recording's own
-// recorded_date can legitimately drift from the session's actual
-// calendar day (Drive processing lag past midnight — see
-// recordedDateFromFileName's own comment), so restricting the human
-// picker to "the recording's own day" was actively hiding the right
-// answer from view in exactly that case (confirmed live: Aadishree
-// Singh Gaur's session never showed up in any dropdown because no
-// recording anywhere landed on her session's own exact day). A human
-// choosing from a list doesn't need same-day precision the way the
-// unambiguous auto-match pass (runDayMatching, via listCandidateSessions
-// below) does — they can just read the date/time and pick correctly.
+// How far back the manual group-lesson picker looks for an outstanding
+// lesson to match against — generous on purpose, same reasoning
+// listAllCandidateSessions used to document for its own now-removed
+// window (see below): a human picking from a list doesn't need same-day
+// precision the way the unambiguous auto-match pass does.
 const CANDIDATE_LOOKBACK_DAYS = 14;
 
-// Every one of a coach's still-open "needs a recording" sessions, not
-// just ones on one specific calendar day — the manual queue's actual
-// candidate pool. Distinct from listCandidateSessions (same-day only),
-// which stays date-exact because it also feeds the unambiguous
-// auto-match pass, where a wrong-day guess would silently mispair a
-// recording with the wrong student.
+// Every one of a coach's still-open recording_missing Needs Review items
+// — the manual queue's actual candidate pool for 1:1 sessions. Sourced
+// from attention_items rather than an independent "attended, unmatched"
+// session query so the two views can't drift apart: confirmed live this
+// mattered when an admin manually resolved Rollins Anderson's
+// recording_missing item (no recording exists, and never will) but he
+// kept showing up here anyway — the two were computing "still needs a
+// recording" two different ways. Also naturally handles a coach
+// recording two back-to-back lessons in one file (confirmed live: Gabe
+// Thornett's case) — once an admin resolves the second lesson's item by
+// hand (having placed the shared recording in that student's folder
+// themselves), it drops out of every dropdown too, with no separate
+// multi-match feature needed. Distinct from listCandidateSessions
+// (same-day only), which stays date-exact because it also feeds the
+// unambiguous auto-match pass, where a wrong-day guess would silently
+// mispair a recording with the wrong student.
 export async function listAllCandidateSessions(
   admin: SupabaseClient,
   coachId: string,
   excludeSessionIds: Set<string>,
 ): Promise<{ id: string; scheduledAt: string; studentId: string; studentName: string }[]> {
-  const cutoff = new Date(Date.now() - CANDIDATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-
   const { data } = await admin
-    .from("sessions")
-    .select("id, scheduled_at, student_id, students(name)")
-    .eq("actual_coach_id", coachId)
-    .eq("status", "attended")
-    .gte("scheduled_at", cutoff.toISOString())
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: false });
+    .from("attention_items")
+    .select("session_id, student_id, students(name), sessions!inner(scheduled_at, actual_coach_id)")
+    .eq("kind", "recording_missing")
+    .neq("status", "resolved")
+    .eq("sessions.actual_coach_id", coachId);
 
   return (data ?? [])
-    .filter((s) => !excludeSessionIds.has(s.id))
-    .map((s) => ({
-      id: s.id,
-      scheduledAt: s.scheduled_at,
-      studentId: s.student_id,
-      studentName: (s.students as unknown as { name: string } | null)?.name ?? "Unknown student",
-    }));
+    .filter((item) => item.session_id && item.student_id && !excludeSessionIds.has(item.session_id))
+    .map((item) => ({
+      id: item.session_id as string,
+      scheduledAt: (item.sessions as unknown as { scheduled_at: string }).scheduled_at,
+      studentId: item.student_id as string,
+      studentName: (item.students as unknown as { name: string } | null)?.name ?? "Unknown student",
+    }))
+    .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
 }
 
-// Group-lesson equivalent of listAllCandidateSessions — same reasoning,
-// same lookback window.
+// Group-lesson equivalent of the old listAllCandidateSessions — group
+// lessons don't get their own recording_missing Needs Review items (see
+// syncRecordingAttentionItems, session_id-only), so there's no
+// equivalent "resolved" signal to source this from yet; keeps its own
+// lookback window instead.
 export async function listAllCandidateGroupLessons(
   admin: SupabaseClient,
   coachId: string,
