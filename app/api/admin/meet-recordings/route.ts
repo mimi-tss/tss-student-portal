@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
-import { listCandidateSessions } from "@/lib/admin/recording-matching";
+import { listCandidateSessions, listCandidateGroupLessons } from "@/lib/admin/recording-matching";
 
 // Pure read — just shows whatever's currently in meet_recordings. Used
 // to also trigger the full scan + name-match + day-match pass inline,
@@ -34,11 +34,14 @@ export async function GET() {
       .select("id, coach_id, drive_file_id, file_name, recorded_date, drive_created_at, coaches(name)")
       .eq("status", "unmatched")
       .order("recorded_date", { ascending: false }),
-    admin.from("meet_recordings").select("matched_session_id").eq("status", "matched"),
+    admin.from("meet_recordings").select("matched_session_id, matched_group_lesson_id").eq("status", "matched"),
   ]);
 
   const alreadyMatchedSessionIds = new Set(
     (matchedRows ?? []).map((r) => r.matched_session_id as string).filter(Boolean),
+  );
+  const alreadyMatchedGroupLessonIds = new Set(
+    (matchedRows ?? []).map((r) => r.matched_group_lesson_id as string).filter(Boolean),
   );
 
   const { data: coaches } = await admin.from("coaches").select("id, timezone");
@@ -47,15 +50,13 @@ export async function GET() {
   const items = await Promise.all(
     (unmatched ?? []).map(async (rec) => {
       const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? null;
-      const candidates = rec.coach_id
-        ? await listCandidateSessions(
-            admin,
-            rec.coach_id,
-            rec.recorded_date,
-            timezoneByCoach.get(rec.coach_id) ?? "America/New_York",
-            alreadyMatchedSessionIds,
-          )
-        : [];
+      const timezone = timezoneByCoach.get(rec.coach_id ?? "") ?? "America/New_York";
+      const [candidates, groupLessonCandidates] = rec.coach_id
+        ? await Promise.all([
+            listCandidateSessions(admin, rec.coach_id, rec.recorded_date, timezone, alreadyMatchedSessionIds),
+            listCandidateGroupLessons(admin, rec.coach_id, rec.recorded_date, timezone, alreadyMatchedGroupLessonIds),
+          ])
+        : [[], []];
       return {
         id: rec.id,
         driveFileId: rec.drive_file_id,
@@ -65,6 +66,7 @@ export async function GET() {
         coachId: rec.coach_id,
         coachName,
         candidates,
+        groupLessonCandidates,
       };
     }),
   );

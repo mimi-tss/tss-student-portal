@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group class recordings now fan out to every registered student (2026-09-03)
+
+You asked directly: "are recordings for group class also sent out to
+each student in the group class?" Traced the whole matching pipeline
+([lib/admin/recording-matching.ts](lib/admin/recording-matching.ts)) and
+the honest answer was no — day-match only draws candidates from
+`sessions` (1:1), name-match requires an *unambiguous single* student
+name in the notes doc (a group class's notes would usually name
+several, so it'd never auto-match), manual match takes one `sessionId`,
+and `attachRecordingToStudent` itself only ever creates one Drive
+shortcut for one student. A group class recording had no path to reach
+more than one student at all.
+
+**Fix**: new `attachRecordingToGroupLesson` fans the same
+shortcut-then-notify pair out across every registered student on that
+lesson's roster (registered/attended/no-show all included — a no-show
+should still be able to watch what they missed), continuing past any
+one student's own failure (no Drive folder set up yet, a Drive API
+hiccup) instead of letting one bad row block the rest. Migration 0087
+adds `meet_recordings.matched_group_lesson_id` (matched_student_id stays
+null for a group match — who actually got it is derived on demand from
+the lesson's own registrations, no new join table needed) and a
+`group_lesson` match_method value.
+
+**Deliberately manual-only, no auto-match**: unlike 1:1 sessions, a
+wrong auto-match here would blast a recording to an entire wrong
+roster instead of one wrong student, and a coach can easily teach two
+group classes the same day — too risky to guess. The
+[Recordings queue](<app/(admin)/admin/recordings/recordings-client.tsx>)'s
+existing manual picker now lists group classes alongside 1:1 sessions
+(prefixed "[Group]", with a student count) in the same dropdown; picking
+one calls a new
+[match-group route](app/api/admin/meet-recordings/match-group/route.ts)
+and reports back how many students were actually reached, naming anyone
+skipped (missing Drive folder, etc.) rather than failing silently.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no live login/Drive credentials here. See Action needed below: migration
+0087 needs to be run and confirmed before the new "match to a group
+class" option actually works (it fails with a normal error until then,
+doesn't crash).
+
 ## Fixed Recordings match dropdown silently missing a student (2026-09-03)
 
 You caught this live: the Recordings queue showed a Nikki Hollins
@@ -4854,6 +4896,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0087 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
+`0087_group_lesson_recording_matching.sql` adds
+`meet_recordings.matched_group_lesson_id` and extends
+`meet_recordings_match_method_check` with a new `group_lesson` value.
+See the entry below for what this powers. **Please run this migration
+in Supabase and reply "successful" once applied.** Harmless if left
+unapplied for now — the new "match to a group class" option on the
+Recordings page just fails with a normal error message until then, same
+no-op-not-a-crash posture as every other unconfirmed migration here.
 
 **Migration 0086 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
 `0086_group_lesson_credits.sql` adds `group_lessons.cancel_reason`, the

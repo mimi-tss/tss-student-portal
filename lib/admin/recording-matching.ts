@@ -198,6 +198,111 @@ export async function attachRecordingToStudent(
   return { success: true };
 }
 
+interface GroupLessonRegistrationForRecording {
+  student_id: string;
+  students: {
+    id: string;
+    name: string;
+    drive_folder_id: string | null;
+    email: string;
+    phone: string | null;
+    notify_alerts_email: boolean;
+    notify_alerts_sms: boolean;
+    notify_alerts_inapp: boolean;
+  } | null;
+}
+
+// A group class's recording belongs to every registered student, not
+// one — the whole matched_student_id shape above assumes exactly one.
+// Fans the same shortcut-then-notify pair
+// attachRecordingToStudent does out across the lesson's full roster
+// (registered/attended/no-show all included — a no-show should still be
+// able to watch what they missed), continuing past any one student's
+// own failure (no Drive folder set up, a Drive API error) rather than
+// letting one bad row block everyone else's copy. Never auto-invoked —
+// unlike day/name matching for 1:1 sessions, there's no safe automatic
+// heuristic here: a coach can teach more than one group class on the
+// same day, and a wrong auto-match would blast a recording to an entire
+// wrong roster instead of just one wrong student, so this only ever runs
+// from an admin's own explicit pick in the queue.
+export async function attachRecordingToGroupLesson(
+  admin: SupabaseClient,
+  recordingId: string,
+  groupLessonId: string,
+): Promise<{ success: boolean; error?: string; notified?: number; skipped?: string[] }> {
+  const { data: recording } = await admin
+    .from("meet_recordings")
+    .select("drive_file_id, status")
+    .eq("id", recordingId)
+    .single();
+
+  if (!recording || recording.status !== "unmatched") {
+    return { success: false, error: "recording not found or already resolved" };
+  }
+
+  const { data: registrations } = await admin
+    .from("group_lesson_registrations")
+    .select(
+      "student_id, students(id, name, drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp)",
+    )
+    .eq("group_lesson_id", groupLessonId);
+
+  const rows = (registrations ?? []) as unknown as GroupLessonRegistrationForRecording[];
+  if (rows.length === 0) {
+    return { success: false, error: "no students are registered for that group lesson" };
+  }
+
+  let notified = 0;
+  const skipped: string[] = [];
+
+  for (const row of rows) {
+    const student = row.students;
+    if (!student) continue;
+
+    if (!student.drive_folder_id) {
+      skipped.push(`${student.name} (no Drive folder)`);
+      continue;
+    }
+
+    try {
+      await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
+    } catch (err) {
+      skipped.push(`${student.name} (${err instanceof Error ? err.message : "couldn't link the file"})`);
+      continue;
+    }
+
+    await notifyStudent(admin, {
+      studentId: student.id,
+      email: student.email,
+      phone: student.phone,
+      group: "alerts",
+      kind: "recording_ready",
+      dedupKey: `student:${student.id}:recording_ready:${recordingId}`,
+      title: "Your recording is ready",
+      body: "Your group class recording has been added to your shared folder.",
+      linkUrl: "/student/dashboard",
+      ghlData: { recordingId },
+      channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+    });
+    notified++;
+  }
+
+  const { error } = await admin
+    .from("meet_recordings")
+    .update({
+      status: "matched",
+      matched_group_lesson_id: groupLessonId,
+      match_method: "group_lesson",
+      matched_at: new Date().toISOString(),
+    })
+    .eq("id", recordingId);
+
+  if (error) return { success: false, error: error.message };
+  await resolveAttentionItemsForRecording(admin, recordingId);
+
+  return { success: true, notified, skipped };
+}
+
 export async function dismissRecording(
   admin: SupabaseClient,
   recordingId: string,
@@ -387,6 +492,46 @@ export async function listCandidateSessions(
       studentId: s.student_id,
       studentName: (s.students as unknown as { name: string } | null)?.name ?? "Unknown student",
     }));
+}
+
+// Non-cancelled group lessons for a coach on one calendar day that don't
+// already have a recording matched to them — the manual queue's other
+// candidate pool, alongside listCandidateSessions. Deliberately never fed
+// into an auto-match pass (see attachRecordingToGroupLesson's own
+// comment on why); this only ever backs the picker a human uses.
+export async function listCandidateGroupLessons(
+  admin: SupabaseClient,
+  coachId: string,
+  date: string,
+  timezone: string,
+  excludeGroupLessonIds: Set<string>,
+): Promise<{ id: string; scheduledAt: string; topic: string | null; studentCount: number }[]> {
+  const rangeStart = new Date(`${date}T00:00:00Z`);
+  rangeStart.setUTCDate(rangeStart.getUTCDate() - 1);
+  const rangeEnd = new Date(`${date}T00:00:00Z`);
+  rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 2);
+
+  const { data } = await admin
+    .from("group_lessons")
+    .select("id, topic, scheduled_at, group_lesson_registrations(id)")
+    .eq("coach_id", coachId)
+    .is("cancelled_at", null)
+    .gte("scheduled_at", rangeStart.toISOString())
+    .lt("scheduled_at", rangeEnd.toISOString());
+
+  return (data ?? [])
+    .filter((l) => !excludeGroupLessonIds.has(l.id))
+    .filter((l) => {
+      const [y, m, d] = zonedYearMonthDay(new Date(l.scheduled_at), timezone);
+      return dateKey(y, m, d) === date;
+    })
+    .map((l) => ({
+      id: l.id,
+      scheduledAt: l.scheduled_at,
+      topic: l.topic,
+      studentCount: ((l.group_lesson_registrations as unknown[] | null) ?? []).length,
+    }))
+    .filter((l) => l.studentCount > 0);
 }
 
 // Auto-resolves the unambiguous case only: exactly one unmatched
