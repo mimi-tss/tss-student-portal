@@ -57,14 +57,24 @@ export default function AdminNav({ initialNeedsReviewCount, role }: { initialNee
   // re-fetches it, so the badge could get stuck showing whatever count
   // was true when the admin section was first opened, arbitrarily far
   // out of date (confirmed live: showed 142 while the actual page
-  // showed 58). Re-fetching the same count the Needs Review page itself
-  // uses, on mount and again on every route change, keeps this close to
-  // live without needing a shared store between every page that can
-  // touch an attention_items row.
+  // showed 58). Re-fetching on mount and again on every route change
+  // keeps this close to live without needing a shared store between
+  // every page that can touch an attention_items row.
+  //
+  // Hits the dedicated /count endpoint, not the main attention-items
+  // route — that one calls getAttentionItems, which always re-runs the
+  // full condition-driven sync (6+ kinds, including the batched
+  // recording-matching pass) regardless of the status filter.
+  // Confirmed live that took 1.6s+ per call, and since this fires on
+  // every single navigation, EVERY admin page change was paying that
+  // cost just to refresh a badge number — the actual root cause of a
+  // real "the whole app is slow" report. /count is a plain read, no
+  // sync — the real sync still happens whenever Needs Review or
+  // Overview is actually loaded.
   useEffect(() => {
-    fetch("/api/admin/attention-items?status=needs_action")
+    fetch("/api/admin/attention-items/count")
       .then((res) => res.json())
-      .then((data) => setNeedsReviewCount((data.items ?? []).length))
+      .then((data) => setNeedsReviewCount(data.count ?? 0))
       .catch(() => {});
   }, [pathname]);
 

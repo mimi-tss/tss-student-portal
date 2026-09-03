@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/auth/roles";
 import { getAttentionItems, type AttentionStatus } from "@/lib/admin/attention-items";
 
 const STATUSES: AttentionStatus[] = ["needs_action", "in_progress", "resolved"];
@@ -14,6 +15,14 @@ export const maxDuration = 60;
 // current data on every call — see syncComputedAttentionItems.
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (!isAdminRole(profile?.role)) return NextResponse.json({ error: "admin access only" }, { status: 403 });
+
   const statusParam = req.nextUrl.searchParams.get("status");
   const status = STATUSES.includes(statusParam as AttentionStatus) ? (statusParam as AttentionStatus) : undefined;
   const studentId = req.nextUrl.searchParams.get("studentId") ?? undefined;
