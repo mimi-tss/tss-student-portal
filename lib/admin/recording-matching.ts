@@ -179,7 +179,7 @@ export async function attachRecordingToStudent(
     .eq("id", recordingId);
 
   if (error) return { success: false, error: error.message };
-  await resolveAttentionItemsForRecording(admin, recordingId);
+  await resolveAttentionItemsForRecording(admin, recordingId, opts.sessionId);
 
   await notifyStudent(admin, {
     studentId,

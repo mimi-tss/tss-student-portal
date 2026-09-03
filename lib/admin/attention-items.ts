@@ -131,13 +131,36 @@ async function createIfNew(
 // problem has a single clean fix-it event, so resolving it here is more
 // helpful than making an admin close it by hand after already fixing it
 // in the Recordings queue.
-export async function resolveAttentionItemsForRecording(supabase: SupabaseClient, recordingId: string) {
+// sessionId resolves the OTHER recording kind at the same time —
+// recording_unmatched (keyed by recording_id) and recording_missing
+// (keyed by session_id) are opposite sides of the same event, but were
+// only ever wired to close on their own condition-driven sync pass.
+// That pass computes recording_missing's "does a match exist now" check
+// against a plain UTC todayStr floor (see syncRecordingAttentionItems)
+// which incorrectly excludes a same-day match whose recorded_date lands
+// on the coach's local previous calendar day (any evening EDT session,
+// confirmed live) — so resolving it here, at the moment a real match
+// happens, is both faster and doesn't depend on that floor being right.
+export async function resolveAttentionItemsForRecording(
+  supabase: SupabaseClient,
+  recordingId: string,
+  sessionId?: string | null,
+) {
   await supabase
     .from("attention_items")
     .update({ status: "resolved", resolved_at: new Date().toISOString() })
     .eq("recording_id", recordingId)
     .eq("kind", "recording_unmatched")
     .neq("status", "resolved");
+
+  if (sessionId) {
+    await supabase
+      .from("attention_items")
+      .update({ status: "resolved", resolved_at: new Date().toISOString() })
+      .eq("session_id", sessionId)
+      .eq("kind", "recording_missing")
+      .neq("status", "resolved");
+  }
 }
 
 const EXPIRING_WITHIN_DAYS = 5;
@@ -476,14 +499,20 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   // One query for every already-matched recording touching today's
   // candidate students, instead of one "does this exact pair exist"
   // query per session — same (student, date) matching, just checked in
-  // JS against a batch instead of round-tripping per row.
+  // JS against a batch instead of round-tripping per row. Deliberately
+  // no recorded_date floor: a `todayStr` floor here used to exclude a
+  // same-day match whose recorded_date lands on the coach's local
+  // previous calendar day (any evening EDT session — confirmed live,
+  // this silently broke auto-resolve for exactly that case). The
+  // matched_student_id filter above already bounds this to a handful of
+  // rows (today's due students only), so there's no real query-size
+  // reason to add a date floor back.
   const studentIds = [...new Set(dueSessions.map((s) => s.studentId))];
   const { data: matchedRecordings } = await supabase
     .from("meet_recordings")
     .select("matched_student_id, recorded_date")
     .eq("status", "matched")
-    .in("matched_student_id", studentIds)
-    .gte("recorded_date", todayStr);
+    .in("matched_student_id", studentIds);
 
   const matchedKeys = new Set(
     (matchedRecordings ?? []).map((r) => `${r.matched_student_id}|${r.recorded_date}`),

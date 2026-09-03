@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
+import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
 
 // A recording stays unmatched this long after both auto-match passes run
@@ -59,6 +60,16 @@ export async function GET(req: NextRequest) {
     });
     matchFailAlerted++;
   }
+
+  // Reconciles recording_missing/recording_unmatched (plus the other 5
+  // condition-driven kinds) here too, not just when an admin happens to
+  // open Needs Review — confirmed live a gap can otherwise sit
+  // unnoticed for days. Needs migration 0088 applied first: the
+  // attention_item_upsert_* RPCs (0082) reject any caller without a
+  // real admin session, service-role included, until that migration
+  // grants an explicit service-role allowance — this call is a no-op
+  // (every upsert silently fails its own is_admin() check) until then.
+  await syncComputedAttentionItems(admin);
 
   return NextResponse.json({ inserted, nameMatched, dayMatched, autoMatched: nameMatched + dayMatched, matchFailAlerted });
 }
