@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed a false "upload failed" on the new direct-to-Drive upload (2026-09-02)
+
+You live-tested the direct-to-Drive upload from the previous entry with
+an 11MB video and got "Upload failed — check your connection and try
+again" — but then found the file actually WAS on Drive. That's a real
+gap in the design, not a fluke: Drive's resumable-upload endpoint will
+accept and complete a cross-origin PUT from the browser, but doesn't
+reliably let the browser's own JS read that response back afterward (a
+CORS restriction on the *response*, distinct from whether the request
+itself is allowed through) — so `xhr.onerror` was firing even on a
+genuinely successful upload, because the browser couldn't confirm it,
+not because it failed.
+
+Fix: [shared-folder-panel.tsx](components/shared-folder-panel.tsx) no
+longer trusts the PUT's own success/failure signal as the final word.
+After the PUT attempt (whichever way it reports), it re-fetches the
+folder's real listing through this app's own server
+([/api/shared-folder/list](app/api/shared-folder/list/route.ts)) — that
+call is server-side, so it isn't subject to the browser's CORS
+restriction at all, and is the actual source of truth for whether the
+file landed. One retry after a 2s pause in case Drive's own listing lags
+the write by a moment. Only shows an error if the file genuinely never
+shows up.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not re-tested live
+here — please try the same 11MB (or larger) video again and confirm it
+now shows success without the false error.
+
 ## Shared-folder uploads now go straight to Drive from the browser — no size cap (2026-09-02)
 
 You reported Anthony (Coach Nikita's student) couldn't upload a video to

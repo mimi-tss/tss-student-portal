@@ -17,11 +17,17 @@ type PendingAction = null | "link";
 // upload.onprogress: fetch has no built-in upload-progress event, and a
 // several-hundred-MB video with no progress feedback at all would just
 // look hung.
-function putFileDirectly(
-  url: string,
-  file: File,
-  onProgress: (percent: number) => void,
-): Promise<{ id: string; name: string; webViewLink: string | null }> {
+//
+// Confirmed live: Drive's resumable-upload endpoint will accept and
+// complete a cross-origin PUT from the browser, but doesn't reliably let
+// browser JS actually READ that response back (a CORS quirk on the
+// response itself, not the request) — this fires `onerror` with no
+// readable status at all even when the file already exists in Drive.
+// So this function's rejection means "the browser couldn't confirm it,"
+// NOT "it definitely failed" — the caller re-checks Drive's own folder
+// listing (via this app's server, unaffected by browser CORS) rather
+// than trusting this promise's outcome as the final word.
+function putFileDirectly(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
@@ -29,20 +35,14 @@ function putFileDirectly(
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch {
-          reject(new Error("Upload finished, but the response couldn't be read."));
-        }
-      } else {
-        reject(new Error(`Upload failed (${xhr.status}).`));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Upload failed — check your connection and try again."));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`status ${xhr.status}`)));
+    xhr.onerror = () => reject(new Error("network error (possibly just an unreadable response — verifying)"));
     xhr.send(file);
   });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Shared folder (coach dashboard spec) — student, coach, and admin can
@@ -110,12 +110,23 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
   // browser — no size cap, since the file never passes through our own
   // server at all (see lib/google/drive.ts's createResumableUploadSession
   // for why the old buffered route couldn't handle a real video).
+  //
+  // The PUT's own success/failure signal isn't trusted on its own —
+  // confirmed live that Drive can genuinely receive and create the file
+  // while the browser still reports a network error reading the response
+  // back (see putFileDirectly's comment). So either way, this re-checks
+  // Drive's own folder listing through our server (server-side, immune to
+  // the browser's CORS restriction) to find out what actually happened —
+  // one retry after a short pause in case Drive's listing lags the write
+  // by a moment.
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
     if (!file) return;
     setBusy(true);
     setError(null);
     setUploadProgress(0);
+    const knownIds = new Set(files.map((f) => f.id));
+    let putError: string | null = null;
     try {
       const sessionRes = await fetch("/api/shared-folder/upload-session", {
         method: "POST",
@@ -128,8 +139,30 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
       }
       const { uploadUrl } = await sessionRes.json();
 
-      const uploaded = await putFileDirectly(uploadUrl, file, setUploadProgress);
-      setFiles((prev) => [{ ...uploaded, isShortcut: false }, ...prev]);
+      try {
+        await putFileDirectly(uploadUrl, file, setUploadProgress);
+      } catch (err) {
+        putError = err instanceof Error ? err.message : "upload error";
+      }
+
+      setUploadProgress(null);
+      let landed = false;
+      for (const delayMs of [0, 2000]) {
+        if (delayMs) await sleep(delayMs);
+        const listRes = await fetch(`/api/shared-folder/list?studentId=${studentId}`);
+        if (!listRes.ok) continue;
+        const { files: freshFiles } = (await listRes.json()) as { files: DriveFile[] };
+        landed = freshFiles.some((f) => !knownIds.has(f.id) && f.name === file.name);
+        if (landed) {
+          setFiles(freshFiles);
+          break;
+        }
+      }
+      if (!landed) {
+        throw new Error(
+          putError ? `Upload didn't complete (${putError}) — please try again.` : "Upload didn't complete — please try again.",
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
