@@ -20,6 +20,30 @@ function dateKey(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+// Both filename schemes Meet produces embed the recording's own local
+// calendar date directly: the raw, not-yet-processed form
+// ("fyj-rnyj-hvq (2026-09-02 22:33 GMT-4)") and the Gemini-processed
+// form ("Coach Celine's Personal Meeting Link - 2026/09/02 09:30 EDT -
+// Recording"). Confirmed live this matters: `createdTime` is when Drive
+// finished writing/processing the file, not when the meeting happened —
+// a recording that starts late at night can finish processing after
+// midnight in the coach's own timezone, landing recorded_date one day
+// later than the actual session and silently dropping that session out
+// of both the manual-match dropdown and the day-match auto-pass (a real
+// case: Nikki Hollins's 2026-09-02 22:33 recording got createdTime
+// 2026-09-03T04:06 UTC — after midnight Eastern — so recorded_date was
+// stored as 2026-09-03 while the student's actual session was on
+// 2026-09-02). Falling back to createdTime only when neither pattern
+// matches keeps this working for any future Drive naming Meet hasn't
+// produced yet.
+function recordedDateFromFileName(fileName: string): string | null {
+  const raw = fileName.match(/\((\d{4})-(\d{2})-(\d{2})\s+\d{2}:\d{2}\s+GMT[+-]?\d+\)/);
+  if (raw) return `${raw[1]}-${raw[2]}-${raw[3]}`;
+  const processed = fileName.match(/(\d{4})\/(\d{2})\/(\d{2})\s+\d{2}:\d{2}\s+[A-Z]{2,4}/);
+  if (processed) return `${processed[1]}-${processed[2]}-${processed[3]}`;
+  return null;
+}
+
 function meetCode(meetLink: string | null): string | null {
   if (!meetLink) return null;
   const match = meetLink.match(/([a-z]{3,4}-[a-z]{3,4}-[a-z]{3,4})/i);
@@ -73,12 +97,14 @@ export async function scanForNewRecordings(admin: SupabaseClient): Promise<{ ins
   const rows = newFiles.map((f) => {
     const coachId = identifyCoach(f.name, coachList);
     const coach = coachList.find((c) => c.id === coachId);
-    const [y, m, d] = zonedYearMonthDay(new Date(f.createdTime), coach?.timezone ?? "America/New_York");
+    const fromFileName = recordedDateFromFileName(f.name);
+    const recordedDate =
+      fromFileName ?? dateKey(...zonedYearMonthDay(new Date(f.createdTime), coach?.timezone ?? "America/New_York"));
     return {
       coach_id: coachId,
       drive_file_id: f.id,
       file_name: f.name,
-      recorded_date: dateKey(y, m, d),
+      recorded_date: recordedDate,
       drive_created_at: f.createdTime,
     };
   });
