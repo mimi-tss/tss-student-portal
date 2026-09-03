@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   const { data: updated, error } = await supabase
     .from("group_lessons")
-    .update({ cancelled_at: new Date().toISOString() })
+    .update({ cancelled_at: new Date().toISOString(), cancel_reason: reason.trim() })
     .eq("id", groupLessonId)
     .select("id");
 
@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
   }
 
   // admin_overrides is per-student (required student_id) and a group
-  // lesson has many attendees, not one — doesn't fit that table. The
-  // reason is still required above so cancelling isn't a no-explanation
-  // click, it just isn't persisted anywhere beyond this request today.
+  // lesson has many attendees, not one — doesn't fit that table, so the
+  // reason is persisted directly on group_lessons (migration 0086)
+  // instead.
   return NextResponse.json({ success: true });
 }

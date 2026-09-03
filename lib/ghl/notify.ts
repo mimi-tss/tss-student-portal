@@ -14,7 +14,8 @@ export interface GhlEvent {
     | "session_reminder_24h"
     | "recording_ready"
     | "makeup_credit_needs_scheduling"
-    | "weekly_digest";
+    | "weekly_digest"
+    | "group_lesson_cancelled";
   studentId: string;
   email: string;
   phone: string | null;

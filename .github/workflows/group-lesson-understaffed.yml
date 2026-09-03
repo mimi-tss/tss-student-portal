@@ -1,0 +1,19 @@
+name: Group lesson understaffed check
+
+# Auto-cancels a group class ~24h out if it has 0 or 1 registered students
+# (app/api/cron/group-lesson-understaffed) — same GitHub Actions posture as
+# every other cron here, see kajabi-sync.yml's comment for why.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call group-lesson-understaffed endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/group-lesson-understaffed" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

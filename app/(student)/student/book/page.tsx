@@ -1,10 +1,34 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
 import { FormattedDateTime } from "@/components/formatted-time";
+import { getUnusedGroupLessonCredits, getRedeemableGroupLessons } from "@/lib/group-lesson-credits";
 import BookingClient from "./booking-client";
 import CancelButton from "../dashboard/cancel-button";
+import GroupLessonCreditPanel, { type CreditWithOptions } from "@/components/group-lesson-credit-panel";
 import styles from "../../student.module.css";
+
+// Group class credits (migration 0086) apply regardless of base tier —
+// Lite is already blocked at the layout level, but a Suite/Pro/Elite
+// student who was the sole registrant of an auto-cancelled group class
+// should see their credit here no matter which branch below they land
+// in. Uses the admin client for the same reason
+// lib/group-lesson-credits.ts's own comment gives: reading other
+// students' registration counts on lessons this student isn't in yet is
+// outside their own RLS visibility.
+async function loadGroupLessonCredits(studentId: string): Promise<CreditWithOptions[]> {
+  const admin = createAdminClient();
+  const credits = await getUnusedGroupLessonCredits(admin, studentId);
+  return Promise.all(
+    credits.map(async (c) => ({
+      creditId: c.id,
+      topic: c.topic,
+      expiresAt: c.expiresAt,
+      options: await getRedeemableGroupLessons(admin, c.topic, studentId),
+    })),
+  );
+}
 
 // BookingClient is shared with admin's book-on-behalf-of page — both now
 // render in the shared dark theme via var()-based Tailwind classes (same
@@ -41,6 +65,8 @@ export default async function BookPage() {
     .single();
 
   if (!student) redirect("/login");
+
+  const groupLessonCredits = await loadGroupLessonCredits(student.id);
 
   if (student.tier === "pro" || student.tier === "elite") {
     // Unused, unexpired credits — what's actually spendable on this
@@ -105,6 +131,8 @@ export default async function BookPage() {
           </div>
         )}
 
+        <GroupLessonCreditPanel credits={groupLessonCredits} />
+
         <BookingClient
           studentId={student.id}
           mode="full"
@@ -129,7 +157,12 @@ export default async function BookPage() {
     .maybeSingle();
 
   if (entitlement && !entitlement.used) {
-    return <BookingClient studentId={student.id} mode="trial" coachId={null} />;
+    return (
+      <div className={styles.wrap}>
+        <GroupLessonCreditPanel credits={groupLessonCredits} />
+        <BookingClient studentId={student.id} mode="trial" coachId={null} />
+      </div>
+    );
   }
 
   // No new bookings available (trial already used, no purchased-addon
@@ -187,6 +220,8 @@ export default async function BookPage() {
           </ul>
         </div>
       )}
+
+      <GroupLessonCreditPanel credits={groupLessonCredits} />
 
       <main className="mx-auto max-w-lg p-8 text-[var(--text)]">
         <h1 className="mb-2 text-xl font-semibold">Book a session</h1>

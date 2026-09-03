@@ -26,6 +26,7 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   recording_unmatched: "Unmatched Recording",
   recording_missing: "Missing Recording",
   fifth_week_available: "5th Week",
+  group_lesson_understaffed: "Group Class Cancelled",
 };
 
 export const KIND_CLASS: Record<AttentionKind, string> = {
@@ -46,6 +47,7 @@ export const KIND_CLASS: Record<AttentionKind, string> = {
   recording_unmatched: styles.naKindCredit,
   recording_missing: styles.naKindCredit,
   fifth_week_available: styles.naKindTrial,
+  group_lesson_understaffed: styles.naKindCancel,
 };
 
 export const STATUS_TABS: { status: AttentionStatus; label: string }[] = [

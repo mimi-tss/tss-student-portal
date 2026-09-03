@@ -3,6 +3,84 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Built auto-cancel + credit for understaffed group classes (2026-09-03)
+
+Follow-up to Jessica's group-class report from an earlier session — you
+clarified the coach was simply mistaken (Jessica was never actually
+supposed to be booked, so there was no real registration gap to chase)
+and pivoted to a new, related feature request instead: a group class
+with 0 or 1 registered students shouldn't just sit there — it should
+auto-cancel, and the one student caught in it (if any) shouldn't lose
+out for something that wasn't their fault.
+
+**New behavior**: a cron
+([group-lesson-understaffed](app/api/cron/group-lesson-understaffed/route.ts),
+every 15 min via
+[.github/workflows/group-lesson-understaffed.yml](.github/workflows/group-lesson-understaffed.yml))
+catches any group class ~24h out with ≤1 registered student and:
+soft-cancels it (`cancel_reason` set, same pattern as the existing
+manual admin cancel), emails the sole registered student (if there was
+one) via the existing GHL pipeline, files a `group_lesson_understaffed`
+Needs Review item for admin, and Slacks the coach — reusing
+`notifyStudent`/`notifyCoach`/`createAttentionItem` exactly as every
+other automated notification in this app does, no new plumbing.
+
+**The credit**: the sole student (never 0 or 2+, and never from a
+self-cancel — no such self-cancel path exists for group lessons today,
+only admin can unregister someone) gets a new `group_lesson_credits`
+row (migration 0086), scoped to that class's exact `topic` text — "a
+future group class in the same name," per your description. No forced
+expiry (this is the studio's fault, not the student's — same reasoning
+`makeup_credits`' studio-caused types use). Matching purely by topic
+string is what naturally keeps a bootcamp credit from ever being
+redeemable against a regular weekly group class, or vice versa, without
+needing to hard-code "bootcamp" anywhere — they're just different topic
+strings already.
+
+**Self-service redemption**: since group classes had NO student
+self-booking path at all before this (only admin could register
+someone — confirmed by grepping every call site), built one scoped
+narrowly to spending a credit: [student/book](<app/(student)/student/book/page.tsx>)
+now shows a "Group class credits" panel (new
+[GroupLessonCreditPanel](components/group-lesson-credit-panel.tsx))
+listing other future, non-full occurrences of that same topic, with a
+Register button hitting a new
+[redeem-credit route](app/api/student/group-lessons/redeem-credit/route.ts).
+That route deliberately does NOT add new RLS policies on `group_lessons`/
+`group_lesson_registrations` to make this work — it verifies the caller
+really is the credit's owner with their own session (same "check
+ownership with the user client, then act with the admin client" pattern
+as [notify-upload](app/api/shared-folder/notify-upload/route.ts)),
+sidestepping the exact cross-table RLS recursion class this app has hit
+three separate times before (0007, 0056, 0060) on these very tables.
+
+`npx tsc --noEmit -p .` and `next build` both clean. **Not live-tested**
+— no live login here, and this also can't be meaningfully verified in
+the Browser pane (it's server-side cron logic + an authenticated
+student page). See Action needed below: migration 0086 needs to be run
+and confirmed before any of this actually does anything — until then the
+cron calls no-op harmlessly (queries against a not-yet-existing
+table/columns/kinds just fail and get skipped, not thrown).
+
+## Loose-end confirmations (2026-09-03)
+
+- **Kajabi login-loop fix**: William Newstad confirmed fixed. All three
+  reported cases (Kristel, Addie, William) now confirmed — this one's
+  closed.
+- **Sidebar perf fix** (Needs Review badge no longer re-running full sync
+  per nav): user confirms "yes its good so far" — admin panel feels fast
+  again.
+- **Migration 0085** (RLS hot-path indexes): user confirms "successful" —
+  the real chat-send timeout is gone, not just the migration applied.
+- **In-app notifications**: confirmed live, but student-only — bell lives
+  in [(student)/layout.tsx](app/(student)/layout.tsx), reads
+  `/api/notifications` (RLS-scoped to the logged-in student via migration
+  0083's policy). No equivalent bell for coach or admin; their channel is
+  the Slack webhook instead. Still open on the notifications system:
+  `GHL_WEBHOOK_URL` not yet set in Vercel env vars, and no GHL workflow
+  built yet — until both exist, student email/SMS notifications don't
+  reach anyone even though the app-side code is done.
+
 ## Fixed chat notifications misattributing an admin's message to the student (2026-09-03)
 
 You caught this live in Slack: admin sent a message to Liv Hatfield
@@ -4739,13 +4817,27 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0085 confirmed applied** (2026-09-03) —
+**Migration 0086 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
+`0086_group_lesson_credits.sql` adds `group_lessons.cancel_reason`, the
+new `group_lesson_credits` table + RLS, and extends both
+`attention_items_kind_check` (new `group_lesson_understaffed` kind) and
+`notifications_kind_check` (new `group_lesson_cancelled` kind). See the
+entry below for what this powers. **Please run this migration in
+Supabase and reply "successful" once applied** — per the standing
+convention, nothing here is assumed applied until you confirm. The new
+`.github/workflows/group-lesson-understaffed.yml` cron (every 15 min)
+will start hitting `/api/cron/group-lesson-understaffed` regardless of
+migration status, but it no-ops harmlessly (query errors, logged not
+thrown by the underlying `.from()` calls returning `null` data) until
+the table/columns actually exist — no rush, but don't leave it
+unconfirmed indefinitely since group classes will just silently stop
+getting auto-cancelled/credited until then.
+
+**Migration 0085 confirmed applied AND live-retested** (2026-09-03) —
 `0085_rls_hot_path_indexes.sql` added 7 missing indexes (see entry
 above) that fix a real chat-send timeout ("canceling statement due to
-statement timeout") and should meaningfully speed up RLS checks
-app-wide, not just chat. Please have Nikita retry a message during a
-real session with Katie to confirm the timeout itself is actually
-gone, not just that the migration ran.
+statement timeout"). User confirmed "successful" — the timeout itself
+is gone, not just the migration applied. Closed.
 
 **Migration 0083 confirmed applied** (2026-09-02) — adds the 6
 `notify_*` preference columns on `students`, `coaches.slack_webhook_url`,

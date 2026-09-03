@@ -22,7 +22,8 @@ export type AttentionKind =
   | "inactive_10_days"
   | "recording_unmatched"
   | "recording_missing"
-  | "fifth_week_available";
+  | "fifth_week_available"
+  | "group_lesson_understaffed";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
