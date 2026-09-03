@@ -146,23 +146,33 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
       }
 
       setUploadProgress(null);
-      let landed = false;
+      let landedFile: DriveFile | undefined;
       for (const delayMs of [0, 2000]) {
         if (delayMs) await sleep(delayMs);
         const listRes = await fetch(`/api/shared-folder/list?studentId=${studentId}`);
         if (!listRes.ok) continue;
         const { files: freshFiles } = (await listRes.json()) as { files: DriveFile[] };
-        landed = freshFiles.some((f) => !knownIds.has(f.id) && f.name === file.name);
-        if (landed) {
+        landedFile = freshFiles.find((f) => !knownIds.has(f.id) && f.name === file.name);
+        if (landedFile) {
           setFiles(freshFiles);
           break;
         }
       }
-      if (!landed) {
+      if (!landedFile) {
         throw new Error(
           putError ? `Upload didn't complete (${putError}) — please try again.` : "Upload didn't complete — please try again.",
         );
       }
+
+      // Coach-facing Slack ping — only actually sends when the caller
+      // resolves server-side to being this student themselves (see the
+      // route's own comment); fire-and-forget, a notification hiccup
+      // shouldn't make a successful upload look like it failed.
+      fetch("/api/shared-folder/notify-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, fileId: landedFile.id, fileName: file.name }),
+      }).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {

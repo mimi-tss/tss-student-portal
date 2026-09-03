@@ -3,6 +3,32 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added a coach Slack ping when a student uploads to their shared folder (2026-09-02)
+
+New event added to the coach notification set (booked/cancelled, chat,
+now this). Only fires when the STUDENT themselves is the uploader —
+[SharedFolderPanel](components/shared-folder-panel.tsx) is reused
+verbatim on the coach's and admin's own views of a student, so a coach
+or admin uploading a file on a student's behalf must NOT trigger "student
+uploaded a file" back at that same coach. That check happens
+server-side in the new
+[notify-upload route](app/api/shared-folder/notify-upload/route.ts)
+(does the caller's `profile_id` actually match this student's?), never
+trusted from the client.
+
+Since the upload itself now goes straight from the browser to Drive (see
+the two entries above) and this app's server never directly observes
+that transfer completing, this is called from the client only *after*
+[handleUpload](components/shared-folder-panel.tsx) has already confirmed
+via the folder re-listing that the file genuinely landed — reuses that
+same confirmed file's Drive id as the `notification_log` dedup key.
+Fire-and-forget; a notification hiccup can't turn a real, successful
+upload into something that looks like it failed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+please have a student upload something and confirm their coach's Slack
+channel gets "{name} uploaded a file: {filename}".
+
 ## Fixed a false "upload failed" on the new direct-to-Drive upload (2026-09-02)
 
 You live-tested the direct-to-Drive upload from the previous entry with
