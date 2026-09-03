@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed chat notifications misattributing an admin's message to the student (2026-09-03)
+
+You caught this live in Slack: admin sent a message to Liv Hatfield
+("Hi Liv! Here's the recording from your lesson with Tara...") and the
+coach's Slack channel showed "New message from Liv Hatfield" — as if
+Liv had written it herself.
+
+Root cause: [notifyRecipient](app/api/chat/messages/route.ts) only ever
+checked `senderIsCoach` (a plain boolean, "is the sender in the
+`coaches` table"). A thread actually has THREE possible senders —
+student, coach, or admin (chat's own insert policy, migration 0036,
+explicitly allows admin) — and the boolean's `else` branch silently
+lumped "admin" in with "student," so an admin's message was treated as
+if the student had sent it: notified the coach (wrong recipient — a
+coach messaging their own student obviously shouldn't self-notify) and
+labeled the sender as the student's own name (very wrong — actively
+misattributes real words to a specific person).
+
+Fixed by resolving all three roles explicitly (`senderRole: "student" |
+"coach" | "admin"`, checking both `coaches` and `students` for the
+sender's `profile_id`) and adding a single `recipientFor()` mapping:
+student sends → coach is notified; coach *or* admin sends → student is
+notified. Admin's own messages now correctly attribute as "Admin" (same
+convention the thread's own `GET` participants map already used) and
+only ever notify the student (email), never the coach's Slack — a coach
+was never the actual recipient of an admin-to-student message to begin
+with.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+please have admin send another test message to a student and confirm
+correct attribution + only the student's email fires, not the coach's
+Slack.
+
 ## Found and fixed why chat sends were timing out during Katie's sessions (2026-09-02)
 
 You reported (via Nikita) that sending a chat message kept timing out

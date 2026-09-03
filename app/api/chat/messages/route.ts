@@ -6,6 +6,8 @@ import { notifySlack } from "@/lib/slack/notify";
 
 const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 
+type SenderRole = "student" | "coach" | "admin";
+
 // Generic "you have a new message" nudge (TSS_App_Spec_1.md section 9) —
 // no message content or contact info exposed. No real in-app presence
 // signal exists (chat is 4s-polling while mounted, nothing tracks
@@ -13,7 +15,21 @@ const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 // recipient per thread per 15 minutes rather than a true
 // active/inactive check — a deliberate simplification, not full spec
 // compliance (see the plan's flagged assumptions).
-async function notifyRecipient(threadId: string, senderIsCoach: boolean, bodyPreview?: string | null) {
+//
+// A thread has exactly two possible recipients, never three — when the
+// STUDENT sends, the coach is notified; when the COACH *or* ADMIN sends,
+// the student is notified. Confirmed live this used to collapse to a
+// boolean (senderIsCoach) that only ever checked "is this a coach" —
+// an admin sending a message (posting on the studio's behalf, e.g.
+// forwarding a recording link) fell through to the "not a coach" branch
+// and was wrongly treated as if the STUDENT had sent it: notified the
+// coach's Slack instead of the student's email, and labeled with the
+// student's own name as if they'd written it themselves.
+function recipientFor(senderRole: SenderRole): "student" | "coach" {
+  return senderRole === "student" ? "coach" : "student";
+}
+
+async function notifyRecipient(threadId: string, senderRole: SenderRole, bodyPreview?: string | null) {
   const admin = createAdminClient();
   const { data: thread } = await admin
     .from("chat_threads")
@@ -25,33 +41,37 @@ async function notifyRecipient(threadId: string, senderIsCoach: boolean, bodyPre
 
   if (!thread) return;
 
+  const recipientRole = recipientFor(senderRole);
   const now = new Date();
-  const throttleColumn = senderIsCoach ? "student_last_notified_at" : "coach_last_notified_at";
-  const lastNotified = senderIsCoach ? thread.student_last_notified_at : thread.coach_last_notified_at;
+  const throttleColumn = recipientRole === "coach" ? "coach_last_notified_at" : "student_last_notified_at";
+  const lastNotified = recipientRole === "coach" ? thread.coach_last_notified_at : thread.student_last_notified_at;
 
   if (lastNotified && now.getTime() - new Date(lastNotified).getTime() < NOTIFY_THROTTLE_MS) {
     return;
   }
 
-  const recipient = senderIsCoach
-    ? (thread.students as unknown as { name: string; email: string } | null)
-    : (thread.coaches as unknown as { name: string; email: string; slack_webhook_url: string | null } | null);
-  const senderName = senderIsCoach
-    ? (thread.coaches as unknown as { name: string } | null)?.name
-    : (thread.students as unknown as { name: string } | null)?.name;
+  const recipient =
+    recipientRole === "coach"
+      ? (thread.coaches as unknown as { name: string; email: string; slack_webhook_url: string | null } | null)
+      : (thread.students as unknown as { name: string; email: string } | null);
+  const senderName =
+    senderRole === "coach"
+      ? (thread.coaches as unknown as { name: string } | null)?.name
+      : senderRole === "student"
+        ? (thread.students as unknown as { name: string } | null)?.name
+        : "Admin"; // same "no coach/student row = Admin" convention GET's own participants map uses
 
   if (recipient?.email) {
     await sendEmail(
       recipient.email,
       "New message on Tara Simon Studios",
-      `<p>You have a new message from ${senderName ?? "your coach"} — log in to view and reply.</p>`,
+      `<p>You have a new message from ${senderName ?? "the studio"} — log in to view and reply.</p>`,
     );
   }
 
-  // Coach-facing Slack ping, same throttle as the email above — a coach
-  // messaged by a student gets both; a student messaged by their coach
-  // still only ever gets the email (students don't have a Slack channel).
-  if (!senderIsCoach) {
+  // Coach-facing Slack ping, same throttle as the email above — only
+  // when the coach is the actual recipient (i.e. a student sent it).
+  if (recipientRole === "coach") {
     const coach = recipient as { slack_webhook_url: string | null } | null;
     if (coach?.slack_webhook_url) {
       const preview = bodyPreview?.trim() ? `: "${bodyPreview.trim().slice(0, 200)}"` : "";
@@ -174,15 +194,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't send that message — please try again." }, { status: 500 });
   }
 
-  const { data: senderCoach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("profile_id", user.id)
-    .maybeSingle();
+  const [{ data: senderCoach }, { data: senderStudent }] = await Promise.all([
+    supabase.from("coaches").select("id").eq("profile_id", user.id).maybeSingle(),
+    supabase.from("students").select("id").eq("profile_id", user.id).maybeSingle(),
+  ]);
+  const senderRole: "coach" | "student" | "admin" = senderCoach ? "coach" : senderStudent ? "student" : "admin";
 
   // Fire-and-forget — a notification-email hiccup shouldn't fail the
   // message send itself.
-  notifyRecipient(thread.id, !!senderCoach, message.body).catch((err) =>
+  notifyRecipient(thread.id, senderRole, message.body).catch((err) =>
     console.error(`chat notification failed for thread ${thread.id}`, err),
   );
 
