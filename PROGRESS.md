@@ -3,6 +3,36 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings match dropdown now shows any of a coach's open gaps, not just same-day (2026-09-03)
+
+Aadishree Singh Gaur still didn't show up in any dropdown after the
+earlier recorded_date/resolve fixes — you asked for the dropdown to
+"just include anyone who doesn't have recording" instead of trying to
+chase every date-matching edge case one at a time.
+
+Turns out that was the right call: her session's real date genuinely
+never lined up with any actual recording file's date (nothing was
+mis-dated this time — her recording just plain wasn't in Drive at
+all yet), so date-matching could never have found her no matter how
+precise. [listAllCandidateSessions/listAllCandidateGroupLessons](lib/admin/recording-matching.ts)
+now source the manual picker from any of a coach's still-open
+(unmatched, attended) sessions/group lessons in the last 14 days — no
+date restriction at all. The old date-exact `listCandidateSessions`
+stays untouched and keeps backing the unambiguous auto-match pass
+(`runDayMatching`), where a wrong-day guess would actually risk
+mispairing a recording with the wrong student — that one still needs
+precision since nobody reviews its picks. `listCandidateGroupLessons`
+(the old date-exact group-lesson lookup) had no other caller once the
+manual picker moved off it, so deleted rather than left as dead code.
+
+Since candidates can now span two weeks instead of one day, the
+dropdown label shows date + time now, not just time (same-time
+candidates on different days would otherwise look identical).
+
+`tsc --noEmit` and `next build` both clean. Re-ran the new query
+directly against Supabase for Nikki Hollins's coach id before pushing
+and confirmed Aadishree now surfaces as a candidate. Pushed to `main`.
+
 ## Fixed duplicate no-show Needs Review cards (2026-09-03)
 
 You caught this live in a screenshot: Jazmynn Hernandez had 6+ identical
