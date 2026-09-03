@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed Recordings match dropdown silently missing a student (2026-09-03)
+
+You caught this live: the Recordings queue showed a Nikki Hollins
+recording (`fyj-rnyj-hvq (2026-09-02 22:33 GMT-4)`) needing a match,
+but Anthony Vaca — whose 2026-09-02 22:30 session it actually was —
+wasn't in the "Select the student…" dropdown, even though Needs Review
+separately had a correct "Anthony Vaca's session on 2026-09-02 has no
+recording yet" item for the exact same session.
+
+Root cause: [scanForNewRecordings](lib/admin/recording-matching.ts)
+computed `recorded_date` from Drive's `createdTime` (when the file
+finished processing/uploading), not from when the recording actually
+happened. Checked live against Supabase: this file's `createdTime` was
+`2026-09-03T04:06:34Z` (00:06 EDT) — after midnight — even though the
+session itself ran 22:30–23:00 EDT on 2026-09-02, so `recorded_date`
+got stored as `2026-09-03`, one day late. That mismatch is invisible in
+the Needs Review "missing recording" check (not date-exact, matches on
+student+day range) but fatal to
+[listCandidateSessions](lib/admin/recording-matching.ts)'s exact-date
+filter, which both the manual dropdown and the day-match auto-pass
+share — so Anthony's actually-attended session silently fell out of
+the candidate pool.
+
+Fix: both Meet filename schemes embed the recording's real local date
+directly — the raw pre-processing form (`code (YYYY-MM-DD HH:MM
+GMT-N)`) and the Gemini-renamed form (`... - YYYY/MM/DD HH:MM ZZZ -
+Recording`). New `recordedDateFromFileName()` parses that instead,
+falling back to the old `createdTime`-based calc only when neither
+pattern matches. Scanned every currently-`unmatched` recording against
+this parser to check blast radius — only the one row above was
+affected; hand-corrected its `recorded_date` back to `2026-09-02`
+directly in Supabase (with your OK — a prod DB write, so I asked first)
+so it resolves right away instead of waiting on the next scan.
+`tsc --noEmit` and `next build` both clean; re-simulated
+`listCandidateSessions`'s exact query against Supabase post-fix and
+confirmed Anthony Vaca now appears in the candidate list. Pushed to
+`main`.
+
 ## Built auto-cancel + credit for understaffed group classes (2026-09-03)
 
 Follow-up to Jessica's group-class report from an earlier session — you
