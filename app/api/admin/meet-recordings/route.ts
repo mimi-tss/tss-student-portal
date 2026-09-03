@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
-import { listCandidateSessions, listCandidateGroupLessons } from "@/lib/admin/recording-matching";
+import { listAllCandidateSessions, listAllCandidateGroupLessons } from "@/lib/admin/recording-matching";
 
 // Pure read — just shows whatever's currently in meet_recordings. Used
 // to also trigger the full scan + name-match + day-match pass inline,
@@ -44,17 +44,13 @@ export async function GET() {
     (matchedRows ?? []).map((r) => r.matched_group_lesson_id as string).filter(Boolean),
   );
 
-  const { data: coaches } = await admin.from("coaches").select("id, timezone");
-  const timezoneByCoach = new Map((coaches ?? []).map((c) => [c.id as string, c.timezone as string]));
-
   const items = await Promise.all(
     (unmatched ?? []).map(async (rec) => {
       const coachName = (rec.coaches as unknown as { name: string } | null)?.name ?? null;
-      const timezone = timezoneByCoach.get(rec.coach_id ?? "") ?? "America/New_York";
       const [candidates, groupLessonCandidates] = rec.coach_id
         ? await Promise.all([
-            listCandidateSessions(admin, rec.coach_id, rec.recorded_date, timezone, alreadyMatchedSessionIds),
-            listCandidateGroupLessons(admin, rec.coach_id, rec.recorded_date, timezone, alreadyMatchedGroupLessonIds),
+            listAllCandidateSessions(admin, rec.coach_id, alreadyMatchedSessionIds),
+            listAllCandidateGroupLessons(admin, rec.coach_id, alreadyMatchedGroupLessonIds),
           ])
         : [[], []];
       return {

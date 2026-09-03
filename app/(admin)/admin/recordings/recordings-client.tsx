@@ -43,6 +43,18 @@ function decodeOption(value: string): { kind: "s" | "g"; id: string } | null {
   return { kind, id };
 }
 
+// Candidates can now span up to two weeks (see listAllCandidateSessions),
+// not just one calendar day, so the date has to be in the label too —
+// time alone stopped being enough to tell two candidates apart.
+function formatCandidateDateTime(scheduledAt: string): string {
+  return new Date(scheduledAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function RecordingsClient() {
   const [items, setItems] = useState<RecordingItem[] | null>(null);
   const [autoMatched, setAutoMatched] = useState(0);
@@ -208,12 +220,12 @@ export default function RecordingsClient() {
                     <option value="">Select the student or group class…</option>
                     {item.candidates.map((c) => (
                       <option key={encodeOption("s", c.id)} value={encodeOption("s", c.id)}>
-                        {c.studentName} — {new Date(c.scheduledAt).toLocaleTimeString()}
+                        {c.studentName} — {formatCandidateDateTime(c.scheduledAt)}
                       </option>
                     ))}
                     {item.groupLessonCandidates.map((g) => (
                       <option key={encodeOption("g", g.id)} value={encodeOption("g", g.id)}>
-                        [Group] {g.topic || "Group Lesson"} — {new Date(g.scheduledAt).toLocaleTimeString()} ·{" "}
+                        [Group] {g.topic || "Group Lesson"} — {formatCandidateDateTime(g.scheduledAt)} ·{" "}
                         {g.studentCount} student{g.studentCount === 1 ? "" : "s"}
                       </option>
                     ))}

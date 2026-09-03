@@ -494,37 +494,72 @@ export async function listCandidateSessions(
     }));
 }
 
-// Non-cancelled group lessons for a coach on one calendar day that don't
-// already have a recording matched to them — the manual queue's other
-// candidate pool, alongside listCandidateSessions. Deliberately never fed
-// into an auto-match pass (see attachRecordingToGroupLesson's own
-// comment on why); this only ever backs the picker a human uses.
-export async function listCandidateGroupLessons(
+// How far back the manual picker looks for an outstanding session/group
+// lesson to match against — generous on purpose. A recording's own
+// recorded_date can legitimately drift from the session's actual
+// calendar day (Drive processing lag past midnight — see
+// recordedDateFromFileName's own comment), so restricting the human
+// picker to "the recording's own day" was actively hiding the right
+// answer from view in exactly that case (confirmed live: Aadishree
+// Singh Gaur's session never showed up in any dropdown because no
+// recording anywhere landed on her session's own exact day). A human
+// choosing from a list doesn't need same-day precision the way the
+// unambiguous auto-match pass (runDayMatching, via listCandidateSessions
+// below) does — they can just read the date/time and pick correctly.
+const CANDIDATE_LOOKBACK_DAYS = 14;
+
+// Every one of a coach's still-open "needs a recording" sessions, not
+// just ones on one specific calendar day — the manual queue's actual
+// candidate pool. Distinct from listCandidateSessions (same-day only),
+// which stays date-exact because it also feeds the unambiguous
+// auto-match pass, where a wrong-day guess would silently mispair a
+// recording with the wrong student.
+export async function listAllCandidateSessions(
   admin: SupabaseClient,
   coachId: string,
-  date: string,
-  timezone: string,
+  excludeSessionIds: Set<string>,
+): Promise<{ id: string; scheduledAt: string; studentId: string; studentName: string }[]> {
+  const cutoff = new Date(Date.now() - CANDIDATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  const { data } = await admin
+    .from("sessions")
+    .select("id, scheduled_at, student_id, students(name)")
+    .eq("actual_coach_id", coachId)
+    .eq("status", "attended")
+    .gte("scheduled_at", cutoff.toISOString())
+    .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: false });
+
+  return (data ?? [])
+    .filter((s) => !excludeSessionIds.has(s.id))
+    .map((s) => ({
+      id: s.id,
+      scheduledAt: s.scheduled_at,
+      studentId: s.student_id,
+      studentName: (s.students as unknown as { name: string } | null)?.name ?? "Unknown student",
+    }));
+}
+
+// Group-lesson equivalent of listAllCandidateSessions — same reasoning,
+// same lookback window.
+export async function listAllCandidateGroupLessons(
+  admin: SupabaseClient,
+  coachId: string,
   excludeGroupLessonIds: Set<string>,
 ): Promise<{ id: string; scheduledAt: string; topic: string | null; studentCount: number }[]> {
-  const rangeStart = new Date(`${date}T00:00:00Z`);
-  rangeStart.setUTCDate(rangeStart.getUTCDate() - 1);
-  const rangeEnd = new Date(`${date}T00:00:00Z`);
-  rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 2);
+  const cutoff = new Date(Date.now() - CANDIDATE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
   const { data } = await admin
     .from("group_lessons")
     .select("id, topic, scheduled_at, group_lesson_registrations(id)")
     .eq("coach_id", coachId)
     .is("cancelled_at", null)
-    .gte("scheduled_at", rangeStart.toISOString())
-    .lt("scheduled_at", rangeEnd.toISOString());
+    .gte("scheduled_at", cutoff.toISOString())
+    .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: false });
 
   return (data ?? [])
     .filter((l) => !excludeGroupLessonIds.has(l.id))
-    .filter((l) => {
-      const [y, m, d] = zonedYearMonthDay(new Date(l.scheduled_at), timezone);
-      return dateKey(y, m, d) === date;
-    })
     .map((l) => ({
       id: l.id,
       scheduledAt: l.scheduled_at,
