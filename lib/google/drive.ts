@@ -1,4 +1,3 @@
-import { Readable } from "stream";
 import { google } from "googleapis";
 import { getGoogleAuth, DRIVE_SCOPES } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -120,40 +119,62 @@ export async function listStudentRecordings(folderId: string): Promise<StudentFo
     }));
 }
 
-// Uploads a file into a student's Drive folder — the shared folder,
-// usable by the student themselves, their coach, or admin (all three
-// per the coach-dashboard shared-folder spec). copyRequiresWriterPermission
-// is set on every upload here to disable Drive's own download/copy/print
-// affordances for viewer-only access — best-effort, not airtight (same
-// honest framing as the Exercises Library: true un-downloadable content
-// isn't fully achievable). Caller is responsible for confirming the
-// folder actually belongs to the target student and the actor is allowed
-// to write to it before calling this.
-export async function uploadToStudentFolder(
+// Mints a one-time Google Drive "resumable upload session" URL and hands
+// it back to the browser, which then PUTs the file's bytes STRAIGHT to
+// Google — never through this app's own server. Replaces an earlier
+// version that buffered the whole file into this serverless function's
+// memory before relaying it to Drive itself: that meant (a) Vercel's own
+// request-body size ceiling rejected anything past a few MB before our
+// code even ran, and (b) a several-hundred-MB video could plausibly
+// exceed the function's time/memory budget even if it did get through —
+// confirmed as the actual cause of a real "video won't upload" report.
+// This has no such ceiling: our server's only job is this fast,
+// byte-free session-creation call: everything after it is a direct
+// browser<->Google transfer.
+//
+// copyRequiresWriterPermission (disables Drive's own download/copy/print
+// affordances for viewer-only access — best-effort, not airtight, same
+// honest framing as the Exercises Library) and the `fields` requested on
+// the session URL both have to be set at SESSION CREATION time, not by
+// the browser's later PUT, since only this server call carries
+// authorization — the browser's PUT that follows needs no Authorization
+// header at all, the session URL itself is the credential.
+//
+// Caller is responsible for confirming the folder actually belongs to
+// the target student and the actor is allowed to write to it before
+// calling this.
+export async function createResumableUploadSession(
   folderId: string,
-  file: { name: string; mimeType: string; buffer: Buffer },
-): Promise<StudentFolderFile> {
-  const drive = getDriveClient();
-  const res = await drive.files.create({
-    requestBody: {
-      name: file.name,
-      parents: [folderId],
-      copyRequiresWriterPermission: true,
-    },
-    media: {
-      mimeType: file.mimeType,
-      body: Readable.from(file.buffer),
-    },
-    fields: "id, name, webViewLink",
-    supportsAllDrives: true,
-  });
+  file: { name: string; mimeType: string },
+): Promise<string> {
+  const auth = getGoogleAuth(DRIVE_SCOPES);
+  const { token } = await auth.getAccessToken();
+  if (!token) throw new Error("could not authenticate with Google Drive");
 
-  return {
-    id: res.data.id!,
-    name: res.data.name ?? file.name,
-    webViewLink: res.data.webViewLink ?? null,
-    isShortcut: false,
-  };
+  const res = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,webViewLink",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": file.mimeType,
+      },
+      body: JSON.stringify({
+        name: file.name,
+        parents: [folderId],
+        copyRequiresWriterPermission: true,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(`could not start an upload session (${res.status}): ${await res.text()}`);
+  }
+
+  const sessionUrl = res.headers.get("Location");
+  if (!sessionUrl) throw new Error("Drive didn't return an upload session URL");
+  return sessionUrl;
 }
 
 // Extracts a Drive file/folder id from any of the URL shapes Drive's

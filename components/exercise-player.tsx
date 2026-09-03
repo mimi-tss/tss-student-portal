@@ -95,7 +95,14 @@ export default function ExercisePlayer({ src }: { src: string }) {
     if (playing) {
       audio.pause();
     } else {
-      audio.play();
+      // play() returns a promise that can reject (autoplay policy, a
+      // decode failure) without the <audio> element's own error event
+      // also firing in every browser — unhandled, that's a click that
+      // silently does nothing, no error shown, indistinguishable from
+      // "exercises just don't play" from the student's side.
+      audio.play().catch(() => {
+        setPlaybackError("Couldn't play this recording — try reloading the page.");
+      });
     }
   }
 

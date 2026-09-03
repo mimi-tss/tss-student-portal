@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Shared-folder uploads now go straight to Drive from the browser — no size cap (2026-09-02)
+
+You reported Anthony (Coach Nikita's student) couldn't upload a video to
+show his coach — kept getting an error — and separately that his
+exercises weren't playing. Traced both from code (no live login/DB here
+to reproduce):
+
+**Upload — root cause and fix.** The old
+[shared-folder upload route](app/api/shared-folder/upload/route.ts)
+(now deleted) buffered the whole file into this serverless function's
+memory before relaying it to Drive, with its own 50MB app-level cap on
+top. Raising that cap wouldn't have actually fixed video uploads —
+Vercel's serverless functions have their own request-body size ceiling
+well under that, so a real video would get rejected by the *platform*
+before our code even ran, regardless of what number we set. Rebuilt the
+whole flow around Drive's resumable-upload sessions instead: this app
+now only mints a one-time, byte-free upload session
+([lib/google/drive.ts's createResumableUploadSession](lib/google/drive.ts))
+via a new [upload-session route](app/api/shared-folder/upload-session/route.ts),
+and the **browser PUTs the file directly to Google** from there — the
+file never touches this app's server at all, so there's no size cap to
+hit, on either side. [shared-folder-panel.tsx](components/shared-folder-panel.tsx)
+now does this as two steps (get session → XHR PUT with upload-progress
+shown, since a several-hundred-MB video with no feedback would just look
+hung) rather than one POST-with-formdata.
+
+**Exercises not playing — one real gap closed, cause not fully
+confirmed.** [exercise-player.tsx](components/exercise-player.tsx)'s
+`togglePlay()` called `audio.play()` with no `.catch()` — that promise
+can reject (autoplay policy, decode failure) without the `<audio>`
+element's own `error` event also firing in every browser, which would
+mean a click that silently does nothing, no error shown — exactly what
+"exercises just don't play" looks like from a student's side. Now shows
+the same error message the element's own error handler already used.
+This is a real, worth-having fix regardless, but I can't confirm from
+code alone that it's actually Anthony's specific cause (could equally be
+a Drive-permission issue on one specific file) — flagging honestly
+rather than claiming it's confirmed fixed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not click-tested —
+no live login here, and a real large-file upload against live Drive
+credentials needs to be tried for real to fully confirm.
+
 ## Fixed login looping forever for students inside Kajabi's embedded portal (2026-09-02)
 
 You reported William Newstad and Liv Hatfield (Coach Tara's students,

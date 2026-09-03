@@ -11,6 +11,40 @@ interface DriveFile {
 
 type PendingAction = null | "link";
 
+// PUTs the file's bytes straight to the Drive resumable-upload session
+// URL minted by /api/shared-folder/upload-session — never touches this
+// app's own server. XMLHttpRequest rather than fetch specifically for
+// upload.onprogress: fetch has no built-in upload-progress event, and a
+// several-hundred-MB video with no progress feedback at all would just
+// look hung.
+function putFileDirectly(
+  url: string,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<{ id: string; name: string; webViewLink: string | null }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Upload finished, but the response couldn't be read."));
+        }
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}).`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload failed — check your connection and try again."));
+    xhr.send(file);
+  });
+}
+
 // Shared folder (coach dashboard spec) — student, coach, and admin can
 // all upload, add a shortcut via a pasted Drive link, or remove an item,
 // all against the same per-student Drive folder recordings already live
@@ -38,6 +72,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -70,14 +105,38 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
     return res;
   }
 
+  // Two steps: ask this app for a Drive upload session (fast, no file
+  // bytes involved), then PUT the file straight to Google from the
+  // browser — no size cap, since the file never passes through our own
+  // server at all (see lib/google/drive.ts's createResumableUploadSession
+  // for why the old buffered route couldn't handle a real video).
   async function handleUpload() {
     const file = fileInputRef.current?.files?.[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("studentId", studentId);
-    await refreshAfter(() => fetch("/api/shared-folder/upload", { method: "POST", body: formData }));
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setBusy(true);
+    setError(null);
+    setUploadProgress(0);
+    try {
+      const sessionRes = await fetch("/api/shared-folder/upload-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, fileName: file.name, mimeType: file.type || "application/octet-stream" }),
+      });
+      if (!sessionRes.ok) {
+        const body = await sessionRes.json().catch(() => ({}));
+        throw new Error(body.error ?? "Could not start the upload.");
+      }
+      const { uploadUrl } = await sessionRes.json();
+
+      const uploaded = await putFileDirectly(uploadUrl, file, setUploadProgress);
+      setFiles((prev) => [{ ...uploaded, isShortcut: false }, ...prev]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+      setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   async function handleAddLink() {
@@ -131,7 +190,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
             disabled={busy}
             className="flex items-center gap-1.5 rounded-lg bg-[var(--gold)] px-3 py-1.5 text-xs font-bold text-[var(--gold-text)] disabled:opacity-50"
           >
-            ⬆ Upload
+            {uploadProgress !== null ? `⬆ Uploading… ${uploadProgress}%` : "⬆ Upload"}
           </button>
           <input ref={fileInputRef} type="file" onChange={handleUpload} disabled={busy} className="hidden" />
         </div>
