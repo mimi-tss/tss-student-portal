@@ -166,7 +166,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Raw Postgres error text (e.g. "canceling statement due to
+    // statement timeout") was leaking straight to the chat UI — logged
+    // here for real debugging, but the student/coach just sees a plain
+    // "try again," not a database internals string they can't act on.
+    console.error(`chat message insert failed for thread ${thread.id}`, error);
+    return NextResponse.json({ error: "Couldn't send that message — please try again." }, { status: 500 });
   }
 
   const { data: senderCoach } = await supabase

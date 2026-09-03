@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found and fixed why chat sends were timing out during Katie's sessions (2026-09-02)
+
+You reported (via Nikita) that sending a chat message kept timing out
+mid-session with the raw text "canceling statement due to statement
+timeout" — that's Postgres's own error wording, verbatim, which was the
+first real clue: something server-side was genuinely too slow, not a
+generic network hiccup.
+
+Root cause, confirmed by grepping every migration's own `create index`
+statements: **`sessions.actual_coach_id`, `students.profile_id`, and
+`coaches.profile_id` have never had an index, in this app's entire
+history.** `auth_coach_student_ids()` (migration 0007's RLS helper,
+called by nearly every policy in the app, chat's own insert policy
+included) runs `select distinct student_id from sessions where
+actual_coach_id = ...` — with no index on that column, this is a full
+sequential scan of the ENTIRE `sessions` table, on every single RLS
+check. Sessions rows only ever grow (nightly recurring materialization
+keeps topping up every active schedule's horizon), so this was always
+going to get slower over time, not stay flat — matches "keeps
+happening" exactly, and explains why it's not obviously tied to one
+specific student. `chat_threads`/`chat_messages`' own FK columns were
+unindexed too, compounding it right where the report happened.
+
+Fix: [migration 0085](supabase/migrations/0085_rls_hot_path_indexes.sql)
+adds 7 indexes on these hot-path RLS lookup columns — purely additive,
+can't change any existing query's *results*, only how fast the planner
+can satisfy it. Also fixed the smaller, separate UI issue while in
+there: [chat/messages/route.ts](app/api/chat/messages/route.ts) was
+passing the raw Postgres error string straight to the chat UI on any
+insert failure — now logs the real error server-side and shows a plain
+"couldn't send, try again" instead, so a future slow query (of any
+cause) never surfaces database internals to a coach or student again.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Flagged below —
+**this migration is not yet confirmed applied.** Once it is, please
+have Nikita retry a message during a real session and confirm the
+timeout is gone.
+
 ## Kajabi login-loop fix: Kristel confirmed working, Addie/William pending (2026-09-02)
 
 Follow-up to the Storage Access API fix above — worked through a long
@@ -4667,6 +4705,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New migration 0085 not yet confirmed applied** —
+`0085_rls_hot_path_indexes.sql` adds 7 missing indexes (see entry
+above) that fix a real chat-send timeout ("canceling statement due to
+statement timeout") and should meaningfully speed up RLS checks
+app-wide, not just chat — purely additive, no behavior change, just
+faster. Please apply and confirm.
 
 **Migration 0083 confirmed applied** (2026-09-02) — adds the 6
 `notify_*` preference columns on `students`, `coaches.slack_webhook_url`,
