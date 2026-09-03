@@ -3,6 +3,45 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings match dropdown now stays in sync with Needs Review resolutions (2026-09-03)
+
+Follow-up to the "broaden the dropdown" entry below, same day. You
+manually resolved Rollins Anderson's recording_missing Needs Review
+item (you know there's genuinely no recording — a Meet call that never
+got recorded) and he kept showing up as a match candidate in the
+Recordings dropdown anyway.
+
+Root cause: the dropdown's candidate list (`listAllCandidateSessions`)
+and Needs Review's `recording_missing` items were two independently
+computed things — one asked "is this session attended and not yet
+matched," the other asked "is there an open Needs Review card for it."
+Resolving one had no effect on the other.
+
+Fix: `listAllCandidateSessions` now sources candidates directly from
+open (non-resolved) `recording_missing` attention_items instead of its
+own separate session query. Resolving a Needs Review item now removes
+that student from every recordings dropdown too, automatically.
+
+This also settles the Gabe Thornett question from a message earlier
+today (Nikki recorded two back-to-back lessons in one ~1hr file, so
+only his first lesson ever got auto-matched) — rather than building a
+whole multi-match schema/UI (a real option I'd sketched out and asked
+about), the simpler fix wins: once an admin manually places that shared
+recording in the second student's own folder and resolves their
+Needs Review item by hand, they drop out of the dropdown too, same as
+Rollins. No new matching machinery needed for the "one recording, two
+lessons" case — it's just a manual resolve, same as "no recording
+exists at all."
+
+`listCandidateSessions` (date-exact) is untouched — still backs
+`runDayMatching`'s unambiguous auto-match pass, which needs same-day
+precision since nobody reviews its picks before it fires.
+
+`tsc --noEmit` and `next build` both clean. Re-ran the query live
+against Supabase for Nikki Hollins's coach id before pushing and
+confirmed Rollins Anderson no longer appears while Astrid Cifuentes and
+Aadishree Singh Gaur still do. Pushed to `main`.
+
 ## Recordings match dropdown now shows any of a coach's open gaps, not just same-day (2026-09-03)
 
 Aadishree Singh Gaur still didn't show up in any dropdown after the
