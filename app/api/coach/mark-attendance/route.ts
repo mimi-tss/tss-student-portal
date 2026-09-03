@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   if (status === "no-show" || status === "late-forfeit") {
     const studentName = (data.students as unknown as { name: string } | null)?.name ?? "Student";
-    await flagConsecutiveMisses(createAdminClient(), data.student_id, studentName);
+    await flagConsecutiveMisses(createAdminClient(), data.student_id, studentName, sessionId);
   }
 
   return NextResponse.json({ success: true });

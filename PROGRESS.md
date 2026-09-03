@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed duplicate no-show Needs Review cards (2026-09-03)
+
+You caught this live in a screenshot: Jazmynn Hernandez had 6+ identical
+"NO-SHOW — Jazmynn Hernandez missed their session" cards in Needs
+Review, for what you confirmed was one real missed lesson.
+
+Root cause: [flagConsecutiveMisses](lib/admin/attention-items.ts) (fires
+from `app/api/coach/mark-attendance` when a coach marks no-show/
+late-forfeit, and from `app/api/booking/cancel` on a student's own
+late/no-credit self-cancel) always did a plain, unconditional INSERT —
+by design, an admin/coach re-marking an already-marked session is
+explicitly allowed as a correction path (mark-attendance's own
+comment says so), but nothing stopped that "correction" — or a stray
+double-click, or just revisiting the same session's mark button more
+than once — from also creating a brand new duplicate review card every
+single time, since there was never any dedup on this path at all.
+
+Fix (migration 0089): no_show_1/2/3 items now carry the triggering
+`session_id` and dedup one-per-session via a new partial unique index +
+`attention_item_upsert_no_show` RPC — same "RPC not `.upsert()`" idiom
+this file already uses for `recording_missing`/the 6 condition-driven
+kinds (a plain `.upsert()` can't express a partial index's WHERE clause
+from the client). Deduped on session_id ALONE, not (session_id, kind) —
+which of the 3 severity kinds applies can shift between two marks of the
+same session (an intervening session's mark changes the streak count),
+but there's still only ever one real event worth reviewing per session.
+
+Also included a one-time, narrowly-scoped cleanup in the same migration:
+collapses existing EXACT-duplicate open no_show_* rows (same student +
+kind + summary text — the old rows have no session_id or date to tell
+real repeats from bugged duplicates apart, so identical rows were
+already indistinguishable under the app's own old logic) down to one,
+resolving the rest. Only ever resolves (never deletes) and never touches
+the real `sessions` table — reversible from the Resolved tab if a
+genuinely-repeated real occurrence ever happened to collapse too. Please
+glance at Jazmynn's (and anyone else's) Resolved tab after this migration
+runs, just to confirm nothing real got swept in.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested. See
+Action needed below: migration 0089 needs to run and be confirmed.
+
 ## Fixed recording_missing never auto-resolving + moved its sync onto the 2-hour cron (2026-09-03)
 
 You matched Anthony Vaca's recording (the same one from the
@@ -4976,6 +5017,20 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0089 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
+`0089_no_show_attention_item_dedup.sql` adds a partial unique index +
+`attention_item_upsert_no_show` RPC so re-marking a session no-show/
+late-forfeit can never again create a duplicate Needs Review card (see
+entry below — this is the Jazmynn Hernandez 6-duplicate-cards fix), plus
+a one-time cleanup collapsing existing exact-duplicate open no_show_*
+rows down to one. **Please run this migration in Supabase, glance at the
+Resolved tab to confirm nothing real got swept into it, and reply
+"successful" once applied.** Until then, no-show/late-forfeit marking
+still works fine, but the new RPC call fails silently (function doesn't
+exist yet) and falls through — meaning no_show_1/2/3 Needs Review cards
+just won't get created at all in the meantime, not that duplicates would
+continue. Nothing crashes either way.
 
 **Migration 0088 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
 `0088_attention_item_upsert_cron.sql` lets the `attention_item_upsert_*`

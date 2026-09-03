@@ -50,8 +50,20 @@ const MISS_STATUSES = ["no-show", "late-forfeit", "cancelled-no-notice"];
 // Shared by app/api/coach/mark-attendance (coach marks no-show) and
 // app/api/booking/cancel (student's own late/no-credit self-cancel) —
 // both are "the student missed a lesson" from the studio's point of
-// view, so both feed the same consecutive-miss streak.
-export async function flagConsecutiveMisses(supabase: SupabaseClient, studentId: string, studentName: string) {
+// view, so both feed the same consecutive-miss streak. sessionId is the
+// specific session that triggered this call — required so the resulting
+// item can dedup on it (createNoShowIfNew below): mark-attendance can
+// legitimately re-mark the same session (a coach correcting a misclick),
+// and without a session-scoped dedup that used to insert a brand new
+// duplicate Needs Review card every single time, confirmed live as
+// exactly what happened to Jazmynn Hernandez (6+ identical cards for one
+// real missed lesson).
+export async function flagConsecutiveMisses(
+  supabase: SupabaseClient,
+  studentId: string,
+  studentName: string,
+  sessionId: string,
+) {
   const { data: recent } = await supabase
     .from("sessions")
     .select("status, scheduled_at")
@@ -68,9 +80,10 @@ export async function flagConsecutiveMisses(supabase: SupabaseClient, studentId:
   if (streak < 1) return;
 
   const kind: AttentionKind = streak >= 3 ? "no_show_3" : streak === 2 ? "no_show_2" : "no_show_1";
-  await createAttentionItem(supabase, {
+  await createNoShowIfNew(supabase, {
     kind,
     studentId,
+    sessionId,
     summary:
       streak >= 3
         ? `${studentName} has missed ${streak} sessions in a row`
@@ -124,6 +137,25 @@ async function createIfNew(
   });
 }
 
+// Session-scoped dedup for no_show_1/2/3 (migration 0089) — a re-mark of
+// the SAME session (a coach correcting a misclick, see mark-attendance's
+// own comment on why re-marking is allowed at all) must not create a
+// second card for it. Uniqueness is on session_id alone, not
+// (session_id, kind): the streak-derived kind can shift between two
+// marks of the same session (an intervening session getting marked
+// changes the streak count), but there's still only ever one real event
+// to review here. Same RPC-not-.upsert() reasoning as createIfNew above.
+async function createNoShowIfNew(
+  supabase: SupabaseClient,
+  input: { kind: AttentionKind; studentId: string; sessionId: string; summary: string },
+) {
+  await supabase.rpc("attention_item_upsert_no_show", {
+    p_kind: input.kind,
+    p_student_id: input.studentId,
+    p_session_id: input.sessionId,
+    p_summary: input.summary,
+  });
+}
 
 // Called the moment a recording leaves 'unmatched' (matched or
 // dismissed, see lib/admin/recording-matching.ts) — unlike the 5

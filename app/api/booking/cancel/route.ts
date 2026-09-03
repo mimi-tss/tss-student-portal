@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!outcome.creditGranted) {
-    await flagConsecutiveMisses(createAdminClient(), student.id, student.name);
+    await flagConsecutiveMisses(createAdminClient(), student.id, student.name, sessionId);
   }
 
   notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
