@@ -7,6 +7,40 @@ type Step = "email" | "code";
 
 const RESEND_COOLDOWN_S = 60;
 
+// Requests permission to use this site's own cookies even while
+// embedded in another site's iframe — Kajabi frames this portal
+// directly (app.tarasimonstudios.com inside portal.tarasimonstudios.com),
+// and confirmed live this is exactly what broke login for students
+// entering it that way: the code verified correctly every single time
+// (login_codes.used_at proved it), but the resulting session cookie
+// never actually stuck in the browser, bouncing them back to enter a
+// fresh code forever. Safari blocks third-party/cross-site cookies by
+// default regardless of how the cookie is set (header or JS); Chrome
+// is moving the same direction. The Storage Access API is the
+// standards-track fix for exactly this — an embedded page asking the
+// browser to treat its own storage as first-party — and it must be
+// called from a real user gesture (a click), which is why this is
+// awaited at the top of both submit handlers below, not on page load.
+// A total no-op when not iframed (top-level browsing already has
+// storage access) or on a browser that doesn't support the API at all.
+async function ensureStorageAccess() {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  if (window.self === window.top) return;
+  if (typeof document.requestStorageAccess !== "function") return;
+
+  try {
+    const alreadyHasAccess =
+      typeof document.hasStorageAccess === "function" ? await document.hasStorageAccess() : false;
+    if (!alreadyHasAccess) {
+      await document.requestStorageAccess();
+    }
+  } catch {
+    // Denied, unsupported in this exact context, or errored — the
+    // login attempt right after this proceeds exactly as it would
+    // have without ever trying, so there's nothing to recover here.
+  }
+}
+
 export default function LoginForm() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -45,6 +79,7 @@ export default function LoginForm() {
     if (!email.trim()) return;
     setSending(true);
     setError(null);
+    await ensureStorageAccess();
     const result = await sendCode(email.trim());
     setSending(false);
     if (!result.ok) {
@@ -60,6 +95,7 @@ export default function LoginForm() {
     setSending(true);
     setError(null);
     setJustResent(false);
+    await ensureStorageAccess();
     const result = await sendCode(email.trim());
     setSending(false);
     if (!result.ok) {
@@ -75,6 +111,12 @@ export default function LoginForm() {
     if (!code.trim()) return;
     setVerifying(true);
     setError(null);
+    // The last chance to grab storage access before the session cookie
+    // this request sets actually needs to stick — handleSendCode's own
+    // earlier call already covers most cases, but repeating it here
+    // (same click-driven requirement) means a code re-entered fresh
+    // still gets the same protection.
+    await ensureStorageAccess();
     const res = await fetch("/api/auth/verify-login-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
