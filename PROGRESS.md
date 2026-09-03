@@ -3,6 +3,36 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed recording_missing firing on no-show/cancelled sessions (2026-09-03)
+
+You caught this live in a screenshot: Aashi Allani had both a
+`NO-SHOW` item ("Aashi Allani missed their session") and a
+`MISSING RECORDING` item ("...session on 2026-09-03 has no recording
+yet") for what's the same underlying session — obviously wrong, since a
+no-show session has nobody to record in the first place.
+
+Root cause: [syncRecordingAttentionItems](lib/admin/attention-items.ts)'s
+candidate-session query only excluded `cancelled-with-notice` and
+`cancelled-no-notice` — it never excluded `no-show` or `late-forfeit`,
+even though the file's own `MISS_STATUSES` constant a few lines above
+already identifies exactly this set as "the student missed this." Any
+session sitting scheduled-but-unmarked at grace-cutoff, later marked
+no-show or late-forfeit, would already have been flagged
+`recording_missing` and then just stay that way forever — nothing ever
+rechecked an existing item against its session's current status.
+
+Fixed both directions: the query now also excludes `no-show` and
+`late-forfeit` going forward, and a new retroactive pass on every sync
+re-checks all currently-open `recording_missing` items against their
+session's live status and auto-resolves any that no longer belong (same
+"computed fact, safe to auto-resolve" reasoning the recording-now-exists
+case already used, just working from the other direction) — so
+Aashi's stale item resolves itself on the next Needs Review/Overview
+load rather than needing a manual click.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration —
+pure application logic, no schema change.
+
 ## Group class recordings now fan out to every registered student (2026-09-03)
 
 You asked directly: "are recordings for group class also sent out to

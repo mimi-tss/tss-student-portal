@@ -145,6 +145,14 @@ const HOLD_ENDING_WITHIN_DAYS = 7;
 const INACTIVE_DAYS = 10;
 const RECORDING_GRACE_HOURS = 6; // matches the real multi-hour Meet processing delay confirmed live
 
+// A no-show or forfeited session never had anyone actually attend, and a
+// cancelled one never happened at all — none of these should ever be
+// expected to produce a recording. Distinct from (though overlapping
+// with) MISS_STATUSES above: this is "was there anything to record",
+// not "did the student miss it" (a coach-side no-show, if that were ever
+// tracked separately, would belong here too but not in MISS_STATUSES).
+const NO_RECORDING_EXPECTED_STATUSES = ["cancelled-with-notice", "cancelled-no-notice", "no-show", "late-forfeit"];
+
 // Reconciles the 5 condition-driven kinds against current data. Cheap
 // enough to run on every Needs Attention / Overview read (a handful of
 // scoped queries, no full-table scans) rather than needing a cron job.
@@ -409,7 +417,7 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
     .select("id, student_id, scheduled_at, duration_minutes, status, students(name), coaches:actual_coach_id(timezone)")
     .gte("scheduled_at", `${todayStr}T00:00:00Z`)
     .lte("scheduled_at", new Date().toISOString())
-    .not("status", "in", "(cancelled-with-notice,cancelled-no-notice)");
+    .not("status", "in", `(${NO_RECORDING_EXPECTED_STATUSES.join(",")})`);
 
   // Past-grace-period only — a session that just ended is too soon to
   // expect a recording yet, same cutoff as before, just filtered up
@@ -429,6 +437,39 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
         sessionDate: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
       };
     });
+
+  // A session already flagged recording_missing can later turn out to be
+  // a no-show, a late-forfeit, or a cancellation — attendance/
+  // cancellation status here is often set well after the fact, not at
+  // the moment it happens (per this studio's own habits, see comments
+  // elsewhere in this file), so a real no-show like Aashi Allani's can
+  // sit in the queue looking like a missing recording for a session that
+  // never should have expected one. Re-checks every currently open item
+  // against its session's current status and resolves any that no
+  // longer belong — same "computed fact, safe to auto-resolve" reasoning
+  // as the recording-now-exists case below, just working from the other
+  // direction. Independent of dueSessions/the early return right below,
+  // since a stale item can exist even on a day with nothing newly due.
+  const { data: openMissingItems } = await supabase
+    .from("attention_items")
+    .select("id, sessions(status)")
+    .eq("kind", "recording_missing")
+    .neq("status", "resolved")
+    .not("session_id", "is", null);
+
+  const staleItemIds = (openMissingItems ?? [])
+    .filter((item) => {
+      const status = (item.sessions as unknown as { status: string } | null)?.status;
+      return !!status && NO_RECORDING_EXPECTED_STATUSES.includes(status);
+    })
+    .map((item) => item.id);
+
+  if (staleItemIds.length > 0) {
+    await supabase
+      .from("attention_items")
+      .update({ status: "resolved", resolved_at: new Date().toISOString() })
+      .in("id", staleItemIds);
+  }
 
   if (dueSessions.length === 0) return;
 
