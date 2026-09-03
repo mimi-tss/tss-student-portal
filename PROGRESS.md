@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Kajabi login-loop fix: Kristel confirmed working, Addie/William pending (2026-09-02)
+
+Follow-up to the Storage Access API fix above — worked through a long
+list of alternate theories with you before landing back on "some
+individual browsers just have stricter privacy settings," since each
+more specific theory got directly ruled out along the way:
+- Not a Tara-specific Kajabi offer issue — Nikki's and Celine's
+  students showed the same rapid-repeat login_codes pattern in the
+  data, not just Tara's.
+- Not a misconfigured embed URL — confirmed identical
+  (`app.tarasimonstudios.com/products/student-access`) to every other
+  coach's equivalent page.
+- Not a missing Kajabi purchase link — `kajabi_customer_id` is null
+  for literally all 106 students in the system, universal, not
+  specific to these 3.
+- Not the Kajabi mobile app — confirmed nobody's using it yet.
+- Not iPhone/Safari itself in general — you're on iPhone yourself with
+  no issue.
+
+**Kristel Herrera confirmed fixed** — logged in successfully after the
+Storage Access API change. **Addie (Liv Hatfield) and William Newstad
+still need to retest — scheduled for tomorrow**, since they weren't
+available to try again today. If both come back fixed too, this is
+fully resolved. If either still loops, that means their specific
+browser is outright denying the Storage Access grant, and the
+separate-tab approach becomes a real trade-off conversation worth
+having, despite the "same app, not a new tab" requirement already
+stated.
+
 ## Added a coach Slack ping when a student uploads to their shared folder (2026-09-02)
 
 New event added to the coach notification set (booked/cancelled, chat,
