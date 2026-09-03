@@ -3,6 +3,56 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed recording_missing never auto-resolving + moved its sync onto the 2-hour cron (2026-09-03)
+
+You matched Anthony Vaca's recording (the same one from the
+misdated-recording fix above) and the "missing recording" Needs Review
+item stayed open instead of clearing itself.
+
+Root cause:
+[syncRecordingAttentionItems](lib/admin/attention-items.ts)'s
+auto-resolve check filtered candidate matched recordings with
+`.gte(recorded_date, todayStr)` (today's UTC date) — but a session late
+enough in the evening EDT lands on the *previous* local calendar day
+(exactly Anthony's case), so a same-day match's `recorded_date` sits
+one day behind that floor and gets silently excluded. Since `todayStr`
+only ever moves forward, an affected item could never auto-resolve, not
+today and not on any later day either — confirmed by re-running the
+exact query live against Supabase both before and after the fix.
+
+Fix, two parts:
+- **Resolve at match time instead of waiting on the periodic sync.**
+  [attachRecordingToStudent](lib/admin/recording-matching.ts) already
+  resolved the sibling `recording_unmatched` item on match — extended
+  [resolveAttentionItemsForRecording](lib/admin/attention-items.ts) to
+  also close the `recording_missing` item for that session when a
+  `sessionId` is known, right there, with no date math involved at all.
+- **Dropped the buggy `todayStr` floor** from the periodic sync's own
+  resolve query too, as a safety net for matches that don't carry a
+  `sessionId` (the name-in-notes auto-match path).
+
+You also asked how to stop this needing a message to me every time:
+separately, `recording_missing`/`recording_unmatched` (and the other 5
+condition-driven Needs Review kinds) only ever got reconciled when an
+admin opened the Needs Review page — nothing ran that sync on a
+schedule, so a real gap (like Aadishree's recording never reaching
+Drive at all — see below) could sit unnoticed for days. Wired
+`syncComputedAttentionItems` into the existing 2-hour scan-recordings
+cron so it runs unattended too.
+
+**⚠️ Needs migration 0088 applied — see Action needed section below**
+before that cron wiring actually does anything: the
+`attention_item_upsert_*` RPCs (0082) intentionally reject any caller
+without a real logged-in admin session, service-role included — which
+is exactly why a service-role cron call currently no-ops there instead
+of writing anything. Migration 0088 adds an explicit service-role
+allowance, reasoning that the scan-recordings route is already gated on
+its own `CRON_SECRET` bearer check before reaching this code, so a
+service-role caller reaching it is exactly as trusted as the admin
+session these functions already accept.
+
+`tsc --noEmit` and `next build` both clean. Pushed to `main`.
+
 ## Fixed recording_missing firing on no-show/cancelled sessions (2026-09-03)
 
 You caught this live in a screenshot: Aashi Allani had both a
@@ -4926,6 +4976,17 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0088 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
+`0088_attention_item_upsert_cron.sql` lets the `attention_item_upsert_*`
+RPCs (0082) accept a service-role caller (`auth.role() = 'service_role'`)
+in addition to a real logged-in admin session — needed so the
+scan-recordings cron (now also running `syncComputedAttentionItems`,
+see entry below) can actually write Needs Review items instead of every
+call silently failing its own `is_admin()` check. **Please run this
+migration in Supabase and reply "successful" once applied.** Until then
+the new cron wiring is a harmless no-op — Needs Review still works
+exactly as before, just without the every-2-hours auto-refresh.
 
 **Migration 0087 — NOT YET CONFIRMED APPLIED** (2026-09-03) —
 `0087_group_lesson_recording_matching.sql` adds
