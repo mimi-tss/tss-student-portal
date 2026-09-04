@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed recording_missing never getting created for yesterday's sessions (2026-09-04)
+
+You flagged Ayla Carswell — lesson the day before, no recording
+matched, but no Needs Review card ever showed up for her, and (since
+the dropdown now sources from Needs Review, see entry below) she wasn't
+a match candidate either.
+
+Root cause: [syncRecordingAttentionItems](lib/admin/attention-items.ts)'s
+create pass scoped its candidate query to a hard UTC-calendar-day floor
+(`todayStr`) instead of a rolling window. That's fine the instant a
+session becomes due, but the floor itself moves forward every day — a
+session that became due yesterday and simply hadn't been caught yet
+(nobody opened Needs Review, or the cron hadn't run before midnight)
+falls permanently out of range the next day, never flagged even once.
+Confirmed live: Ayla's session was completely invisible to this query
+by the time I looked.
+
+Fix: replaced the `todayStr` floor with a rolling 3-day
+(`RECORDING_MISSING_LOOKBACK_DAYS`) window on both queries this
+function runs — keeps the original stated intent (never dump weeks of
+historical backlog into Needs Review) while actually catching a session
+that's a day or two old, which is exactly the case this feature exists
+for.
+
+Separately confirmed **not a bug**: the same recording never
+auto-matched by name because Celine stopped/restarted recording
+mid-session, producing 3 separate files for one call slot — the
+existing "a notes doc shared across multiple still-unmatched recordings
+can't be trusted for any of them" dedup logic correctly declines to
+guess among them. A human still has to pick the right one of the 3 in
+the dropdown by hand — which will now actually list her, since this fix
+also feeds the dropdown (see entry below).
+
+`tsc --noEmit` and `next build` both clean. Re-ran the new query
+directly against Supabase before pushing and confirmed Ayla now falls
+within the lookback window. Pushed to `main`.
+
 ## Recordings match dropdown now stays in sync with Needs Review resolutions (2026-09-03)
 
 Follow-up to the "broaden the dropdown" entry below, same day. You
