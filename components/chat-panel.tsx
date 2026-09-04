@@ -108,7 +108,18 @@ export default function ChatPanel({
 
   async function handleSend() {
     if (!text.trim() && !file) return;
-    if (!threadId) return;
+    // A text-only send doesn't need a pre-existing threadId — the send
+    // route (app/api/chat/messages POST) resolves/lazily-creates the
+    // thread itself from studentId alone (0092: a coach messaging a
+    // group-lesson-only student for the very first time has no thread
+    // yet). An attachment upload is the one case that genuinely needs a
+    // real thread id upfront, since the storage path convention IS the
+    // thread id — so that's still gated below; send a text message
+    // first to get a thread, then attachments work on the next message.
+    if (file && !threadId) {
+      setError("Send a text message first before attaching a file to a new conversation.");
+      return;
+    }
 
     setSending(true);
     setError(null);

@@ -1,86 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail } from "@/lib/email/send";
-import { notifySlack } from "@/lib/slack/notify";
-
-const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
-
-type SenderRole = "student" | "coach" | "admin";
-
-// Generic "you have a new message" nudge (TSS_App_Spec_1.md section 9) —
-// no message content or contact info exposed. No real in-app presence
-// signal exists (chat is 4s-polling while mounted, nothing tracks
-// "active right now"), so this is throttled to at most one email per
-// recipient per thread per 15 minutes rather than a true
-// active/inactive check — a deliberate simplification, not full spec
-// compliance (see the plan's flagged assumptions).
-//
-// A thread has exactly two possible recipients, never three — when the
-// STUDENT sends, the coach is notified; when the COACH *or* ADMIN sends,
-// the student is notified. Confirmed live this used to collapse to a
-// boolean (senderIsCoach) that only ever checked "is this a coach" —
-// an admin sending a message (posting on the studio's behalf, e.g.
-// forwarding a recording link) fell through to the "not a coach" branch
-// and was wrongly treated as if the STUDENT had sent it: notified the
-// coach's Slack instead of the student's email, and labeled with the
-// student's own name as if they'd written it themselves.
-function recipientFor(senderRole: SenderRole): "student" | "coach" {
-  return senderRole === "student" ? "coach" : "student";
-}
-
-async function notifyRecipient(threadId: string, senderRole: SenderRole, bodyPreview?: string | null) {
-  const admin = createAdminClient();
-  const { data: thread } = await admin
-    .from("chat_threads")
-    .select(
-      "student_id, coach_id, student_last_notified_at, coach_last_notified_at, students(name, email), coaches(name, email, slack_webhook_url)",
-    )
-    .eq("id", threadId)
-    .single();
-
-  if (!thread) return;
-
-  const recipientRole = recipientFor(senderRole);
-  const now = new Date();
-  const throttleColumn = recipientRole === "coach" ? "coach_last_notified_at" : "student_last_notified_at";
-  const lastNotified = recipientRole === "coach" ? thread.coach_last_notified_at : thread.student_last_notified_at;
-
-  if (lastNotified && now.getTime() - new Date(lastNotified).getTime() < NOTIFY_THROTTLE_MS) {
-    return;
-  }
-
-  const recipient =
-    recipientRole === "coach"
-      ? (thread.coaches as unknown as { name: string; email: string; slack_webhook_url: string | null } | null)
-      : (thread.students as unknown as { name: string; email: string } | null);
-  const senderName =
-    senderRole === "coach"
-      ? (thread.coaches as unknown as { name: string } | null)?.name
-      : senderRole === "student"
-        ? (thread.students as unknown as { name: string } | null)?.name
-        : "Admin"; // same "no coach/student row = Admin" convention GET's own participants map uses
-
-  if (recipient?.email) {
-    await sendEmail(
-      recipient.email,
-      "New message on Tara Simon Studios",
-      `<p>You have a new message from ${senderName ?? "the studio"} — log in to view and reply.</p>`,
-    );
-  }
-
-  // Coach-facing Slack ping, same throttle as the email above — only
-  // when the coach is the actual recipient (i.e. a student sent it).
-  if (recipientRole === "coach") {
-    const coach = recipient as { slack_webhook_url: string | null } | null;
-    if (coach?.slack_webhook_url) {
-      const preview = bodyPreview?.trim() ? `: "${bodyPreview.trim().slice(0, 200)}"` : "";
-      await notifySlack(`New message from ${senderName ?? "a student"}${preview}`, coach.slack_webhook_url);
-    }
-  }
-
-  await admin.from("chat_threads").update({ [throttleColumn]: now.toISOString() }).eq("id", threadId);
-}
+import { notifyChatRecipient } from "@/lib/chat/notify";
+import { coachHasAccessToStudent, getOrCreateThreadId } from "@/lib/chat/thread";
 
 // Coach/student chat (spec section 9) — access is enforced by RLS
 // (migration 0013): a thread only resolves for its own student, its own
@@ -164,20 +86,39 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { data: thread } = await supabase
-    .from("chat_threads")
-    .select("id")
-    .eq("student_id", studentId)
-    .maybeSingle();
+  const [{ data: thread }, { data: senderCoach }, { data: senderStudent }] = await Promise.all([
+    supabase.from("chat_threads").select("id").eq("student_id", studentId).maybeSingle(),
+    supabase.from("coaches").select("id").eq("profile_id", user.id).maybeSingle(),
+    supabase.from("students").select("id").eq("profile_id", user.id).maybeSingle(),
+  ]);
+  const senderRole: "coach" | "student" | "admin" = senderCoach ? "coach" : senderStudent ? "student" : "admin";
 
-  if (!thread) {
+  let threadId = thread?.id ?? null;
+
+  // No thread yet — the only student this can legitimately happen for
+  // is one who's never triggered the assigned-coach trigger (0013), most
+  // commonly a group-lesson-only registrant (see 0092). Only a coach can
+  // start one here, and only when they actually have real access to this
+  // student (verified explicitly since chat_threads has no INSERT
+  // policy for supabase-js to rely on) — a student can never spawn a
+  // thread themselves, and admin's own behavior is unchanged (still 404s,
+  // same as before this fix; not the reported gap).
+  if (!threadId && senderCoach) {
+    const admin = createAdminClient();
+    const hasAccess = await coachHasAccessToStudent(admin, senderCoach.id, studentId);
+    if (hasAccess) {
+      threadId = await getOrCreateThreadId(admin, studentId, senderCoach.id);
+    }
+  }
+
+  if (!threadId) {
     return NextResponse.json({ error: "thread not found" }, { status: 404 });
   }
 
   const { data: message, error } = await supabase
     .from("chat_messages")
     .insert({
-      thread_id: thread.id,
+      thread_id: threadId,
       sender_profile_id: user.id,
       body: body || null,
       attachment_url: attachmentUrl || null,
@@ -190,20 +131,14 @@ export async function POST(req: NextRequest) {
     // statement timeout") was leaking straight to the chat UI — logged
     // here for real debugging, but the student/coach just sees a plain
     // "try again," not a database internals string they can't act on.
-    console.error(`chat message insert failed for thread ${thread.id}`, error);
+    console.error(`chat message insert failed for thread ${threadId}`, error);
     return NextResponse.json({ error: "Couldn't send that message — please try again." }, { status: 500 });
   }
 
-  const [{ data: senderCoach }, { data: senderStudent }] = await Promise.all([
-    supabase.from("coaches").select("id").eq("profile_id", user.id).maybeSingle(),
-    supabase.from("students").select("id").eq("profile_id", user.id).maybeSingle(),
-  ]);
-  const senderRole: "coach" | "student" | "admin" = senderCoach ? "coach" : senderStudent ? "student" : "admin";
-
   // Fire-and-forget — a notification-email hiccup shouldn't fail the
   // message send itself.
-  notifyRecipient(thread.id, senderRole, message.body).catch((err) =>
-    console.error(`chat notification failed for thread ${thread.id}`, err),
+  notifyChatRecipient(threadId, senderRole, message.body).catch((err) =>
+    console.error(`chat notification failed for thread ${threadId}`, err),
   );
 
   return NextResponse.json({ message });

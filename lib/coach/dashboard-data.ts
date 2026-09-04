@@ -90,31 +90,43 @@ export interface CoachStudent {
   tier: string;
 }
 
-// Every student this coach can see — currently assigned, plus anyone
-// they've ever had a real session with (same scoping as /api/coach/students
-// and the auth_coach_student_ids() RLS helper), reused here for both "My
-// Students" and the reminder queries below.
+// Every student this coach can see — currently assigned, anyone they've
+// ever had a real 1:1 session with, plus anyone ever registered in one
+// of their group lessons (same scoping as /api/coach/students and the
+// auth_coach_student_ids()/auth_coach_group_lesson_student_ids() RLS
+// helpers, migration 0092), reused here for both "My Students" and the
+// reminder queries below. Group-only students previously never showed
+// up here at all — confirmed live via Coach Celine's report that her
+// group class's students weren't in "My Students" and she had no way to
+// message them.
 export async function getCoachStudents(
   supabase: SupabaseClient,
   coachId: string,
 ): Promise<CoachStudent[]> {
-  const [{ data: assigned }, { data: sessionRows }] = await Promise.all([
+  const [{ data: assigned }, { data: sessionRows }, { data: groupRegistrations }] = await Promise.all([
     supabase.from("students").select("id, name, tier").eq("assigned_coach_id", coachId),
     supabase.from("sessions").select("student_id").eq("actual_coach_id", coachId),
+    supabase
+      .from("group_lesson_registrations")
+      .select("student_id, group_lessons!inner(coach_id)")
+      .eq("group_lessons.coach_id", coachId),
   ]);
 
   const assignedIds = new Set((assigned ?? []).map((s) => s.id));
-  const historicalIds = [...new Set((sessionRows ?? []).map((r) => r.student_id))].filter(
-    (id) => !assignedIds.has(id),
-  );
+  const otherIds = [
+    ...new Set([
+      ...(sessionRows ?? []).map((r) => r.student_id),
+      ...(groupRegistrations ?? []).map((r) => r.student_id as string),
+    ]),
+  ].filter((id) => !assignedIds.has(id));
 
-  let historical: CoachStudent[] = [];
-  if (historicalIds.length > 0) {
-    const { data } = await supabase.from("students").select("id, name, tier").in("id", historicalIds);
-    historical = data ?? [];
+  let others: CoachStudent[] = [];
+  if (otherIds.length > 0) {
+    const { data } = await supabase.from("students").select("id, name, tier").in("id", otherIds);
+    others = data ?? [];
   }
 
-  return [...(assigned ?? []), ...historical].sort((a, b) => a.name.localeCompare(b.name));
+  return [...(assigned ?? []), ...others].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface ExpiringMakeup {

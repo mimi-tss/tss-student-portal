@@ -114,6 +114,12 @@ export default function DashboardClient({
   const [assignedExercises, setAssignedExercises] = useState(initialAssignedExercises);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [markingGroup, setMarkingGroup] = useState(false);
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<{ sent: number; total: number; failed: string[] } | null>(
+    null,
+  );
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
 
   const selectStudent = useCallback(
     (studentId: string) => {
@@ -149,6 +155,39 @@ export default function DashboardClient({
   function selectGroupLesson(groupLessonId: string) {
     setSelectedId(null);
     setSelectedGroupLessonId(groupLessonId);
+    setBroadcastText("");
+    setBroadcastResult(null);
+    setBroadcastError(null);
+  }
+
+  // Sends one typed message into EACH registered student's own
+  // individual chat thread (never a shared thread the class sees each
+  // other in — see the broadcast route's own comment). Students reply
+  // normally afterward in their existing individual chat, nothing
+  // group-shaped on their side.
+  async function handleBroadcast(groupLessonId: string) {
+    if (!broadcastText.trim()) return;
+    setBroadcasting(true);
+    setBroadcastError(null);
+    setBroadcastResult(null);
+    try {
+      const res = await fetch("/api/coach/group-lessons/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupLessonId, message: broadcastText.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBroadcastError(data.error ?? "Couldn't send that message.");
+        return;
+      }
+      setBroadcastResult({ sent: data.sent ?? 0, total: data.total ?? 0, failed: data.failed ?? [] });
+      setBroadcastText("");
+    } catch {
+      setBroadcastError("Couldn't send that message — try again.");
+    } finally {
+      setBroadcasting(false);
+    }
   }
 
   async function handleMarkGroupAttendee(registrationId: string, status: "attended" | "no-show") {
@@ -430,6 +469,39 @@ export default function DashboardClient({
                     ))}
                   </ul>
                 )}
+              </div>
+
+              <div className={styles.panel} style={{ marginTop: 16 }}>
+                <h2>Message the class</h2>
+                <p className={styles.panelText}>
+                  Sends this as an individual message to each registered student&apos;s own chat — not a shared
+                  thread the class sees each other in. They&apos;ll reply to you normally from there.
+                </p>
+                <textarea
+                  className={styles.input}
+                  style={{ width: "100%", minHeight: 70, resize: "vertical", marginTop: 8 }}
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
+                  placeholder="Write a message to everyone registered for this class…"
+                  disabled={broadcasting}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                  <button
+                    className={styles.cta}
+                    disabled={broadcasting || !broadcastText.trim()}
+                    onClick={() => handleBroadcast(selectedGroupLesson.id)}
+                  >
+                    {broadcasting ? "Sending…" : "Send to class"}
+                  </button>
+                  {broadcastError && <span style={{ color: "#c0392b", fontSize: 13 }}>{broadcastError}</span>}
+                  {broadcastResult && (
+                    <span className={styles.panelText}>
+                      Sent to {broadcastResult.sent}/{broadcastResult.total} students
+                      {broadcastResult.failed.length > 0 && ` — couldn't reach: ${broadcastResult.failed.join(", ")}`}
+                      .
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ) : !selectedId || !snapshot ? (

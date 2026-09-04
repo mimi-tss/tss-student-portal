@@ -3,6 +3,89 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group-class coaches can now see and message their students (2026-09-04)
+
+You forwarded Coach Celine's Slack message: her group class's students
+weren't showing up in "My Students," and she had "no way to send them
+any message." Asked how far to take the fix, you described the target
+design directly: a group session shows on the Coach Dashboard when it's
+today, the coach can message everyone in it at once, that fans out as
+an INDIVIDUAL message into each student's own chat (never a shared
+thread the class sees each other in), and each student replies normally
+in their own individual chat.
+
+**Root cause, traced fully**: coach access to a student has only ever
+come from two sources — `assigned_coach_id` (1:1) and
+`auth_coach_student_ids()` (any coach with real 1:1 session history,
+made permanent/additive by migration 0022). A group-lesson-only
+relationship (`group_lesson_registrations`) was never part of either —
+not in "My Students" ([lib/coach/dashboard-data.ts](lib/coach/dashboard-data.ts)/
+[/api/coach/students](app/api/coach/students/route.ts), which had drifted
+into two separate copies of the same query — now one calls the other),
+not in the `students` table RLS the coach's own dashboard snapshot
+depends on (meaning even the *existing* group-lesson roster panel was
+silently showing "Student" instead of a real name for any registrant
+who wasn't otherwise one of Celine's — a related, previously-invisible
+bug this same fix also closes), and not in chat's own RLS at all.
+
+**Fix** (migration 0092): a new `auth_coach_group_lesson_student_ids()`
+helper, same additive pattern 0022 already established, added as a third
+OR clause everywhere `auth_coach_student_ids()` already appears for
+chat access — `students`, `chat_threads`, `chat_messages`, and the
+chat-attachments storage policies. Still exactly ONE chat thread per
+student (never redesigned into one-per-coach) — access is additive, not
+multiplied, matching how a reassigned coach already keeps permanent
+access under 0022.
+
+**The remaining real gap**: a pure group-class-only student (never had a
+1:1 coach) has no `chat_threads` row at all — the only trigger that
+creates one fires on `assigned_coach_id`. [app/api/chat/messages](app/api/chat/messages/route.ts)'s
+POST now lazily creates one the first time a *verified* coach (via new
+[lib/chat/thread.ts](lib/chat/thread.ts)'s `coachHasAccessToStudent` —
+assigned, 1:1 history, or group-lesson registration) messages such a
+student — `chat_threads` has no INSERT policy at all (only the
+assigned-coach trigger writes it), so this is checked in application
+code and written via the admin client, same "verify with the user's own
+session, act with the admin client" posture as
+[notify-upload](app/api/shared-folder/notify-upload/route.ts). Also
+fixed [ChatPanel](components/chat-panel.tsx), which previously silently
+no-op'd Send whenever no thread existed yet (`if (!threadId) return`) —
+a real bug this surfaced: a text-only send no longer needs a
+pre-existing thread id at all now that the route creates one itself;
+only an attachment upload still does (the storage path convention IS
+the thread id), so that's the one case still gated, with a real message
+instead of silent nothing.
+
+**New**: [POST /api/coach/group-lessons/broadcast](app/api/coach/group-lessons/broadcast/route.ts)
+re-derives the roster server-side from `groupLessonId` (never trusts a
+client-submitted student list), fans one typed message into each
+registered student's own thread (get-or-create per student, same
+`lib/chat/thread.ts` helper), and reports back how many were actually
+reached. Includes every registration regardless of status (registered/
+attended/no-show) — same reasoning as the group-lesson recording
+fan-out. Coach Dashboard's existing "today's group lesson" roster panel
+(already today-only by construction — `getTodaysGroupLessons` — so no
+extra date gating needed) now has a "Message the class" composer right
+below it. Extracted the actual email/Slack notify logic out of
+`app/api/chat/messages/route.ts` into [lib/chat/notify.ts](lib/chat/notify.ts)
+so both the normal single-send path and the new broadcast path share it
+rather than duplicating.
+
+**Known, deliberately out-of-scope gap**: homework notes, exercise
+assignment, and the shared-folder panel still use the old two-source
+access model (never extended to group-lesson coaches) — only "My
+Students" visibility and chat were part of what was actually reported/
+asked for. If Celine (or another group-class coach) also needs those for
+a group-only student, that's a quick, same-shaped follow-up, not done
+here.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no live login here. See Action needed below: migration 0092 needs to run
+and be confirmed — until then, group-class students still won't appear
+in "My Students" or be messageable (same harmless no-op posture as every
+other unconfirmed migration; nothing crashes, the feature just isn't
+live yet).
+
 ## Recordings now learn a name alias from every manual match (2026-09-04)
 
 Direct follow-up to the Angelica Nesenchuk / "Natalie Semon" case from
@@ -5202,6 +5285,18 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0092 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
+`0092_group_lesson_chat_access.sql` adds the `auth_coach_group_lesson_student_ids()`
+RLS helper and OR's it into the `students`/`chat_threads`/`chat_messages`/
+chat-attachment-storage policies (see entry above — this is the Coach
+Celine "add my group students, let me message them" fix, for every
+coach with group classes, not just her). **Please run this migration in
+Supabase and reply "successful" once applied.** Until then, "My
+Students" still won't include group-only students (the final name
+lookup is RLS-gated) and messaging them will still fail — no crash,
+same no-op-not-a-crash posture as every other unconfirmed migration
+here.
 
 **Migration 0091 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
 `0091_meet_recording_aliases.sql` adds the `meet_recording_aliases`
