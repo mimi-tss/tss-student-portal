@@ -129,7 +129,7 @@ export async function attachRecordingToStudent(
 ): Promise<{ success: boolean; error?: string }> {
   const { data: recording } = await admin
     .from("meet_recordings")
-    .select("drive_file_id, status")
+    .select("drive_file_id, status, coach_id, file_name, drive_created_at")
     .eq("id", recordingId)
     .single();
 
@@ -139,7 +139,7 @@ export async function attachRecordingToStudent(
 
   const { data: student } = await admin
     .from("students")
-    .select("drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
+    .select("name, drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
     .eq("id", studentId)
     .single();
   if (!student?.drive_folder_id) {
@@ -180,6 +180,22 @@ export async function attachRecordingToStudent(
 
   if (error) return { success: false, error: error.message };
   await resolveAttentionItemsForRecording(admin, recordingId, opts.sessionId);
+
+  // Only for a human's own pick — an auto-match (day_session,
+  // name_in_notes) is already the machine's best guess, not a confirmed
+  // fact worth teaching the system from. A manual pick means an admin
+  // looked at the actual video/notes and is certain, which is exactly
+  // the confidence bar for silently remembering a name for next time.
+  if (opts.method === "manual" && recording.coach_id) {
+    await learnRecordingAlias(admin, {
+      recordingId,
+      coachId: recording.coach_id,
+      studentId,
+      studentName: student.name,
+      fileName: recording.file_name,
+      driveCreatedAt: recording.drive_created_at,
+    });
+  }
 
   await notifyStudent(admin, {
     studentId,
@@ -318,6 +334,77 @@ export async function dismissRecording(
   return { success: true };
 }
 
+// Matches Gemini's own notes-doc formatting for attributing a specific
+// person within a session that covers more than one topic/person — a
+// bracketed action-item owner ("[Natalie Semon] Practice Blue: ...") or
+// a parenthetical section header ("Coaching Validation ... (Maeve
+// O'Connell)"). Confirmed live this is far more reliable than scanning
+// for any capitalized word — it's exactly the pattern Gemini uses to
+// name whoever a given note actually belongs to.
+const ATTRIBUTED_NAME_PATTERN = /[[(]([A-Z][a-zA-Z'-]+(?:\s[A-Z][a-zA-Z'-]+)+)[\])]/g;
+
+// Best-effort, silent — never lets a failure here affect the match that
+// already succeeded. Called only from a manual match (see
+// attachRecordingToStudent), and only learns an alias when there's no
+// real ambiguity about which physical recording file the extracted name
+// actually belongs to:
+//  - the recording's own filename label isn't shared with another still-
+//    unmatched recording for the same coach (the exact case that blocks
+//    Maeve O'Connell's real name from auto-matching today: Celine
+//    stopped/restarted recording mid-session, so one shared notes doc
+//    covers 3 different students across 3 different video files — no
+//    text alone can say which student is THIS file's).
+//  - the recording's own label resolves to exactly one notes doc.
+// Picks whichever attributed name appears most often in the doc and
+// isn't the coach's or the already-matched student's own name — for a
+// single lesson's own notes, that's reliably the parent/guardian's name
+// when the account joining Meet isn't the student's, same as every
+// action item in Angelica Nesenchuk's actual notes doc being attributed
+// to "Natalie Semon" (her mom) throughout, never "Angelica" once.
+async function learnRecordingAlias(
+  admin: SupabaseClient,
+  opts: { recordingId: string; coachId: string; studentId: string; studentName: string; fileName: string; driveCreatedAt: string },
+): Promise<void> {
+  try {
+    const labelMatch = opts.fileName.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2} [A-Z]{2,4}/);
+    if (labelMatch) {
+      const { data: siblings } = await admin
+        .from("meet_recordings")
+        .select("id")
+        .eq("coach_id", opts.coachId)
+        .eq("status", "unmatched")
+        .ilike("file_name", `%${labelMatch[0]}%`)
+        .neq("id", opts.recordingId)
+        .limit(1);
+      if (siblings && siblings.length > 0) return;
+    }
+
+    const candidates = await findGeminiNotesForRecording(opts.fileName, opts.driveCreatedAt);
+    if (candidates.length !== 1) return;
+
+    const text = await exportDocText(candidates[0].id);
+    const { data: coach } = await admin.from("coaches").select("name").eq("id", opts.coachId).single();
+    const excludeNames = new Set(
+      [coach?.name, opts.studentName].filter((n): n is string => !!n).map((n) => n.toLowerCase()),
+    );
+
+    const counts = new Map<string, number>();
+    for (const match of text.matchAll(ATTRIBUTED_NAME_PATTERN)) {
+      const name = match[1];
+      if (excludeNames.has(name.toLowerCase())) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const aliasName = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!aliasName) return;
+
+    await admin
+      .from("meet_recording_aliases")
+      .upsert({ coach_id: opts.coachId, alias_name: aliasName, student_id: opts.studentId }, { onConflict: "coach_id,alias_name" });
+  } catch (err) {
+    console.error(`learnRecordingAlias failed for recording ${opts.recordingId}`, err);
+  }
+}
+
 // Searches a Gemini notes doc's text for exactly one of a coach's
 // students by full name — deliberately requires an unambiguous single
 // hit (two names appearing, or none, both fall through to the manual
@@ -382,13 +469,14 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
   if (!unmatched?.length) return { matched: 0 };
 
   const coachIds = [...new Set(unmatched.map((r) => r.coach_id as string))];
-  const [{ data: coaches }, { data: students }] = await Promise.all([
+  const [{ data: coaches }, { data: students }, { data: aliases }] = await Promise.all([
     admin.from("coaches").select("id, email").in("id", coachIds),
     admin
       .from("students")
       .select("id, name, assigned_coach_id")
       .eq("archived", false)
       .in("assigned_coach_id", coachIds),
+    admin.from("meet_recording_aliases").select("coach_id, alias_name, student_id").in("coach_id", coachIds),
   ]);
 
   const coachEmailById = new Map((coaches ?? []).map((c) => [c.id as string, (c.email as string).toLowerCase()]));
@@ -397,6 +485,18 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
     const key = s.assigned_coach_id as string;
     const list = studentsByCoach.get(key) ?? [];
     list.push({ id: s.id, name: s.name });
+    studentsByCoach.set(key, list);
+  }
+  // A learned alias is just another name in the same search pool, not a
+  // separate trust tier — findStudentNameInText still requires it be
+  // the ONLY name-like hit in the doc, so a recording that's still
+  // genuinely ambiguous (shared notes doc across multiple files, same
+  // as Maeve O'Connell's real name doesn't auto-match today) stays
+  // blocked exactly as it already is, alias or not.
+  for (const a of aliases ?? []) {
+    const key = a.coach_id as string;
+    const list = studentsByCoach.get(key) ?? [];
+    list.push({ id: a.student_id as string, name: a.alias_name as string });
     studentsByCoach.set(key, list);
   }
 
