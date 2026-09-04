@@ -5368,16 +5368,12 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0093 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
-`0093_trial_lesson_coach_lock.sql` adds `entitlements.coach_id` (see
-entry above — this is the "trial lesson with Tara specifically" fix).
-**Please run this migration in Supabase and reply "successful" once
-applied.** Until then, granting ANY trial (via the Add Student form or
-the dashboard's "Grant trial") will fail with a real error — both now
-always send a `coach_id` field (null for "Any coach"), and Postgres
-rejects the whole insert if that column doesn't exist yet, not just
-when a specific coach is picked. Not silent, but also not a small gap —
-please confirm this one promptly.
+**Migration 0093 confirmed applied** (2026-09-04) — `entitlements.coach_id`
+is live. Granting a trial (Add Student form or the dashboard's "Grant
+trial") with either "Any coach" or a specific one like Tara should now
+both work — the specific-coach case skips the coach-picker on both the
+student's own booking page and admin's book-trial page, straight to
+date/time.
 
 **Migration 0092 confirmed applied** (2026-09-04) — `auth_coach_group_lesson_student_ids()`
 and the broadened `students`/`chat_threads`/`chat_messages`/chat-attachment
