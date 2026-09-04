@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings now learn a name alias from every manual match (2026-09-04)
+
+Direct follow-up to the Angelica Nesenchuk / "Natalie Semon" case from
+earlier today — her coach's notes doc refers to her only by her mom's
+Google account name, every single week, so no text-matching heuristic
+would ever find "Angelica" in it. Rather than a new alias-teaching UI
+(you didn't want anything added to the Admin SOP), the whole thing is
+silent: it learns from the manual match you already make today, no new
+field or step.
+
+New `meet_recording_aliases` table (migration 0091, `coach_id,
+alias_name -> student_id`). [learnRecordingAlias](lib/admin/recording-matching.ts)
+fires from `attachRecordingToStudent`, manual matches only (an
+auto-match is the machine's own guess, not a human-confirmed fact worth
+teaching from). Extracts whichever name Gemini's own notes-doc
+formatting attributes things to most often — bracketed action-item
+owners (`[Natalie Semon] Practice Blue: ...`) and parenthetical section
+headers (`... (Maeve O'Connell)`), confirmed live as exactly the pattern
+Gemini itself uses — excluding the coach's and the already-matched
+student's own names.
+
+Deliberately declines to learn anything when there's real ambiguity
+about which physical video file the extracted name belongs to: skipped
+if the recording's filename label is shared with another still-unmatched
+recording for the same coach (the exact thing blocking Maeve
+O'Connell's own real name from auto-matching — one shared notes doc
+covering 3 students across 3 separate files from that "16:30 EDT"
+stop/restart block), and skipped if the label doesn't resolve to
+exactly one notes doc.
+
+`runNameMatching` now folds known aliases into the same search pool as
+the student roster — not a separate trust tier, just one more name a
+recording's notes doc can match on. Still requires exactly one name-like
+hit to auto-match, same safety net as always; Maeve's own case stays
+correctly blocked either way.
+
+`tsc --noEmit` and `next build` both clean. Re-ran the extraction logic
+live against Angelica's real notes doc before pushing and confirmed it
+correctly picks "Natalie Semon" (8 occurrences, everything else
+excluded). Pushed to `main`.
+
 ## Added a health-check alert for the scan-recordings cron going silent (2026-09-04)
 
 Follow-up to today's string of recording-matching fixes — asked whether
@@ -5161,6 +5202,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0091 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
+`0091_meet_recording_aliases.sql` adds the `meet_recording_aliases`
+table the new recording-alias auto-learning feature (see entry above)
+reads/writes. **Please run this migration in Supabase and reply
+"successful" once applied.** Harmless if left unapplied — manual
+matching and name-matching both still work exactly as before, the
+alias read/write just fails silently (table doesn't exist yet) and
+nothing gets learned or applied in the meantime, same no-op-not-a-crash
+posture as every other unconfirmed migration here.
 
 **Migration 0090 confirmed applied** (2026-09-04) — `cron_heartbeats`
 exists; the scan-recordings health-check alert (see entry above) is
