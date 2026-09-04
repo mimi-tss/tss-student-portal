@@ -10,6 +10,18 @@ import { notifyStaff } from "@/lib/notifications/create";
 // stuck.
 const MATCH_FAIL_GRACE_HOURS = 3;
 
+// This job is scheduled every 2 hours (.github/workflows/scan-recordings.yml)
+// — a gap bigger than this means at least one scheduled run never made it
+// to its own success path (auth failure, Vercel outage, quota, anything),
+// and Needs Review/Recordings have quietly stopped refreshing with nobody
+// aware. Generous margin over the 2h schedule so ordinary scheduling
+// jitter never false-alarms. This only catches "a run was skipped or
+// failed," not "GitHub Actions itself stopped firing the schedule
+// entirely" — that failure mode needs an external uptime check (e.g.
+// healthchecks.io), which is outside what this codebase alone can detect.
+const HEALTH_CHECK_STALE_HOURS = 4;
+const CRON_JOB_NAME = "scan-recordings";
+
 // Runs the exact same scan + auto-match pass the admin Recordings page
 // (app/api/admin/meet-recordings/route.ts) triggers on load — pulled
 // out so it can also run unattended, on a schedule, via GitHub Actions
@@ -30,6 +42,28 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+
+  // Checked first, before any real work — a stale heartbeat means the
+  // PREVIOUS scheduled run(s) never made it here, not this one. Dedup
+  // key is per-calendar-day, not per-run, so a genuinely broken cron
+  // gets one alert a day rather than one every 2 hours.
+  const { data: heartbeat } = await admin
+    .from("cron_heartbeats")
+    .select("last_run_at")
+    .eq("job_name", CRON_JOB_NAME)
+    .maybeSingle();
+  if (heartbeat) {
+    const staleCutoff = Date.now() - HEALTH_CHECK_STALE_HOURS * 60 * 60 * 1000;
+    if (new Date(heartbeat.last_run_at).getTime() < staleCutoff) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      await notifyStaff(admin, {
+        kind: "cron_stale",
+        dedupKey: `staff:cron_stale:${CRON_JOB_NAME}:${todayStr}`,
+        text: `⚠️ ${CRON_JOB_NAME} hasn't completed successfully since ${heartbeat.last_run_at} — Needs Review/Recordings may be stale.`,
+      });
+    }
+  }
+
   const { inserted } = await scanForNewRecordings(admin);
   // Name-matching first — it doesn't depend on attendance ever being
   // marked (day+session matching does), so it resolves more real cases
@@ -70,6 +104,14 @@ export async function GET(req: NextRequest) {
   // grants an explicit service-role allowance — this call is a no-op
   // (every upsert silently fails its own is_admin() check) until then.
   await syncComputedAttentionItems(admin);
+
+  // Recorded last, only once every step above has actually completed —
+  // an error thrown partway through this handler means this line never
+  // runs, which is exactly the signal the next run's own check above
+  // needs to see.
+  await admin
+    .from("cron_heartbeats")
+    .upsert({ job_name: CRON_JOB_NAME, last_run_at: new Date().toISOString() });
 
   return NextResponse.json({ inserted, nameMatched, dayMatched, autoMatched: nameMatched + dayMatched, matchFailAlerted });
 }
