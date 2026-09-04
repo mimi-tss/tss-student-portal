@@ -424,28 +424,38 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
   );
 }
 
-// Both kinds here are deliberately forward-looking only (recorded_date/
-// scheduled_at >= today) — never applied to the historical backlog.
-// Surfacing weeks of pre-existing unmatched recordings here would
+// Both kinds here are bounded to a short recent window
+// (RECORDING_MISSING_LOOKBACK_DAYS), not the full historical backlog —
+// surfacing weeks of pre-existing unmatched recordings here would
 // recreate the exact "queue too overwhelming to use" problem already
-// hit once building the Recordings page itself.
+// hit once building the Recordings page itself. This used to be a hard
+// "today only" (UTC calendar day) floor instead of a rolling window,
+// which silently dropped any session that became due yesterday and
+// just hadn't been caught yet — confirmed live: Ayla Carswell's session
+// the day before never got a recording_missing item at all, because by
+// the time anyone next opened Needs Review (or the cron ran), "today"
+// had already moved past her session's date and the query's floor moved
+// with it, permanently excluding her. A session that's a day or two old
+// and still missing its recording is exactly the case this feature
+// exists to catch, not backlog to hide.
 //
 // Batched rather than one query per row — this runs on every Needs
 // Review/Overview read (getAttentionItems below), so a studio with
 // dozens of sessions today would otherwise mean dozens of sequential
 // round-trips just for this one reconciliation pass before the page
 // could even start rendering, worth avoiding on a hot read path.
+const RECORDING_MISSING_LOOKBACK_DAYS = 3;
+
 async function syncRecordingAttentionItems(supabase: SupabaseClient) {
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const todayStr = todayStart.toISOString().slice(0, 10);
+  const lookbackStart = new Date(Date.now() - RECORDING_MISSING_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const lookbackDateStr = lookbackStart.toISOString().slice(0, 10);
   const graceCutoff = new Date(Date.now() - RECORDING_GRACE_HOURS * 60 * 60 * 1000);
 
   const { data: unmatchedRecordings } = await supabase
     .from("meet_recordings")
     .select("id, coach_id, recorded_date, coaches(name)")
     .eq("status", "unmatched")
-    .gte("recorded_date", todayStr);
+    .gte("recorded_date", lookbackDateStr);
 
   if (unmatchedRecordings && unmatchedRecordings.length > 0) {
     // Dedups on recording_id, not student_id like createIfNew above — a
@@ -470,7 +480,7 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   const { data: candidateSessions } = await supabase
     .from("sessions")
     .select("id, student_id, scheduled_at, duration_minutes, status, students(name), coaches:actual_coach_id(timezone)")
-    .gte("scheduled_at", `${todayStr}T00:00:00Z`)
+    .gte("scheduled_at", lookbackStart.toISOString())
     .lte("scheduled_at", new Date().toISOString())
     .not("status", "in", `(${NO_RECORDING_EXPECTED_STATUSES.join(",")})`);
 
