@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { DAY_NAMES, nextWeeklySlotInstant } from "@/lib/scheduling/recurring";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { formatTimeInZone } from "@/lib/timezone";
@@ -528,7 +529,9 @@ function SeriesRegisterControl({
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
             >
               <span>
-                {r.studentName}{" "}
+                <Link href={`/admin/students/${r.studentId}`} className={styles.rowName}>
+                  {r.studentName}
+                </Link>{" "}
                 <span className={styles.mutedText}>({r.registeredCount} upcoming)</span>
               </span>
               <button
@@ -656,7 +659,9 @@ function GroupLessonCard({
               className={styles.listItem}
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
             >
-              <span>{a.studentName}</span>
+              <Link href={`/admin/students/${a.studentId}`} className={styles.rowName}>
+                {a.studentName}
+              </Link>
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={styles.mutedText}>{a.status}</span>
                 {a.status === "registered" && (

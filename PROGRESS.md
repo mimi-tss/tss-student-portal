@@ -3,6 +3,18 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group-lesson rosters: student names now link to their profile (2026-09-04)
+
+Small UI request — the admin Group Lessons page's roster lists (both the
+recurring-series roster and a one-off lesson's attendee list) showed
+plain student names with no way to reach their profile page, unlike
+almost every other student list in the admin app. Both now link to
+`/admin/students/{id}` (same `.rowName` link style used everywhere
+else, e.g. Needs Review's own rows) — `studentId` was already present
+on both row shapes, no data change needed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration.
+
 ## Group-class coaches can now see and message their students (2026-09-04)
 
 You forwarded Coach Celine's Slack message: her group class's students
