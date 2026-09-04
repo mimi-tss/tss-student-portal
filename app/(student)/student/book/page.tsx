@@ -151,7 +151,7 @@ export default async function BookPage() {
   // layout level): check for an unused trial-lesson entitlement.
   const { data: entitlement } = await supabase
     .from("entitlements")
-    .select("used")
+    .select("used, coach_id")
     .eq("student_id", student.id)
     .eq("perk_type", "trial_lesson")
     .maybeSingle();
@@ -160,7 +160,12 @@ export default async function BookPage() {
     return (
       <div className={styles.wrap}>
         <GroupLessonCreditPanel credits={groupLessonCredits} />
-        <BookingClient studentId={student.id} mode="trial" coachId={null} />
+        {/* A trial granted for a specific coach (migration 0093 — e.g. a
+            student who paid extra for a trial with Tara specifically)
+            skips straight to date/time for that coach — BookingClient's
+            own "pick a coach first" screen only shows when coachId is
+            null. */}
+        <BookingClient studentId={student.id} mode="trial" coachId={entitlement.coach_id} />
       </div>
     );
   }

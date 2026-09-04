@@ -309,9 +309,14 @@ export default function BookingClient({
 
   return (
     <main className="mx-auto max-w-2xl p-8 text-[var(--text)]">
-      <h1 className="mb-4 text-xl font-semibold">
+      <h1 className={`text-xl font-semibold ${mode === "trial" && selectedCoachId ? "mb-1" : "mb-4"}`}>
         {mode === "trial" ? "Book Your FREE First Vocal Coaching Session" : "Book a session"}
       </h1>
+      {mode === "trial" && selectedCoachId && (
+        <p className="mb-4 text-sm text-[var(--text-muted)]">
+          with {coaches.find((c) => c.id === selectedCoachId)?.name ?? "your coach"}
+        </p>
+      )}
 
       {mode === "full" && selectedCredit && (
         <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text-muted)]">

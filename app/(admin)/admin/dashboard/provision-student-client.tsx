@@ -48,6 +48,12 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   // also "suite"), not auto-synced to tier after that — an admin who
   // changes tier keeps whatever they last set here.
   const [grantTrial, setGrantTrial] = useState(true);
+  // Locks the trial to one specific coach (e.g. a student who paid extra
+  // for a trial with Tara specifically) instead of the default
+  // any-coach-picker — independent of the regular `coachId` above, since
+  // a brand-new student can be trial-locked to a coach before ever
+  // having a regular assigned one.
+  const [trialCoachId, setTrialCoachId] = useState("");
   const [lessonType, setLessonType] = useState<LessonType>("none");
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [startTime, setStartTime] = useState("16:00");
@@ -101,6 +107,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
         sessionDurationMinutes,
         ambassador,
         grantTrial,
+        trialCoachId: grantTrial && trialCoachId ? trialCoachId : undefined,
         lessonType: lessonType === "none" ? undefined : lessonType,
         dayOfWeek: needsSchedule ? dayOfWeek : undefined,
         startTime: needsSchedule ? startTime : undefined,
@@ -131,6 +138,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       setName("");
       setAmbassador(false);
       setGrantTrial(true);
+      setTrialCoachId("");
       setLessonType("none");
       setCreditExpiresAt("");
       setBirthDate("");
@@ -252,6 +260,19 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
             Grant a free trial lesson
           </label>
         </div>
+        {grantTrial && (
+          <div className={styles.field}>
+            <label>Trial with{trialCoachId ? "" : " (optional)"}</label>
+            <select value={trialCoachId} onChange={(e) => setTrialCoachId(e.target.value)} className={styles.select}>
+              <option value="">Any coach</option>
+              {coaches.map((coach) => (
+                <option key={coach.id} value={coach.id}>
+                  {coach.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {needsSchedule && (

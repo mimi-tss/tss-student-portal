@@ -12,7 +12,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 // admin INSERT policy on entitlements today (only select/update/delete
 // — migration 0079) — same posture as provision-student's own route.
 export async function POST(req: NextRequest) {
-  const { studentId } = await req.json();
+  const { studentId, coachId } = await req.json();
   if (!studentId) {
     return NextResponse.json({ error: "studentId required" }, { status: 400 });
   }
@@ -52,6 +52,10 @@ export async function POST(req: NextRequest) {
     student_id: studentId,
     perk_type: "trial_lesson",
     recurrence: "one-time",
+    // Locks the trial to a specific coach (migration 0093) — e.g. a
+    // student who paid extra for a trial with Tara specifically. Null
+    // (the default, no coachId sent) keeps the old any-coach behavior.
+    coach_id: coachId || null,
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

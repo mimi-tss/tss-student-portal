@@ -17,6 +17,11 @@ export interface ProvisionStudentInput {
   // case, which never sends this field), falls back to that same
   // tier-based default so bulk import's behavior is unchanged.
   grantTrial?: boolean;
+  // Locks a granted trial to one specific coach (migration 0093 — e.g. a
+  // student who paid extra for a trial with Tara specifically), instead
+  // of the default any-coach-picker. Ignored unless grantTrial resolves
+  // true.
+  trialCoachId?: string | null;
   // Overrides for students migrated in with real history predating this
   // row (CSV bulk import's main use case) — birth_date and
   // student_since_override are plain passthroughs; billingAnniversaryDate
@@ -193,6 +198,7 @@ export async function provisionStudent(
       student_id: student.id,
       perk_type: "trial_lesson",
       recurrence: "one-time",
+      coach_id: input.trialCoachId || null,
     });
   }
 

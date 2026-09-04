@@ -83,13 +83,24 @@ export async function POST(req: NextRequest) {
 
     const { data: entitlement } = await supabase
       .from("entitlements")
-      .select("id, used")
+      .select("id, used, coach_id")
       .eq("student_id", studentId)
       .eq("perk_type", "trial_lesson")
       .maybeSingle();
 
     if (!entitlement || entitlement.used) {
       return NextResponse.json({ error: "no trial lesson available" }, { status: 409 });
+    }
+
+    // A trial granted for a specific coach (migration 0093 — e.g. a
+    // student who paid extra for a trial with Tara specifically) can
+    // only ever be booked against that coach — never trust the client's
+    // own requestedCoachId over what was actually granted.
+    if (entitlement.coach_id && entitlement.coach_id !== requestedCoachId) {
+      return NextResponse.json(
+        { error: "this trial lesson was granted for a specific coach" },
+        { status: 409 },
+      );
     }
 
     coachId = requestedCoachId;

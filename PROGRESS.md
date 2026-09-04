@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Trial lessons can now be locked to a specific coach (e.g. Tara) (2026-09-04)
+
+Direct follow-up to the trial-granting work above: some students pay
+extra specifically for a trial lesson with a named coach (Tara,
+specifically, per your example) — admin knows this from the payment,
+but the trial-booking flow was any-coach-picker-first with no way to
+lock it. Once granted, a student who paid for "trial with Tara" could
+still pick a different coach entirely.
+
+Migration 0093 adds `entitlements.coach_id` (nullable — null keeps
+today's exact any-coach behavior). Both places admin grants a trial (the
+Add Student form's checkbox, and the dashboard's "Grant trial" action)
+now show a coach dropdown ("Any coach" + the real list) right alongside
+the grant action.
+
+Wiring on the booking side turned out to need almost nothing new:
+[BookingClient](app/(student)/student/book/booking-client.tsx)'s "pick
+a coach first" screen was already gated on `!selectedCoachId`, and
+`selectedCoachId` already initializes from the `coachId` prop — so both
+[the student's own book page](app/(student)/student/book/page.tsx) and
+[admin's book-trial page](<app/(admin)/admin/book-trial/[studentId]/page.tsx>)
+just needed to read `entitlement.coach_id` and pass it through instead
+of a hardcoded `null`. When it's set, the coach-picker screen never
+renders at all — both student and admin go straight to date/time, per
+your "what's only left for student is to book trial lesson date." Added
+a small "with {coach name}" line under the heading so it's not silently
+implicit. [app/api/booking/book/route.ts](app/api/booking/book/route.ts)
+now also rejects a trial-booking request whose `coachId` doesn't match
+a locked entitlement's `coach_id` — never trusts the client over what
+was actually granted.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no live login here. See Action needed below: migration 0093 needs to
+run and be confirmed.
+
 ## Admin can now grant a trial lesson to any student, not just implicit Suite (2026-09-04)
 
 Follow-up to explaining the trial-booking flow: you asked for admin
@@ -5332,6 +5367,17 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0093 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
+`0093_trial_lesson_coach_lock.sql` adds `entitlements.coach_id` (see
+entry above — this is the "trial lesson with Tara specifically" fix).
+**Please run this migration in Supabase and reply "successful" once
+applied.** Until then, granting ANY trial (via the Add Student form or
+the dashboard's "Grant trial") will fail with a real error — both now
+always send a `coach_id` field (null for "Any coach"), and Postgres
+rejects the whole insert if that column doesn't exist yet, not just
+when a specific coach is picked. Not silent, but also not a small gap —
+please confirm this one promptly.
 
 **Migration 0092 confirmed applied** (2026-09-04) — `auth_coach_group_lesson_student_ids()`
 and the broadened `students`/`chat_threads`/`chat_messages`/chat-attachment

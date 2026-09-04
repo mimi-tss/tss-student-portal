@@ -36,6 +36,8 @@ export default function StudentTable({
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [grantingTrialId, setGrantingTrialId] = useState<string | null>(null);
+  const [grantTrialCoachId, setGrantTrialCoachId] = useState("");
   const trialSet = new Set(studentsWithUnusedTrial);
 
   const filtered = students
@@ -58,7 +60,7 @@ export default function StudentTable({
     const res = await fetch("/api/admin/grant-trial", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId: student.id }),
+      body: JSON.stringify({ studentId: student.id, coachId: grantTrialCoachId || undefined }),
     });
     setBusyId(null);
 
@@ -68,6 +70,8 @@ export default function StudentTable({
       return;
     }
 
+    setGrantingTrialId(null);
+    setGrantTrialCoachId("");
     router.refresh();
   }
 
@@ -184,13 +188,45 @@ export default function StudentTable({
                       Remove
                     </button>
                   </span>
+                ) : grantingTrialId === student.id ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                    <select
+                      value={grantTrialCoachId}
+                      onChange={(e) => setGrantTrialCoachId(e.target.value)}
+                      className={styles.selectSmall}
+                    >
+                      <option value="">Any coach</option>
+                      {coaches.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleGrantTrial(student)}
+                      disabled={busyId === student.id}
+                      className={styles.linkBtnSmall}
+                    >
+                      {busyId === student.id ? "Granting…" : "Grant"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setGrantingTrialId(null);
+                        setGrantTrialCoachId("");
+                      }}
+                      disabled={busyId === student.id}
+                      className={styles.linkBtnSmall}
+                    >
+                      Cancel
+                    </button>
+                  </span>
                 ) : (
                   <button
-                    onClick={() => handleGrantTrial(student)}
+                    onClick={() => setGrantingTrialId(student.id)}
                     disabled={busyId === student.id}
                     className={styles.linkBtnSmall}
                   >
-                    {busyId === student.id ? "Granting…" : "Grant trial"}
+                    Grant trial
                   </button>
                 )}
               </td>
