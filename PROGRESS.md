@@ -5286,17 +5286,14 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0092 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
-`0092_group_lesson_chat_access.sql` adds the `auth_coach_group_lesson_student_ids()`
-RLS helper and OR's it into the `students`/`chat_threads`/`chat_messages`/
-chat-attachment-storage policies (see entry above — this is the Coach
-Celine "add my group students, let me message them" fix, for every
-coach with group classes, not just her). **Please run this migration in
-Supabase and reply "successful" once applied.** Until then, "My
-Students" still won't include group-only students (the final name
-lookup is RLS-gated) and messaging them will still fail — no crash,
-same no-op-not-a-crash posture as every other unconfirmed migration
-here.
+**Migration 0092 confirmed applied** (2026-09-04) — `auth_coach_group_lesson_student_ids()`
+and the broadened `students`/`chat_threads`/`chat_messages`/chat-attachment
+policies are live. Group-class coaches (Celine and anyone else with a
+group class) should now see those students in "My Students," get real
+names in the group-lesson roster panel, and be able to message them
+individually or via the new "Message the class" broadcast. Not yet
+live-clicked by an actual coach — worth a quick real check next time
+Celine's in the app.
 
 **Migration 0091 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
 `0091_meet_recording_aliases.sql` adds the `meet_recording_aliases`
