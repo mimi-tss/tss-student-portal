@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now grant a trial lesson to any student, not just implicit Suite (2026-09-04)
+
+Follow-up to explaining the trial-booking flow: you asked for admin
+control over which manually-added students get a free trial available,
+rather than it only ever happening implicitly for Suite tier.
+
+Traced the previous behavior: [provisionStudent](lib/admin/provision-student.ts)
+(the "Add ambassador / manual student" form's backend) auto-granted the
+`trial_lesson` entitlement whenever `tier === "suite"`, with no admin
+choice in it at all — a Pro/Elite manual add never got one, and there
+was no way to grant one after the fact either (the dashboard's Trial
+lesson column only ever had a "Remove" action for a student who already
+had one, nothing for a student who didn't).
+
+**Two additions**, both landing on the exact same `entitlements` row
+`app/(admin)/admin/book-trial/[studentId]` already knows how to book
+against:
+- The Add Student form has a new **"Grant a free trial lesson"**
+  checkbox, independent of tier (defaults checked, matching the old
+  implicit Suite default) — explicit admin choice at creation time now,
+  for any tier. CSV bulk-import is unaffected (never sends this field,
+  so `provisionStudent` falls back to the same old tier-based default
+  it always had).
+- The Students dashboard table's Trial lesson column now has a **"Grant
+  trial"** action for any student who doesn't currently have an unused
+  one — new [/api/admin/grant-trial](app/api/admin/grant-trial/route.ts)
+  route, same admin-auth-check-then-admin-client posture as
+  provision-student's own route (there's no admin INSERT policy on
+  `entitlements` at all — only select/update/delete, migration 0079 —
+  so this can't just go through the user's own RLS-scoped session
+  client the way "Remove" already does for delete).
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration. Not
+live-tested — no live login here.
+
 ## Group-lesson rosters: student names now link to their profile (2026-09-04)
 
 Small UI request — the admin Group Lessons page's roster lists (both the

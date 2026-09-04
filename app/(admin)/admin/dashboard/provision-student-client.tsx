@@ -40,6 +40,14 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   const [coachId, setCoachId] = useState("");
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(30);
   const [ambassador, setAmbassador] = useState(false);
+  // Explicit choice, independent of tier — provisionStudent() otherwise
+  // falls back to its old implicit "Suite always gets one" rule when
+  // this isn't sent at all, but this form always sends it, so this
+  // checkbox is the actual decision for anyone added here. Starts
+  // checked to match that old default (this form's own tier default is
+  // also "suite"), not auto-synced to tier after that — an admin who
+  // changes tier keeps whatever they last set here.
+  const [grantTrial, setGrantTrial] = useState(true);
   const [lessonType, setLessonType] = useState<LessonType>("none");
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [startTime, setStartTime] = useState("16:00");
@@ -92,6 +100,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
         coachId: coachId || undefined,
         sessionDurationMinutes,
         ambassador,
+        grantTrial,
         lessonType: lessonType === "none" ? undefined : lessonType,
         dayOfWeek: needsSchedule ? dayOfWeek : undefined,
         startTime: needsSchedule ? startTime : undefined,
@@ -121,6 +130,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       setEmail("");
       setName("");
       setAmbassador(false);
+      setGrantTrial(true);
       setLessonType("none");
       setCreditExpiresAt("");
       setBirthDate("");
@@ -230,6 +240,16 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
               onChange={(e) => setAmbassador(e.target.checked)}
             />
             Ambassador
+          </label>
+        </div>
+        <div className={styles.field}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={grantTrial}
+              onChange={(e) => setGrantTrial(e.target.checked)}
+            />
+            Grant a free trial lesson
           </label>
         </div>
       </div>

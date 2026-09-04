@@ -11,6 +11,12 @@ export interface ProvisionStudentInput {
   coachId?: string | null;
   sessionDurationMinutes?: number;
   ambassador?: boolean;
+  // Explicit admin choice, from the "Add ambassador / manual student"
+  // form's own checkbox — overrides the old implicit "Suite tier always
+  // gets one" rule below. Left undefined (the CSV bulk-import route's
+  // case, which never sends this field), falls back to that same
+  // tier-based default so bulk import's behavior is unchanged.
+  grantTrial?: boolean;
   // Overrides for students migrated in with real history predating this
   // row (CSV bulk import's main use case) — birth_date and
   // student_since_override are plain passthroughs; billingAnniversaryDate
@@ -60,7 +66,8 @@ export type ProvisionStudentResult =
 // Shared by the single-student "Add ambassador / manual student" route
 // (app/api/admin/provision-student/route.ts) and the CSV bulk-import route
 // — same sequence either way: insert the student row, create the auth
-// user/profile, link them, grant the trial-lesson entitlement for Suite,
+// user/profile, link them, grant the trial-lesson entitlement if asked
+// for (or, absent an explicit grantTrial, for Suite tier by default),
 // provision the Drive folder (no-ops without a coach), send the login
 // link. Callers are responsible for their own admin-auth check and for
 // passing a service-role client — creating a Supabase auth user isn't
@@ -181,7 +188,7 @@ export async function provisionStudent(
     await admin.from("students").update({ profile_id: authUser.user.id }).eq("id", student.id);
   }
 
-  if (tier === "suite") {
+  if (input.grantTrial ?? tier === "suite") {
     await admin.from("entitlements").insert({
       student_id: student.id,
       perk_type: "trial_lesson",

@@ -53,6 +53,24 @@ export default function StudentTable({
     router.refresh();
   }
 
+  async function handleGrantTrial(student: Student) {
+    setBusyId(student.id);
+    const res = await fetch("/api/admin/grant-trial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId: student.id }),
+    });
+    setBusyId(null);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      window.alert(body.error ?? "Could not grant a trial lesson.");
+      return;
+    }
+
+    router.refresh();
+  }
+
   async function handleRemoveTrial(student: Student) {
     const confirmed = window.confirm(`Remove ${student.name}'s unused trial lesson? This can't be undone.`);
     if (!confirmed) return;
@@ -167,7 +185,13 @@ export default function StudentTable({
                     </button>
                   </span>
                 ) : (
-                  <span className={styles.mutedText}>—</span>
+                  <button
+                    onClick={() => handleGrantTrial(student)}
+                    disabled={busyId === student.id}
+                    className={styles.linkBtnSmall}
+                  >
+                    {busyId === student.id ? "Granting…" : "Grant trial"}
+                  </button>
                 )}
               </td>
               <td>
