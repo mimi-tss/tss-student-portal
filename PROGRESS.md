@@ -5162,15 +5162,9 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0090 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
-`0090_cron_heartbeats.sql` adds the `cron_heartbeats` table the
-scan-recordings health-check alert (see entry above) reads/writes.
-**Please run this migration in Supabase and reply "successful" once
-applied.** Harmless if left unapplied — scan-recordings itself still
-runs fine either way, the heartbeat read/write just fails silently
-(table doesn't exist yet) and the health-check simply never fires,
-same no-op-not-a-crash posture as every other unconfirmed migration
-here.
+**Migration 0090 confirmed applied** (2026-09-04) — `cron_heartbeats`
+exists; the scan-recordings health-check alert (see entry above) is
+now actually live, not a no-op.
 
 **Migrations 0086, 0087, 0088, and 0089 confirmed applied** (2026-09-03)
 — user replied "migrations succesful" covering all four then-outstanding
