@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added a health-check alert for the scan-recordings cron going silent (2026-09-04)
+
+Follow-up to today's string of recording-matching fixes — asked whether
+this would keep happening. Everything fixed today closed the "why did
+this specific item silently disappear" class of bug; the one remaining
+soft spot was one level up: nothing would notice if the job that catches
+all of it (scan-recordings, every 2h) stopped completing at all.
+
+New `cron_heartbeats` table (migration 0090) holds one row per job,
+updated only once every step in scan-recordings's handler actually
+completes. Each run checks that heartbeat FIRST — a gap bigger than 4
+hours (double the schedule) means a previous run never made it to its
+own success path, and pings staff Slack once per day while it stays
+broken (dedup keyed per calendar day, not per run).
+
+**Known limit**: only catches "a scheduled run was skipped or failed,"
+not "GitHub Actions itself stopped firing the schedule entirely" — that
+needs an external uptime check (e.g. healthchecks.io), outside what
+this codebase alone can detect.
+
+Also investigated two more recording-matching reports today, worth
+recording since neither needed a code change:
+- **Maeve O'Connell** — her full name is right there in Celine's shared
+  notes doc ("Coaching Validation and Professional Feedback (Maeve
+  O'Connell)"), but that same doc pairs to 3 separate still-unmatched
+  video files (Celine stopped/restarted recording mid-session across 3
+  back-to-back lessons — Ayla's, "F I"'s, and Maeve's). The existing
+  "a notes doc shared across multiple still-unmatched recordings can't
+  be trusted for any of them" safety correctly declines to guess which
+  physical file is hers. Working as designed — needs a human to
+  actually watch the 3 clips.
+- **Angelica Nesenchuk / "Natalie Semon"** — her mom's Google account
+  name appears throughout that recording's entire notes doc; "Angelica"
+  never appears anywhere in it, so no amount of smarter text-matching
+  would ever find her. Discussed a "learned alias" feature (remember
+  coach + display-name → student, silently, with no new admin step) but
+  didn't build it — flagging here in case it comes up again.
+
 ## Fixed recording_missing never getting created for yesterday's sessions (2026-09-04)
 
 You flagged Ayla Carswell — lesson the day before, no recording
@@ -5123,6 +5161,16 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0090 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
+`0090_cron_heartbeats.sql` adds the `cron_heartbeats` table the
+scan-recordings health-check alert (see entry above) reads/writes.
+**Please run this migration in Supabase and reply "successful" once
+applied.** Harmless if left unapplied — scan-recordings itself still
+runs fine either way, the heartbeat read/write just fails silently
+(table doesn't exist yet) and the health-check simply never fires,
+same no-op-not-a-crash posture as every other unconfirmed migration
+here.
 
 **Migrations 0086, 0087, 0088, and 0089 confirmed applied** (2026-09-03)
 — user replied "migrations succesful" covering all four then-outstanding
