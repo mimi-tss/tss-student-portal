@@ -5295,15 +5295,10 @@ individually or via the new "Message the class" broadcast. Not yet
 live-clicked by an actual coach — worth a quick real check next time
 Celine's in the app.
 
-**Migration 0091 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
-`0091_meet_recording_aliases.sql` adds the `meet_recording_aliases`
-table the new recording-alias auto-learning feature (see entry above)
-reads/writes. **Please run this migration in Supabase and reply
-"successful" once applied.** Harmless if left unapplied — manual
-matching and name-matching both still work exactly as before, the
-alias read/write just fails silently (table doesn't exist yet) and
-nothing gets learned or applied in the meantime, same no-op-not-a-crash
-posture as every other unconfirmed migration here.
+**Migration 0091 confirmed applied** (2026-09-04) — the
+`meet_recording_aliases` table is live; the recording-alias
+auto-learning feature (see entry above) should now actually read/write
+it instead of silently no-op'ing.
 
 **Migration 0090 confirmed applied** (2026-09-04) — `cron_heartbeats`
 exists; the scan-recordings health-check alert (see entry above) is
