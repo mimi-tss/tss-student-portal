@@ -3,6 +3,21 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Show session duration in admin's Next Session / billing-cycle lists (2026-09-04)
+
+Staff kept getting confused rescheduling/canceling because those two
+lists only ever showed a date/time — no way to tell a 30-min slot from
+a 60-min one without opening something else first. `duration_minutes`
+was already being fetched in both places, just never rendered. Added
+"· 30 min" / "· 60 min" next to the date/time, matching the existing
+"with Coach X · 30 min · manage via..." convention already used for
+group lessons on the same page.
+
+Touched: [(admin)/students/[studentId]/page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>)
+(Next Session panel) and [admin-upcoming-sessions.tsx](<app/(admin)/admin/students/[studentId]/admin-upcoming-sessions.tsx>)
+(All Sessions This Billing Cycle). `tsc --noEmit` and `next build` both
+clean. Pushed to `main`.
+
 ## Found and fixed why Coach Celine's dashboard takes "a minute to open" (2026-09-04)
 
 Same day, follow-up to the blank-screen/slow reports above. This time
