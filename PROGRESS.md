@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added a stronger "Fix stuck screen" button — the plain Refresh button wasn't enough (2026-09-04)
+
+Same-day follow-up to the Refresh button below. You sent two screen
+recordings of Coach Celine's actual screen going fully **blank/black**
+inside the Kajabi iframe (`app.tarasimonstudios.com/products/coach-access`),
+in Chrome, after clicking around "My Students" — not just sluggish, a
+real stuck failure. Extracted frames with `ffmpeg` (installed via
+Homebrew for this) since the tool can't read video directly, and
+confirmed from the visible Chrome menu bar and the frame-by-frame
+sequence that the content area goes solid black and never recovers for
+the rest of the recording.
+
+Critical detail you added: she'd already tried refreshing multiple
+times before recording this, and it was still broken. That's the tell
+that the plain Refresh button (a bare page reload) isn't the right tool
+for THIS failure — a reload reuses whatever's already stored, so if the
+real problem is her own session/cookie state, reloading just reproduces
+the same blank screen. The thing you'd already confirmed actually fixes
+it is manually clearing cookies, which forces a fresh login — a
+categorically stronger action than a reload.
+
+New [SessionResetButton](components/session-reset-button.tsx) is that
+same fix as one click instead of a browser-settings walkthrough: calls
+Supabase's own `signOut()` (clears its auth cookies through the same
+storage adapter that set them, scoped to just this app's own session —
+not a blanket "wipe all site data" the way manually clearing cookies
+is) and sends her to `/login`. Confirms with a `window.confirm()`
+before acting, since it deliberately forces a real re-login. Kept
+separate from RefreshButton rather than replacing it — a forced
+re-login shouldn't fire for ordinary sluggishness a plain reload would
+resolve on its own. Added alongside RefreshButton in all four dashboard
+headers (coach, student, admin, admin_finance).
+
+`tsc --noEmit` and `next build` both clean. Not yet confirmed this
+actually resolves Celine's specific blank-screen case — worth checking
+back once she hits it again and tries this button instead of manually
+clearing cookies.
+
 ## Added a one-click Refresh button — investigated "coaches say the app is slow" first (2026-09-04)
 
 You reported coaches finding the app sluggish by the end of a long day
