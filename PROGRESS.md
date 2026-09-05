@@ -3,6 +3,59 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added a one-click Refresh button — investigated "coaches say the app is slow" first (2026-09-04)
+
+You reported coaches finding the app sluggish by the end of a long day
+(or after ~2 days without logging out), almost always in Chrome and
+rarely in Safari, and that manually clearing cookies/cache fixes it —
+but you can't keep walking non-technical coaches through browser
+settings every time. You first floated auto-clearing cookies/cache as
+the fix; investigated properly against real production data before
+building anything, since that specific fix would force-logout coaches
+repeatedly for a problem that isn't actually about cookies.
+
+Checked every plausible in-code cause and ruled each out with real
+numbers, not guesses:
+- **Today's migration 0092** (new RLS policies joining
+  `group_lessons`/`group_lesson_registrations` for group-lesson chat
+  access) — this app has hit RLS-performance bugs before (0007, 0056,
+  0060, 0085), so a strong first suspect. Checked actual row counts:
+  62 and 77 rows respectively — a missing index there costs
+  microseconds, nowhere near perceptible.
+- **Duplicate Supabase client instances** (a classic leak: calling
+  `createClient()` fresh inside a component body on every render,
+  accumulating auth-refresh timers) — [components/chat-panel.tsx](components/chat-panel.tsx)
+  does call it in the component body, but read `@supabase/ssr`'s own
+  source directly: `createBrowserClient` already caches a module-level
+  singleton in browser contexts, so this isn't actually creating new
+  clients. Ruled out.
+- **Unbounded chat history** — [chat-messages/route.ts](app/api/chat/messages/route.ts)'s
+  GET has no `.limit()`, and `chat-panel.tsx` polls it every 4 seconds
+  forever while mounted — a real code smell worth fixing on its own
+  merits eventually, but checked actual message counts per thread in
+  production: max 9. Not remotely enough to explain "everything's
+  slow."
+- No service worker/PWA, no realtime/websocket usage anywhere in this
+  app either.
+
+With every app-level theory checked and ruled out, the pattern that's
+left — Chrome specifically, builds up over multiple days in one
+never-refreshed tab, fixed by a fresh page load — points at ordinary
+Chrome long-tab memory behavior (well-documented as worse than
+Safari's engine for this), not a bug in this codebase. A plain reload
+already fixes it; the actual problem was that fix requiring a browser-
+settings walkthrough each time.
+
+New [RefreshButton](components/refresh-button.tsx) — a plain
+`window.location.reload()`, no cookies/auth touched (not a forced
+re-login, just a fresh JS context) — added to all four dashboard
+headers: coach ([(coach)/layout.tsx](<app/(coach)/layout.tsx>)),
+student ([(student)/layout.tsx](<app/(student)/layout.tsx>)), and admin
+([(admin)/admin-nav.tsx](<app/(admin)/admin-nav.tsx>), both admin and
+admin_finance). `tsc --noEmit` and `next build` both clean. Not yet
+confirmed by an actual coach that this resolves the end-of-day
+slowness — worth checking back on.
+
 ## Fixed group-lesson coaches unable to assign exercises / notes / shared folder (2026-09-04)
 
 You caught this live in a screenshot: a coach picked a group-only
