@@ -311,7 +311,7 @@ export default async function StudentDashboardPage() {
           Open full chat →
         </Link>
       </div>
-      <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
+      <ChatPanel studentId={student.id} currentProfileId={user.id} />
 
       <div className={styles.sectionTitle}>
         <h2>Your exercises</h2>

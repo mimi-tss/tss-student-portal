@@ -21,7 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 // from RefreshButton rather than folding into it, since this one forces
 // a real re-login and shouldn't fire for ordinary sluggishness a plain
 // reload would've resolved.
-export default function SessionResetButton({ dark = false }: { dark?: boolean }) {
+export default function SessionResetButton() {
   const [working, setWorking] = useState(false);
 
   async function handleClick() {
@@ -44,11 +44,11 @@ export default function SessionResetButton({ dark = false }: { dark?: boolean })
       onClick={handleClick}
       disabled={working}
       title="Screen stuck or blank? This signs you out and back to login — fixes it."
-      className={
-        dark
-          ? "rounded border border-[#2c2c3d] bg-[#20202f] px-2 py-1 text-xs text-[#9997ab] hover:text-[#f4f0e6] disabled:opacity-50"
-          : "rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-      }
+      // Fallback values, not a bare var() — also renders inside
+      // app/global-error.tsx and components/dashboard-error.tsx (Next's
+      // error-boundary fallbacks, outside any layout's themed .root div,
+      // see RefreshButton's identical comment).
+      className="rounded border border-[var(--border,#2c2c3d)] bg-[var(--surface-2,#20202f)] px-2 py-1 text-xs text-[var(--text-muted,#9997ab)] hover:text-[var(--text,#f4f0e6)] disabled:opacity-50"
     >
       {working ? "Fixing…" : "Fix stuck screen"}
     </button>

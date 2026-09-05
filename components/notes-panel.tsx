@@ -25,21 +25,17 @@ function coachName(note: Note): string {
 // student, shared across whichever coach currently or previously worked
 // with them (migration 0022), not siloed per coach. `canAdd` shows the
 // composer (coaches and admin — migration 0036; students get read-only).
-// `initialLimit`
-// collapses to the most recent N with an expand toggle, per spec's
-// "shows recent ~5-8 entries by default" for the student view; omit it
-// to always show everything (coach/admin views). `dark` switches to the
-// light-on-dark palette used by the student layout's theme (section 8).
+// `initialLimit` collapses to the most recent N with an expand toggle,
+// per spec's "shows recent ~5-8 entries by default" for the student
+// view; omit it to always show everything (coach/admin views).
 export default function NotesPanel({
   studentId,
   canAdd = false,
   initialLimit,
-  dark = false,
 }: {
   studentId: string;
   canAdd?: boolean;
   initialLimit?: number;
-  dark?: boolean;
 }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -92,30 +88,16 @@ export default function NotesPanel({
     <div>
       {canAdd && (
         <div className="mb-3">
-          {error && (
-            <p className={dark ? "mb-1 text-xs text-[#e85c86]" : "mb-1 text-xs text-red-600"}>
-              {error}
-            </p>
-          )}
+          {error && <p className="mb-1 text-xs text-[var(--coral)]">{error}</p>}
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={2}
             placeholder="Add a homework note…"
-            className={
-              dark
-                ? "mb-1 w-full rounded-lg border border-[#2c2c3d] bg-[#20202f] p-2 text-sm text-[#f4f0e6] placeholder:text-[#9997ab]"
-                : "mb-1 w-full rounded border p-2 text-sm"
-            }
+            className="mb-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
           />
           <div className="flex items-center justify-between">
-            <label
-              className={
-                dark
-                  ? "flex items-center gap-1 text-xs text-[#9997ab]"
-                  : "flex items-center gap-1 text-xs text-gray-500"
-              }
-            >
+            <label className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
               <input
                 type="checkbox"
                 checked={pinned}
@@ -126,11 +108,7 @@ export default function NotesPanel({
             <button
               onClick={handleAdd}
               disabled={saving || !text.trim()}
-              className={
-                dark
-                  ? "rounded-lg bg-[#a78bfa] px-3 py-1 text-xs font-bold text-[#241a3d] disabled:opacity-50"
-                  : "rounded bg-black px-3 py-1 text-xs text-white disabled:opacity-50"
-              }
+              className="rounded-lg bg-[var(--gold)] px-3 py-1 text-xs font-bold text-[var(--gold-text)] disabled:opacity-50"
             >
               {saving ? "Saving…" : "Add note"}
             </button>
@@ -138,31 +116,20 @@ export default function NotesPanel({
         </div>
       )}
 
-      {notes === null && (
-        <p className={dark ? "text-sm text-[#9997ab]" : "text-sm text-gray-500"}>Loading…</p>
-      )}
+      {notes === null && <p className="text-sm text-[var(--text-muted)]">Loading…</p>}
       {notes !== null && notes.length === 0 && (
-        <p className={dark ? "text-sm text-[#9997ab]" : "text-sm text-gray-500"}>
-          No homework notes yet.
-        </p>
+        <p className="text-sm text-[var(--text-muted)]">No homework notes yet.</p>
       )}
 
       {visible && visible.length > 0 && (
         <ul className="space-y-2">
           {visible.map((n) => (
-            <li
-              key={n.id}
-              className={
-                dark
-                  ? "rounded-lg border border-[#2c2c3d] bg-[#20202f] p-3 text-sm"
-                  : "rounded border p-2 text-sm"
-              }
-            >
+            <li key={n.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
               <p className="whitespace-pre-wrap">
                 {n.pinned && <span className="mr-1 text-amber-600">📌</span>}
                 {n.note}
               </p>
-              <p className={dark ? "mt-1 text-xs text-[#9997ab]" : "mt-1 text-xs text-gray-500"}>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {coachName(n)} · <FormattedDateTime value={n.created_at} />
               </p>
             </li>
@@ -171,14 +138,7 @@ export default function NotesPanel({
       )}
 
       {hiddenCount > 0 && (
-        <button
-          onClick={() => setExpanded(true)}
-          className={
-            dark
-              ? "mt-2 text-xs text-[#a78bfa] underline"
-              : "mt-2 text-xs text-blue-600 underline"
-          }
-        >
+        <button onClick={() => setExpanded(true)} className="mt-2 text-xs text-[var(--gold)] underline">
           Show {hiddenCount} more
         </button>
       )}

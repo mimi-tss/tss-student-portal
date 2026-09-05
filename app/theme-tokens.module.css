@@ -1,11 +1,20 @@
-/* Shared dark-theme design tokens for every dashboard (student, coach,
-   admin, admin payroll — TSS_App_Spec_1.md section 8 decision to make
-   the whole app visually consistent, not just the student side).
-   Each route group composes this into its own `.root` class rather than
-   importing it directly, so the token values can't drift between
+/* Shared design tokens for every dashboard (student, coach, admin, admin
+   payroll — TSS_App_Spec_1.md section 8 decision to make the whole app
+   visually consistent, not just the student side). Each route group
+   composes this into its own `.root` class rather than importing it
+   directly, so the token values can't drift between
    student.module.css / coach.module.css / admin.module.css while each
    still stays self-contained per the existing per-route-group CSS
-   module convention. */
+   module convention.
+
+   Dark is still the default for everyone, unchanged from before a light
+   theme existed — this deliberately does NOT follow the visitor's OS
+   light/dark setting (prefers-color-scheme), since nobody asked for the
+   app to suddenly look different based on that; it only changes via the
+   explicit toggle (components/theme-toggle.tsx), which stamps
+   data-theme="light" on <html> and remembers the choice in
+   localStorage. `:global(...)` reaches outside this file's own
+   CSS-Modules scope to match that attribute on the real <html> element. */
 
 .tokens {
   --bg: #101018;
@@ -39,4 +48,43 @@
      never look the same, since one is bookable and the other isn't. */
   --slot-held: #5b5b6b;
   --slot-held-text: #d8d6e0;
+
+  /* Sticky header's translucent backdrop-blur fill — a plain --bg
+     reference can't carry its own opacity, so this is its own token
+     rather than duplicating --bg's literal value with alpha bolted on
+     (which is what happened before: a hardcoded rgba(16,16,24,.92) that
+     stayed dark-near-black even under the light theme below). */
+  --header-bg: rgba(16, 16, 24, 0.92);
+}
+
+/* Light theme — a soft violet-grey page ground (not stark white, per
+   direct feedback after looking at Speedtest's own light mode) with
+   white cards standing a level above it, and the same purple accent
+   hue deepened enough to stay readable as text/icons on a light ground
+   (the dark theme's --gold only ever needs to work as a light fill
+   with dark text on top, so it can stay lighter). */
+:global(html[data-theme="light"]) .tokens {
+  --bg: #eeecf3;
+  --surface: #ffffff;
+  --surface-2: #f5f4f9;
+  --border: #ddd9e8;
+  --gold: #6d4fd1;
+  --gold-dim: #ece7fb;
+  --gold-text: #ffffff;
+  --coral: #c23764;
+  --coral-text: #ffffff;
+  --text: #201d2b;
+  --text-muted: #6b6878;
+
+  --slot-open: #e7e5ef;
+  --slot-blocked: #46424f;
+  --slot-trial: #f5b942;
+  --slot-trial-text: #3d2b00;
+  --slot-group: #22c55e;
+  --slot-group-text: #052e14;
+
+  --slot-held: #d6d3e0;
+  --slot-held-text: #4a4756;
+
+  --header-bg: rgba(238, 236, 243, 0.92);
 }

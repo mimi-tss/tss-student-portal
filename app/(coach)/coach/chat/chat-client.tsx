@@ -48,7 +48,6 @@ export default function CoachChatClient({ currentProfileId }: { currentProfileId
               key={selectedId}
               studentId={selectedId}
               currentProfileId={currentProfileId}
-              dark
             />
           </>
         ) : (

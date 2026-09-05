@@ -71,8 +71,8 @@ export default function DashboardError({
         >
           Try again
         </button>
-        <RefreshButton dark />
-        <SessionResetButton dark />
+        <RefreshButton />
+        <SessionResetButton />
       </div>
       {error.digest && (
         <p style={{ fontSize: 11, opacity: 0.4, margin: 0 }}>Error ref: {error.digest}</p>

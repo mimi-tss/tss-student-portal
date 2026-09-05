@@ -476,13 +476,13 @@ export default async function AdminStudentPage({
 
       <div className={styles.panel}>
         <h2>Homework notes</h2>
-        <NotesPanel studentId={student.id} canAdd dark />
+        <NotesPanel studentId={student.id} canAdd />
       </div>
 
       <div className={styles.panel}>
         <h2>Chat</h2>
         {user ? (
-          <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
+          <ChatPanel studentId={student.id} currentProfileId={user.id} />
         ) : (
           <p className={styles.mutedText}>Chat unavailable.</p>
         )}

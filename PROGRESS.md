@@ -3,6 +3,73 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added an optional light theme, toggle-only (2026-09-04)
+
+You saw Speedtest.net's light mode (a screenshot of both its dark and
+light layouts) and asked for something similar — greyish page
+background, not stark white. Confirmed first whether you wanted a
+manual toggle (like Speedtest's own sun/moon switch) or to just follow
+the visitor's OS setting automatically — you picked the manual toggle,
+remembered per device, dark staying the default for everyone who's
+never touched it (this does NOT read `prefers-color-scheme` at all,
+deliberately — nobody asked for the app to suddenly look different for
+existing users based on their OS setting).
+
+**Turned out the token architecture already mostly supported this** —
+[theme-tokens.module.css](app/theme-tokens.module.css) is composed into
+each of student/coach/admin's own `.root` class, and most components
+already reference `var(--text)`/`var(--surface)`/etc. rather than
+literal hex. Added the light palette as a second block there, activated
+via `:global(html[data-theme="light"]) .tokens { ... }` — a plain
+violet-tinted grey page (`--bg: #eeecf3`), white cards standing a level
+above it, and the purple accent deepened from the dark theme's `#a78bfa`
+to `#6d4fd1` (same hue family, just dark enough to still read as text/
+icons on a light ground, not only as a button fill).
+
+**New**: [components/theme-toggle.tsx](components/theme-toggle.tsx) — a
+sun/moon button in all three headers (student, coach, admin sidebar
+footer). Root [layout.tsx](app/layout.tsx)
+runs a tiny synchronous inline script before paint to apply a stored
+choice from localStorage, so there's no dark-then-light flash for
+anyone who's picked light. No account/DB-level preference — per device
+only, by design (matches how the admin sidebar's own collapse state is
+already remembered).
+
+**Found and fixed two real bugs auditing for this**, not just added
+tokens and called it done:
+1. `SessionResetButton`/`RefreshButton`/`TimeZoneNavControl`/`ChatPanel`/
+   `NotesPanel` all took a `dark` boolean prop that was — confirmed by
+   grepping every call site — ALWAYS `true`, never `false`, anywhere in
+   the app; the "light" branch in each was 10-months-dead code from
+   before admin/coach were unified onto the same dark theme as student.
+   Removed the prop entirely and switched every one of these components
+   to the same `var(--token)` pattern most of the app already used —
+   they're genuinely theme-aware now, not hardcoded.
+2. The student/coach dashboard's own "hero" welcome banner had a
+   **hardcoded dark gradient background** while its title/text colors
+   came from `--text`/`--text-muted` — those flip to a dark color in
+   light mode too, so the hero would have rendered as illegible
+   dark-on-dark. Same root issue for the sticky page header's
+   translucent backdrop (a hardcoded `rgba(16,16,24,.92)` — always a
+   near-black bar across the top of the page, light mode or not). Both
+   now pull from tokens (`--surface`/`--surface-2` for the hero, a new
+   `--header-bg` token for the header, since a plain color var can't
+   carry its own alpha).
+3. Two shared error-boundary components
+   ([global-error.tsx](app/global-error.tsx), a fallback that
+   deliberately renders OUTSIDE any layout's themed div) still needed
+   their literal dark hex — added as CSS `var(--x, #literal)` fallbacks
+   rather than a prop, so the same component still works correctly in
+   both the normal themed case and that one un-themed case.
+
+Published a side-by-side static preview (dark vs. light, same
+component shapes) to sanity-check contrast before calling this done —
+[Light Theme Check](https://claude.ai/code/artifact/58b865d2-e1f3-4e50-afec-bdd6ee73fd5e).
+`npx tsc --noEmit -p .` and `next build` both clean. **Not live-tested**
+— no live login here, and the toggle itself can only really be judged
+by clicking it on a real logged-in page across student/coach/admin —
+please try it and let me know if anything reads wrong in light mode.
+
 ## Show session duration in admin's Next Session / billing-cycle lists (2026-09-04)
 
 Staff kept getting confused rescheduling/canceling because those two

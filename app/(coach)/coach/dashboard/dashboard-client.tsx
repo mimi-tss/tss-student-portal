@@ -597,12 +597,12 @@ export default function DashboardClient({
 
               <div className={styles.panel}>
                 <h2>Homework Notes</h2>
-                <NotesPanel studentId={snapshot.id} canAdd initialLimit={2} dark />
+                <NotesPanel studentId={snapshot.id} canAdd initialLimit={2} />
               </div>
 
               <div className={styles.panel}>
                 <h2>Chat</h2>
-                <ChatPanel studentId={snapshot.id} currentProfileId={currentProfileId} dark />
+                <ChatPanel studentId={snapshot.id} currentProfileId={currentProfileId} />
               </div>
 
               <div className={styles.panel}>

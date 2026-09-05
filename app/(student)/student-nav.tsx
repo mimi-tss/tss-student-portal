@@ -42,7 +42,7 @@ export default function StudentNav() {
         <Link href="/student/book" className={styles.navLink}>
           Scheduler
         </Link>
-        <TimeZoneNavControl dark />
+        <TimeZoneNavControl />
       </div>
 
       <button
@@ -79,7 +79,7 @@ export default function StudentNav() {
             Scheduler
           </Link>
           <div className={styles.navDropdownTz}>
-            <TimeZoneNavControl dark />
+            <TimeZoneNavControl />
           </div>
         </div>
       )}

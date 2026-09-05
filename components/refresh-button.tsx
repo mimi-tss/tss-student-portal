@@ -12,17 +12,20 @@
 // and all ruled out) — it's a known long-lived-tab behavior Chrome hits
 // harder than Safari. A full reload is the actual fix; this just makes
 // it one click instead of a walkthrough.
-export default function RefreshButton({ dark = false }: { dark?: boolean }) {
+export default function RefreshButton() {
   return (
     <button
       type="button"
       onClick={() => window.location.reload()}
       title="Feeling slow? Refresh the page."
-      className={
-        dark
-          ? "rounded border border-[#2c2c3d] bg-[#20202f] px-2 py-1 text-xs text-[#9997ab] hover:text-[#f4f0e6]"
-          : "rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-      }
+      // var(...,fallback) rather than a bare var() — this also renders
+      // inside app/global-error.tsx and components/dashboard-error.tsx,
+      // Next's error-boundary fallbacks, which sit outside any layout's
+      // themed .root div (no --border/--text/etc. in scope there), so a
+      // bare var() would resolve to nothing. The fallback keeps the
+      // exact same look it always had in that context, while a normal
+      // themed page uses the real token.
+      className="rounded border border-[var(--border,#2c2c3d)] bg-[var(--surface-2,#20202f)] px-2 py-1 text-xs text-[var(--text-muted,#9997ab)] hover:text-[var(--text,#f4f0e6)]"
     >
       ↻ Refresh
     </button>

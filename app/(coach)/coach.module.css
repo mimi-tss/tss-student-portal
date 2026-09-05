@@ -24,7 +24,7 @@
   padding: 18px 32px;
   border-bottom: 1px solid var(--border);
   top: 0;
-  background: rgba(16, 16, 24, 0.92);
+  background: var(--header-bg);
   backdrop-filter: blur(6px);
   z-index: 10;
   flex-wrap: wrap;
@@ -186,7 +186,10 @@
   margin: 32px 0 28px;
   padding: 28px 32px;
   border-radius: 20px;
-  background: linear-gradient(135deg, #1c1c2c 0%, #231a1f 100%);
+  /* Was a hardcoded dark gradient — invisible in light mode, since this
+     card's own text colors come from --text/--text-muted, which flip to
+     a DARK color in light mode too. Surface tokens stay readable in both. */
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
   border: 1px solid var(--border);
   display: flex;
   justify-content: space-between;

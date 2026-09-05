@@ -27,7 +27,7 @@ export default async function StudentChatPage() {
         <h2>Chat with your coach</h2>
       </div>
       {student.assigned_coach_id ? (
-        <ChatPanel studentId={student.id} currentProfileId={user.id} dark />
+        <ChatPanel studentId={student.id} currentProfileId={user.id} />
       ) : (
         <p className={styles.panelText}>
           You&apos;ll be able to chat here once a coach is assigned to you.

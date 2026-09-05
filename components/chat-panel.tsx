@@ -31,13 +31,9 @@ function isImage(path: string) {
 export default function ChatPanel({
   studentId,
   currentProfileId,
-  dark = false,
 }: {
   studentId: string;
   currentProfileId: string;
-  // Light-on-dark palette for the student layout's theme (section 8) —
-  // admin/coach chat stays on the default light styling.
-  dark?: boolean;
 }) {
   const supabase = createClient();
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -163,31 +159,19 @@ export default function ChatPanel({
   }
 
   return (
-    <div
-      className={
-        dark
-          ? "flex h-[70vh] flex-col rounded-2xl border border-[#2c2c3d] bg-[#1a1a26]"
-          : "flex h-[70vh] flex-col rounded border"
-      }
-    >
+    <div className="flex h-[70vh] flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <p className={dark ? "text-sm text-[#9997ab]" : "text-sm text-gray-500"}>
-            No messages yet — say hello.
-          </p>
+          <p className="text-sm text-[var(--text-muted)]">No messages yet — say hello.</p>
         )}
         {messages.map((m) => {
           const mine = m.sender_profile_id === currentProfileId;
           const senderName = participants[m.sender_profile_id] ?? "Unknown";
           const attachmentUrl = m.attachment_url ? signedUrls[m.attachment_url] : null;
 
-          const bubbleClass = dark
-            ? mine
-              ? "max-w-xs rounded-xl rounded-br-sm p-2.5 text-sm bg-[#a78bfa] text-[#241a3d]"
-              : "max-w-xs rounded-xl rounded-bl-sm p-2.5 text-sm bg-[#20202f] text-[#f4f0e6] border border-[#2c2c3d]"
-            : mine
-              ? "max-w-xs rounded p-2 text-sm bg-black text-white"
-              : "max-w-xs rounded p-2 text-sm bg-gray-100 text-gray-900";
+          const bubbleClass = mine
+            ? "max-w-xs rounded-xl rounded-br-sm p-2.5 text-sm bg-[var(--gold)] text-[var(--gold-text)]"
+            : "max-w-xs rounded-xl rounded-bl-sm p-2.5 text-sm bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]";
 
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
@@ -209,16 +193,14 @@ export default function ChatPanel({
                         href={attachmentUrl ?? "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`underline ${mine ? (dark ? "text-[#241a3d]" : "text-white") : dark ? "text-[#a78bfa]" : "text-blue-600"}`}
+                        className={`underline ${mine ? "text-[var(--gold-text)]" : "text-[var(--gold)]"}`}
                       >
                         {filenameFromPath(m.attachment_url)}
                       </a>
                     )}
                   </div>
                 )}
-                <p
-                  className={`mt-1 text-[10px] ${mine ? "opacity-70" : dark ? "text-[#9997ab]" : "text-gray-400"}`}
-                >
+                <p className={`mt-1 text-[10px] ${mine ? "opacity-70" : "text-[var(--text-muted)]"}`}>
                   <FormattedDateTime value={m.created_at} />
                 </p>
               </div>
@@ -227,16 +209,10 @@ export default function ChatPanel({
         })}
       </div>
 
-      <div
-        className={dark ? "border-t border-[#2c2c3d] bg-[#20202f] p-3" : "border-t p-3"}
-      >
-        {error && (
-          <p className={dark ? "mb-2 text-sm text-[#e85c86]" : "mb-2 text-sm text-red-600"}>
-            {error}
-          </p>
-        )}
+      <div className="border-t border-[var(--border)] bg-[var(--surface-2)] p-3">
+        {error && <p className="mb-2 text-sm text-[var(--coral)]">{error}</p>}
         {file && (
-          <p className={dark ? "mb-2 text-xs text-[#9997ab]" : "mb-2 text-xs text-gray-600"}>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">
             Attached: {file.name}{" "}
             <button onClick={() => setFile(null)} className="underline">
               remove
@@ -255,11 +231,7 @@ export default function ChatPanel({
             }}
             placeholder="Type a message…"
             rows={2}
-            className={
-              dark
-                ? "flex-1 resize-none rounded-lg border border-[#2c2c3d] bg-[#1a1a26] p-2 text-sm text-[#f4f0e6] placeholder:text-[#9997ab]"
-                : "flex-1 resize-none rounded border p-2 text-sm"
-            }
+            className="flex-1 resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
           />
           <input
             ref={fileInputRef}
@@ -270,22 +242,14 @@ export default function ChatPanel({
           />
           <label
             htmlFor="chat-file-input"
-            className={
-              dark
-                ? "cursor-pointer rounded-lg border border-[#2c2c3d] bg-[#1a1a26] px-3 py-2 text-sm text-[#9997ab] hover:text-[#f4f0e6]"
-                : "cursor-pointer rounded border px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            }
+            className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
           >
             Attach
           </label>
           <button
             onClick={handleSend}
             disabled={sending || (!text.trim() && !file)}
-            className={
-              dark
-                ? "rounded-lg bg-[#a78bfa] px-4 py-2 text-sm font-bold text-[#241a3d] disabled:opacity-50"
-                : "rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-            }
+            className="rounded-lg bg-[var(--gold)] px-4 py-2 text-sm font-bold text-[var(--gold-text)] disabled:opacity-50"
           >
             {sending ? "Sending…" : "Send"}
           </button>

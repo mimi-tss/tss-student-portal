@@ -8,31 +8,17 @@ import TimeZoneSelect from "./timezone-select";
 // current display timezone is always visible and always changeable, per
 // spec: times are shown in this zone everywhere, defaulting to Eastern
 // for admin/coach and the viewer's detected local zone for students.
-// `dark` switches to light-on-dark colors for the student layout's new
-// theme (TSS_App_Spec_1.md section 8) — admin/coach keep the default.
-export default function TimeZoneNavControl({ dark = false }: { dark?: boolean }) {
+export default function TimeZoneNavControl() {
   const { timeZone, setTimeZone } = useTimeZone();
 
   return (
-    <label
-      className={
-        dark
-          ? "flex items-center gap-1.5 text-xs text-[#9997ab]"
-          : "ml-auto flex items-center gap-1.5 text-xs text-gray-500"
-      }
-    >
+    <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
       <span className="hidden sm:inline">Viewing in</span>
-      <span className={dark ? "font-medium text-[#f4f0e6]" : "font-medium text-gray-700"}>
-        {timezoneAbbreviation(timeZone)}
-      </span>
+      <span className="font-medium text-[var(--text)]">{timezoneAbbreviation(timeZone)}</span>
       <TimeZoneSelect
         value={timeZone}
         onChange={setTimeZone}
-        className={
-          dark
-            ? "max-w-[45vw] rounded border border-[#2c2c3d] bg-[#20202f] px-1.5 py-0.5 text-xs text-[#f4f0e6]"
-            : "rounded border px-1.5 py-0.5 text-xs"
-        }
+        className="max-w-[45vw] rounded border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5 text-xs text-[var(--text)]"
       />
     </label>
   );
