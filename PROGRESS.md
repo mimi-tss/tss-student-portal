@@ -3,6 +3,63 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found and fixed why Coach Celine's dashboard takes "a minute to open" (2026-09-04)
+
+Same day, follow-up to the blank-screen/slow reports above. This time
+she wasn't stuck — just very slow. You asked for a real fix, not more
+diagnostics she'd have to run herself, so this was investigated
+entirely from this end.
+
+Ruled out, with real evidence, in order:
+- **Her internet** — asked for a speed test: 314 Mbps down, 68ms ping.
+  Fine.
+- **Every database query her dashboard runs** — with your OK, minted a
+  diagnostic session for her account (server-side only, never opened in
+  a browser — a live browser login as her was correctly blocked by the
+  safety classifier even after you approved it in chat, and I didn't
+  try to route around that) and timed her actual RLS-scoped queries
+  directly against production. Every one, including today's newest
+  policy, came back under 300ms.
+- **Vercel's platform** — checked their public status page directly:
+  operational now, though there was a real, now-resolved incident
+  earlier today ("Elevated latency in VCR, Blob, and Sandbox API",
+  19:11–20:27 UTC) whose timing lines up with the earlier blank-screen
+  video — that one may genuinely have been Vercel's own outage, not
+  this app.
+
+That left Google Drive, which I hadn't tested at all yet. Listed every
+shared drive this app's service account can actually see
+(`drive.drives.list()`) and found **five completely unrelated
+businesses'** shared drives alongside "TSS Student Drives" — the same
+Google Workspace account is reused across multiple unrelated
+organizations. [listStudentRecordings and getOrCreateArchiveFolder](lib/google/drive.ts)
+both searched `corpora: "allDrives"` for a lookup that could only ever
+resolve inside one specific, already-known student folder — meaning
+every single one of those unrelated drives got enumerated too, every
+time. Timed old vs. scoped side by side on a real folder (confirmed
+faster) and — more importantly — re-ran both versions against 5 real
+students' folders and confirmed byte-identical results before shipping,
+not just "seems to still work."
+
+**Separately confirmed, not fixed**: `googleapis`'s HTTP layer retries
+transient/rate-limit errors automatically by default (3x, exponential
+backoff) — completely invisible in this app's own logs. Less Drive work
+per call means less quota pressure and fewer chances for that silent
+retry path to fire, which plausibly compounds into exactly this kind of
+intermittent "sometimes a few seconds, sometimes a lot longer" pattern
+— flagging honestly that I couldn't reproduce the full 60-second case
+directly to prove this is the *entire* explanation, only that it's a
+real, verified contributing fix.
+
+**Left alone deliberately**: `lib/exercises.ts`'s own Drive call also
+uses `corpora: "allDrives"`, but its folder ID
+(`GOOGLE_EXERCISES_FOLDER_ID`) isn't configured in this environment —
+couldn't confirm which drive it actually lives in, and scoping it on a
+guess risked breaking it outright the day someone does configure it.
+
+`tsc --noEmit` and `next build` both clean. Not yet confirmed by Celine
+that this actually resolves the one-minute wait — worth checking back.
+
 ## Added error boundaries everywhere — the actual long-run fix for the blank-screen reports (2026-09-04)
 
 You asked how "normal" apps avoid this class of problem at all. Real
