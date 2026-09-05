@@ -3,6 +3,31 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed group-lesson coaches unable to assign exercises / notes / shared folder (2026-09-04)
+
+You caught this live in a screenshot: a coach picked a group-only
+student from "My Students" (visibility fixed earlier this session,
+0092) and hit `new row violates row-level security policy for table
+"exercise_assignments"` trying to assign them an exercise — the exact
+gap flagged as a known follow-up when 0092 shipped ("homework notes,
+exercise assignment, and the shared-folder panel still use the old
+two-source access model").
+
+Migration 0094 extends `exercise_assignments` (insert/select/delete)
+and `homework_notes` (select/insert) with the same
+`auth_coach_group_lesson_student_ids()` additive policy 0092 already
+established for chat — pure additions, nothing dropped. Also fixed
+[resolveFolderAccess](lib/shared-folder.ts) (backs all three shared-folder
+routes: upload/shortcut/remove), which isn't an RLS table check but its
+own application-code authorization function — it only checked
+`assigned_coach_id` and 1:1 session history, so a group-only student's
+shared folder was unreachable by their group coach even after 0092.
+Now also checks `group_lesson_registrations` the same way.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no live login here. See Action needed below: migration 0094 needs to
+run and be confirmed.
+
 ## Trial lessons can now be locked to a specific coach (e.g. Tara) (2026-09-04)
 
 Direct follow-up to the trial-granting work above: some students pay
@@ -5367,6 +5392,15 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0094 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
+`0094_group_lesson_exercise_notes_access.sql` extends `exercise_assignments`
+and `homework_notes` RLS with `auth_coach_group_lesson_student_ids()`
+(see entry above — this is the "coach can't assign exercise to a group
+student" fix). **Please run this migration in Supabase and reply
+"successful" once applied.** Until then, assigning an exercise or
+adding a homework note for a group-only student still fails with the
+same RLS error as before — no worse than today, but not fixed either.
 
 **Migration 0093 confirmed applied** (2026-09-04) — `entitlements.coach_id`
 is live. Granting a trial (Add Student form or the dashboard's "Grant
