@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TimeZoneNavControl from "@/components/timezone-nav-control";
 import RefreshButton from "@/components/refresh-button";
+import SessionResetButton from "@/components/session-reset-button";
 import type { Role } from "@/types/database";
 import styles from "./admin.module.css";
 
@@ -154,6 +155,7 @@ export default function AdminNav({ initialNeedsReviewCount, role }: { initialNee
         <div className={styles.avatar} style={{ width: 30, height: 30, fontSize: 12, flexShrink: 0 }}>
           A
         </div>
+        {!collapsed && <SessionResetButton dark />}
         {!collapsed && <RefreshButton dark />}
         {!collapsed && <TimeZoneNavControl dark />}
       </div>

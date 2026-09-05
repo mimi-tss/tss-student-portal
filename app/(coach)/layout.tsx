@@ -4,6 +4,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
 import TimeZoneNavControl from "@/components/timezone-nav-control";
 import RefreshButton from "@/components/refresh-button";
+import SessionResetButton from "@/components/session-reset-button";
 import CoachNav from "./coach-nav";
 import { Anton, Inter, Caveat } from "next/font/google";
 import styles from "./coach.module.css";
@@ -45,6 +46,7 @@ export default async function CoachLayout({
           </div>
           <CoachNav />
           <div className={styles.headerRight}>
+            <SessionResetButton dark />
             <RefreshButton dark />
             <TimeZoneNavControl dark />
             <div className={styles.avatar}>{initials(coach?.name ?? "?")}</div>
