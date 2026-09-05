@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
 import TimeZoneNavControl from "@/components/timezone-nav-control";
+import RefreshButton from "@/components/refresh-button";
 import CoachNav from "./coach-nav";
 import { Anton, Inter, Caveat } from "next/font/google";
 import styles from "./coach.module.css";
@@ -44,6 +45,7 @@ export default async function CoachLayout({
           </div>
           <CoachNav />
           <div className={styles.headerRight}>
+            <RefreshButton dark />
             <TimeZoneNavControl dark />
             <div className={styles.avatar}>{initials(coach?.name ?? "?")}</div>
             <span className={styles.roleBadge}>Coach</span>

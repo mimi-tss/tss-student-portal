@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
 import NotificationBell from "@/components/notification-bell";
+import RefreshButton from "@/components/refresh-button";
 import StudentNav from "./student-nav";
 import styles from "./student.module.css";
 
@@ -48,6 +49,7 @@ export default async function StudentLayout({
           </div>
           <StudentNav />
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <RefreshButton dark />
             <NotificationBell />
             <div className={styles.avatar}>{initials(student.name)}</div>
           </div>
