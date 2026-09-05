@@ -3,6 +3,55 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added error boundaries everywhere — the actual long-run fix for the blank-screen reports (2026-09-04)
+
+You asked how "normal" apps avoid this class of problem at all. Real
+answer: proactive token refresh (Supabase's own client already does
+this by default — checked), never showing a blank page on a crash (an
+error boundary), bounded client-side memory, and self-healing past a
+stale deploy. You asked for the error-boundary piece specifically,
+since it's the one actually missing here and the one that turns any
+future unexpected crash — not just today's — into something recoverable
+instead of a silent blank screen.
+
+This app had **zero error boundaries anywhere** before this. New
+[dashboard-error.tsx](components/dashboard-error.tsx) is the shared UI
+(a message, "Try again" via Next's own `reset()`, plus the existing
+RefreshButton/SessionResetButton reused rather than duplicated), wired
+in at four levels:
+- `(coach|student|admin)/error.tsx` — catch errors from pages within
+  each group. These render nested inside that group's own layout
+  (Next.js only replaces the `{children}` slot), so they inherit its
+  dark background for free.
+- [app/error.tsx](app/error.tsx) — root-level safety net. Important
+  detail: a **layout's own** errors (the `requireRole` check, a coach/
+  student name lookup, the admin sidebar's stats fetch) are NOT caught
+  by that group's own error.tsx — they bubble to the nearest ancestor
+  boundary instead. Without this root one, that exact class of failure
+  — plausibly what actually happened in the coach's screen recording —
+  would still blank the whole page, header included.
+- [app/global-error.tsx](app/global-error.tsx) — last-resort, only for
+  `app/layout.tsx` itself throwing (rare — the root layout is trivial
+  today — but Next.js requires this to cover that case). Supplies its
+  own `<html>/<body>` since it replaces the whole document.
+
+**Caught a real bug live while testing this**, not just in theory:
+built a temporary throw-test page, ran the dev server, and confirmed
+via screenshot that `app/error.tsx` initially reused
+`dashboard-error.tsx`'s light-on-dark text unchanged — invisible
+against the *root* layout's plain white body, since (unlike the
+group-level boundaries) this one doesn't render inside an
+already-dark-styled layout. Added a `standalone` prop that gives it its
+own dark backdrop, re-tested, confirmed legible. Removed the test route
+afterward.
+
+`tsc --noEmit` and `next build` both clean. `@supabase/ssr`'s
+`autoRefreshToken` is already on by default — confirmed by reading the
+library source — so that piece needed no work. The one remaining gap
+from that list, not yet addressed: the chat panel polls its entire
+message history unbounded every 4 seconds (harmless today at max 9
+messages/thread, but worth capping eventually).
+
 ## Added a stronger "Fix stuck screen" button — the plain Refresh button wasn't enough (2026-09-04)
 
 Same-day follow-up to the Refresh button below. You sent two screen
