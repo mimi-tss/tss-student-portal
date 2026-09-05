@@ -6,6 +6,20 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth: getGoogleAuth(DRIVE_SCOPES) });
 }
 
+// Every student folder lives in this one shared drive. Confirmed live
+// (2026-09-04, investigating a coach's "takes a minute to open" report)
+// that this service account can see FIVE OTHER shared drives too —
+// entirely unrelated businesses sharing the same Google Workspace
+// account, not just this studio's own. Every call below that targets a
+// student's own folder used to search `corpora: "allDrives"`, meaning
+// every single one of those unrelated drives got enumerated too on
+// every request — confirmed via a direct timing comparison that scoping
+// to just this drive is meaningfully faster, and it's also the more
+// correct scope regardless: a lookup for a specific known student
+// folder never had any legitimate reason to search a stranger's
+// business drive in the first place.
+const STUDENT_DRIVES_ID = "0ACL0rzsmUC2iUk9PVA";
+
 // Exercises Library catalog folder — the studio manages its contents by
 // hand (add/remove audio files whenever the exercise set changes) and
 // the app syncs off it rather than the studio going through an in-app
@@ -103,7 +117,8 @@ export async function listStudentRecordings(folderId: string): Promise<StudentFo
     // removeStudentFolderItem) — a removed item's new home shouldn't
     // reappear as a stray folder row in this same listing.
     q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
-    corpora: "allDrives",
+    corpora: "drive",
+    driveId: STUDENT_DRIVES_ID,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true,
     fields: "files(id, name, mimeType, createdTime, webViewLink, shortcutDetails)",
@@ -236,7 +251,8 @@ async function getOrCreateArchiveFolder(studentFolderId: string): Promise<string
     q: `'${studentFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and name = 'Archive'`,
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
-    corpora: "allDrives",
+    corpora: "drive",
+    driveId: STUDENT_DRIVES_ID,
     fields: "files(id)",
   });
   const found = existing.data.files?.[0]?.id;
