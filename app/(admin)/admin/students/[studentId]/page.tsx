@@ -429,7 +429,7 @@ export default async function AdminStudentPage({
         ) : nextSession ? (
           <>
             <p>
-              <FormattedDateTime value={nextSession.scheduled_at} />
+              <FormattedDateTime value={nextSession.scheduled_at} /> · {nextSession.duration_minutes} min
             </p>
             <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
               <AdminCancelButtons

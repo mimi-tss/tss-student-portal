@@ -101,7 +101,7 @@ export default function AdminUpcomingSessions({
           {sessions.map((s) => (
             <li key={s.id} className={styles.listItem}>
               <p>
-                <FormattedDateTime value={s.scheduled_at} />
+                <FormattedDateTime value={s.scheduled_at} /> · {s.duration_minutes} min
               </p>
               <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
                 <AdminCancelButtons
