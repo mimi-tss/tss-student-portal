@@ -5393,14 +5393,11 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0094 — NOT YET CONFIRMED APPLIED** (2026-09-04) —
-`0094_group_lesson_exercise_notes_access.sql` extends `exercise_assignments`
-and `homework_notes` RLS with `auth_coach_group_lesson_student_ids()`
-(see entry above — this is the "coach can't assign exercise to a group
-student" fix). **Please run this migration in Supabase and reply
-"successful" once applied.** Until then, assigning an exercise or
-adding a homework note for a group-only student still fails with the
-same RLS error as before — no worse than today, but not fixed either.
+**Migration 0094 confirmed applied** (2026-09-04) — `exercise_assignments`
+and `homework_notes` RLS now recognize a group-lesson-only coach
+relationship too. A coach opening a group student from "My Students"
+should now be able to assign exercises and add homework notes without
+hitting the earlier RLS error.
 
 **Migration 0093 confirmed applied** (2026-09-04) — `entitlements.coach_id`
 is live. Granting a trial (Add Student form or the dashboard's "Grant
