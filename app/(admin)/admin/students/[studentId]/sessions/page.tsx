@@ -32,7 +32,7 @@ export default async function StudentSessionHistoryPage({
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
 
-  const [{ data: coaches }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }] =
+  const [{ data: coaches }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }, { data: credits }] =
     await Promise.all([
       supabase.from("coaches").select("id, name").order("name"),
       supabase
@@ -47,6 +47,17 @@ export default async function StudentSessionHistoryPage({
         .eq("student_id", student.id)
         .eq("type", "student-fault")
         .gte("created_at", yearStart),
+      // Unused credits available to spend on a backfilled session — e.g. a
+      // late cancellation that happened in the old app but had already used
+      // up a credit there, which this app still shows as unspent. Same
+      // query book/page.tsx already uses for the live booking flow.
+      supabase
+        .from("makeup_credits")
+        .select("id, type, reason, expires_at, duration_minutes")
+        .eq("student_id", student.id)
+        .eq("used", false)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order("expires_at", { ascending: true, nullsFirst: false }),
     ]);
 
   return (
@@ -60,6 +71,7 @@ export default async function StudentSessionHistoryPage({
         coaches={coaches ?? []}
         monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
         yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
+        credits={credits ?? []}
       />
     </div>
   );

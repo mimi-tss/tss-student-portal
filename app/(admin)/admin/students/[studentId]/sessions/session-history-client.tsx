@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
+import { creditDisplayName, creditTypeLabel } from "@/lib/booking/credit-display";
 import AdminCancelButtons from "../admin-cancel-buttons";
 import styles from "../../../../admin.module.css";
 
 interface Coach {
   id: string;
   name: string;
+}
+
+interface Credit {
+  id: string;
+  type: string;
+  reason: string | null;
+  expires_at: string | null;
+  duration_minutes: number | null;
 }
 
 interface SessionRow {
@@ -53,12 +62,18 @@ function coachName(coaches: Coach[], id: string): string {
 // here).
 function SessionForm({
   coaches,
+  credits,
   initial,
   submitLabel,
   onCancel,
   onSubmit,
 }: {
   coaches: Coach[];
+  // Only passed for "Add past session" — a backfilled record can spend an
+  // existing unused credit (e.g. one already consumed by this same lesson
+  // back in the old app, still showing here as unspent). Editing an
+  // already-real session doesn't touch credits at all.
+  credits?: Credit[];
   initial: { scheduledAt: string; durationMinutes: number; coachId: string; status: string };
   submitLabel: string;
   onCancel: () => void;
@@ -68,6 +83,7 @@ function SessionForm({
     coachId: string;
     status: string;
     note: string;
+    creditId: string | null;
   }) => Promise<string | null>;
 }) {
   const [scheduledAt, setScheduledAt] = useState(initial.scheduledAt);
@@ -75,13 +91,20 @@ function SessionForm({
   const [coachId, setCoachId] = useState(initial.coachId);
   const [status, setStatus] = useState(initial.status);
   const [note, setNote] = useState("");
+  const [creditId, setCreditId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleCreditChange(id: string) {
+    setCreditId(id);
+    const credit = credits?.find((c) => c.id === id);
+    if (credit?.duration_minutes) setDurationMinutes(credit.duration_minutes);
+  }
 
   async function handleSubmit() {
     setSaving(true);
     setError(null);
-    const err = await onSubmit({ scheduledAt, durationMinutes, coachId, status, note });
+    const err = await onSubmit({ scheduledAt, durationMinutes, coachId, status, note, creditId: creditId || null });
     setSaving(false);
     if (err) setError(err);
   }
@@ -129,6 +152,20 @@ function SessionForm({
             ))}
           </select>
         </div>
+        {credits && (
+          <div className={styles.field}>
+            <label>Use a credit (optional)</label>
+            <select value={creditId} onChange={(e) => handleCreditChange(e.target.value)} className={styles.select}>
+              <option value="">None</option>
+              {credits.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {creditDisplayName(c.duration_minutes ?? 30)} — {creditTypeLabel(c.type)}
+                  {c.expires_at ? ` (expires ${new Date(c.expires_at).toLocaleDateString()})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div className={styles.field} style={{ marginTop: 8 }}>
         <label>Note (optional — logged to the admin audit trail)</label>
@@ -159,11 +196,13 @@ export default function SessionHistoryClient({
   coaches,
   monthlyCreditsUsed,
   yearlyCreditsUsed,
+  credits,
 }: {
   studentId: string;
   coaches: Coach[];
   monthlyCreditsUsed: number;
   yearlyCreditsUsed: number;
+  credits: Credit[];
 }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -201,7 +240,14 @@ export default function SessionHistoryClient({
 
   async function handleEdit(
     sessionId: string,
-    values: { scheduledAt: string; durationMinutes: number; coachId: string; status: string; note: string },
+    values: {
+      scheduledAt: string;
+      durationMinutes: number;
+      coachId: string;
+      status: string;
+      note: string;
+      creditId: string | null;
+    },
   ) {
     const res = await fetch("/api/admin/edit-session", {
       method: "POST",
@@ -228,6 +274,7 @@ export default function SessionHistoryClient({
     coachId: string;
     status: string;
     note: string;
+    creditId: string | null;
   }) {
     const res = await fetch("/api/admin/add-session", {
       method: "POST",
@@ -239,6 +286,7 @@ export default function SessionHistoryClient({
         durationMinutes: values.durationMinutes,
         status: values.status,
         note: values.note,
+        creditId: values.creditId,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -304,6 +352,7 @@ export default function SessionHistoryClient({
         {adding && (
           <SessionForm
             coaches={coaches}
+            credits={credits}
             initial={{ scheduledAt: nowLocal, durationMinutes: 30, coachId: coaches[0]?.id ?? "", status: "attended" }}
             submitLabel="Add session"
             onCancel={() => setAdding(false)}

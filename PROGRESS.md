@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Session history follow-ups: spend a credit on a backfilled session, fix cramped link (2026-09-07)
+
+Two quick follow-ups to the session-history page below, both from you
+looking at it live right after it shipped.
+
+**Layout**: "Show all sessions this billing cycle" and "See all previous
+sessions" rendered jammed together with no gap (the second was just
+appended right after the first with no layout control). Wrapped both in
+a flex row with `justifyContent: "space-between"` so the new link sits
+on the opposite side, matching the screenshot you sent.
+
+**Spend a credit when backfilling a session**: your exact point — a
+session added via "Add past session" might represent a lesson that
+*already consumed* a real makeup credit back in the old app, which this
+app would otherwise keep showing as unused. New optional "Use a credit"
+dropdown on the Add form only (not Edit — an already-real session isn't
+being backfilled) lists the student's unused credits
+([credit-display.ts](lib/booking/credit-display.ts)'s existing
+labels); picking one sets `is_makeup`/`makeup_credit_id` on the new
+session and marks that credit `used` — the exact same two-write
+sequence [the live booking flow](app/api/booking/book/route.ts) already
+does, just triggered from a backfill instead of a real-time booking.
+Never grants or creates a credit, only spends an existing unused one —
+[add-session](app/api/admin/add-session/route.ts) 409s if the chosen
+credit turns out already spent or doesn't belong to that student.
+
+Verified both the insert-with-credit and the double-spend guard against
+real Supabase the same way as below (throwaway test student + a real
+`test-admin` session via `verifyOtp`, cleaned up after). `tsc`/`build`
+clean.
+
 ## Admin can now see, edit, and backfill a student's full session history (2026-09-07)
 
 You flagged a real gap: Bianca late-cancelled a session in the old app
