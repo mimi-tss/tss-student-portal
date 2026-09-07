@@ -479,29 +479,46 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
 
   const { data: candidateSessions } = await supabase
     .from("sessions")
-    .select("id, student_id, scheduled_at, duration_minutes, status, students(name), coaches:actual_coach_id(timezone)")
+    .select(
+      "id, student_id, actual_coach_id, scheduled_at, duration_minutes, status, students(name), coaches:actual_coach_id(timezone)",
+    )
     .gte("scheduled_at", lookbackStart.toISOString())
     .lte("scheduled_at", new Date().toISOString())
     .not("status", "in", `(${NO_RECORDING_EXPECTED_STATUSES.join(",")})`);
 
-  // Past-grace-period only — a session that just ended is too soon to
-  // expect a recording yet, same cutoff as before, just filtered up
-  // front instead of skipped one at a time in the loop below.
+  // A recording for this coach/date already sitting unmatched (real
+  // Drive evidence it showed up) means the grace period's whole purpose
+  // — don't flag "missing" while Meet might still be processing it — is
+  // already moot. Confirmed live: Celine's own sessions (ended minutes
+  // earlier) had matching recordings already visible in the unmatched
+  // queue, but the manual-match dropdown stayed empty because this
+  // function hadn't created a recording_missing item yet — the grace
+  // period was blocking the one place that's supposed to let an admin
+  // match a recording that ALREADY exists.
+  const unmatchedRecordingKeys = new Set(
+    (unmatchedRecordings ?? []).map((r) => `${r.coach_id}|${r.recorded_date}`),
+  );
+
+  // Past-grace-period only, UNLESS a recording already showed up for
+  // that coach/date — a session that just ended is too soon to expect a
+  // recording yet, same cutoff as before, just filtered up front instead
+  // of skipped one at a time in the loop below.
   const dueSessions = (candidateSessions ?? [])
-    .filter((s) => {
-      const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
-      return endTime <= graceCutoff.getTime();
-    })
     .map((s) => {
       const timezone = (s.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
       const [y, m, d] = zonedYearMonthDay(new Date(s.scheduled_at), timezone);
+      const sessionDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
+      const isDue = endTime <= graceCutoff.getTime() || unmatchedRecordingKeys.has(`${s.actual_coach_id}|${sessionDate}`);
       return {
         id: s.id,
         studentId: s.student_id,
         studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
-        sessionDate: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+        sessionDate,
+        isDue,
       };
-    });
+    })
+    .filter((s) => s.isDue);
 
   // A session already flagged recording_missing can later turn out to be
   // a no-show, a late-forfeit, or a cancellation — attendance/

@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed Recordings page dropdown staying empty for same-day sessions (2026-09-07)
+
+You caught this live: Celine had several attended sessions today
+(Victoria Alvarez, Solomiya Jackson, Greg Myers) and matching unmatched
+recordings already sitting in the queue for the same day, but the
+manual-match dropdown said "No attended sessions or group classes found
+that day" for every one of them.
+
+Root cause: the dropdown's candidate list
+([listAllCandidateSessions](lib/admin/recording-matching.ts)) is sourced
+from open `recording_missing` attention items, not sessions directly
+(deliberate — see that function's own comment, it fixed a worse bug
+once already). But [syncRecordingAttentionItems](lib/admin/attention-items.ts)
+only creates a `recording_missing` item once a session is
+`RECORDING_GRACE_HOURS` (6h) past its end time — a delay meant to avoid
+flagging "missing" while Meet might still be processing. Verified
+directly against production: server time was 21:25 UTC (5:25pm ET),
+grace cutoff 11:25am ET, but Celine's attended sessions ended between
+12:00pm–4:30pm ET — none 6h stale yet, so zero open `recording_missing`
+items existed, even though the recordings had already shown up on Drive
+(confirmed live: `Coach Celine's Personal Meeting Link - 2026/09/07
+12:01 EDT` etc. were already in `meet_recordings` as `unmatched`).
+
+Fixed by also treating a session as "due" immediately once a same-day
+unmatched recording already exists for that coach — real Drive evidence
+the recording showed up makes the whole point of the grace period moot
+for that specific session. Grace period still applies normally for
+everything else (a session with no recording yet still waits the full
+6h before getting flagged, unchanged).
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration —
+pure application logic. Not live-clicked (no login here), but verified
+the exact real production rows (coach id, session times, recording
+rows) against the new logic by hand before shipping. Should show up
+within: the next Needs Review/Overview page load (which always
+resyncs), or the 2-hour scan-recordings cron, whichever comes first.
+
 ## Fixed admin sidebar footer overlap from the new theme toggle (2026-09-07)
 
 You caught this live in a screenshot: the admin sidebar's bottom area
