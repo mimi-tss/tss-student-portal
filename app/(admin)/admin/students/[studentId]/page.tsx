@@ -460,6 +460,9 @@ export default async function AdminStudentPage({
           monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
           yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
         />
+        <Link href={`/admin/students/${student.id}/sessions`} className={styles.linkBtn} style={{ display: "inline-block", marginTop: 8 }}>
+          See all previous sessions
+        </Link>
       </div>
 
       <div className={styles.panel}>

@@ -3,6 +3,65 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now see, edit, and backfill a student's full session history (2026-09-07)
+
+You flagged a real gap: Bianca late-cancelled a session in the old app
+(Opus) before this app's session history even existed, and there was
+no way to record that fact here — the student page only ever shows the
+*current* billing cycle's sessions (`/api/sessions/upcoming`, `status =
+'scheduled'` only). Anything older, or any non-scheduled status
+(attended/no-show/late-forfeit/cancelled-*), was invisible in the admin
+UI even though the rows exist in `sessions` — there was simply no page
+querying for them. First answer was "use the existing Staff Notes
+panel" (already built for exactly this — admin-only, permanent), but
+you asked for something more structural: a real "See all previous
+sessions" page.
+
+New **"See all previous sessions"** link on the student page → new
+[/admin/students/[studentId]/sessions](<app/(admin)/admin/students/[studentId]/sessions/page.tsx>)
+page:
+- Editable date-range filter (from/to), paginated 50 at a time — same
+  shape as the existing Activity Log page's own filter row.
+- Every session in range, any status, with the coach's actual marked
+  attendance shown plainly (not just "scheduled").
+- **Edit** — full correction tool (date/time, coach, duration, status),
+  works regardless of the session's current status. Deliberately
+  touches no credits/makeup_credits (unlike cancel/staff-cancel) — it's
+  a raw record fix, not a live booking action. An optional note gets
+  logged to `admin_overrides` for audit, on top of the automatic
+  field-level `audit_log` trigger (0064) every session write already
+  gets.
+- **Cancel / Staff cancel** — reused `AdminCancelButtons` as-is, shown
+  only for a still-`'scheduled'` past-due session (one nobody ever
+  marked attendance on).
+- **+ Add past session** — the actual Bianca-shaped fix: a plain insert
+  for a session this app never created (pick date/time, coach,
+  duration, status), with the same optional audit note. No makeup
+  credit, no coach notification, no payroll side effect — payroll's own
+  generate step already picks up an `'attended'` row on its own next
+  run, so backfilling one just works without extra plumbing.
+
+New routes: [session-history](app/api/admin/session-history/route.ts) (GET),
+[edit-session](app/api/admin/edit-session/route.ts),
+[add-session](app/api/admin/add-session/route.ts) (POST) — all three
+rely on RLS already granted to admins on `sessions`
+(select/insert/update from 0007/0017, delete from 0054), same
+no-explicit-admin-check convention the existing cancel/reassign routes
+already use.
+
+Verified for real, not just typechecked: minted a magic link for the
+`test-admin@tarasimonstudios.com` account, redeemed it server-side
+(`verifyOtp`, never opened in a browser), and ran the exact
+insert/select/update/delete/admin_overrides-insert sequence these
+routes perform against a throwaway test student in production —
+confirmed every RLS policy behaves as expected, then deleted the test
+student and session so nothing real was touched. Also curl-tested every
+new route unauthenticated to confirm validation/error paths don't
+crash. `npx tsc --noEmit -p .` and `next build` both clean. **Not
+click-tested in a real browser** — no live admin login available here;
+worth a quick look next time you're in the app to confirm the UI reads
+right, especially the two inline forms (Edit / Add past session).
+
 ## Fixed Recordings page dropdown staying empty for same-day sessions (2026-09-07)
 
 You caught this live: Celine had several attended sessions today
