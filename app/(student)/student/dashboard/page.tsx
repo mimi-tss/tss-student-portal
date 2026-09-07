@@ -37,8 +37,9 @@ function firstName(name: string) {
 }
 
 // Student dashboard: next session + Join button (opens 10 min early),
-// a homework-note spotlight, chat, recordings, and the plan/credit
-// summary. See TSS_App_Spec_1.md section 8.
+// chat, recordings, and the plan/credit summary. See
+// TSS_App_Spec_1.md section 8. Homework notes are coach/admin-only
+// (migration 0095) — deliberately not fetched or shown here anymore.
 export default async function StudentDashboardPage() {
   const supabase = await createClient();
   const {
@@ -66,7 +67,6 @@ export default async function StudentDashboardPage() {
     { data: nextSession },
     { data: availableCredits },
     { count: sessionsThisCycle },
-    { data: spotlightNotes },
     { data: upcomingCycleSessions },
     { data: pendingRequests },
     { data: recurringSchedules },
@@ -108,15 +108,6 @@ export default async function StudentDashboardPage() {
       .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)")
       .gte("scheduled_at", cycleStart.toISOString())
       .lt("scheduled_at", cycleEnd.toISOString()),
-    // Most recent homework note, pinned ones first — spotlighted above
-    // the full list, same source of truth (RLS-scoped to this student).
-    supabase
-      .from("homework_notes")
-      .select("id, note, created_at")
-      .eq("student_id", student.id)
-      .order("pinned", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1),
     // Every scheduled session left in this billing cycle — backs the
     // "Upcoming lessons this cycle" card next to "Your plan", which links
     // to the scheduler rather than offering inline cancel (that's still
@@ -145,8 +136,6 @@ export default async function StudentDashboardPage() {
   const sessionCycleCap = effectiveSessionCycleCap(student.tier, (recurringSchedules ?? []).map((s) => s.cadence));
 
   const hasPendingCancelRequest = (pendingRequests?.length ?? 0) > 0;
-
-  const spotlightNote = spotlightNotes?.[0] ?? null;
 
   const [assignedExercises, upcomingGroupLessons] = await Promise.all([
     listAssignedExercises(supabase, student.id),
@@ -294,13 +283,6 @@ export default async function StudentDashboardPage() {
             </div>
           ))}
         </Link>
-      )}
-
-      {spotlightNote && (
-        <div className={styles.note}>
-          <div className={styles.noteFrom}>Homework Notes</div>
-          <p className={styles.noteText}>{spotlightNote.note}</p>
-        </div>
       )}
 
       <StreakPing initialCount={student.streak_count ?? 0} />

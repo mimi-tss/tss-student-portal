@@ -93,6 +93,44 @@ click-tested in a real browser** — no live admin login available here;
 worth a quick look next time you're in the app to confirm the UI reads
 right, especially the two inline forms (Edit / Add past session).
 
+## Homework notes are now coach/admin-only, not visible to students (2026-09-07)
+
+You reported Celine saying last week's homework notes had "disappeared"
+and, separately, stated the actual rule you want going forward: coach
+and admin should see the full past history, students should not.
+
+Investigated the "disappeared" report first, against real production
+data, before assuming anything was actually lost: every `homework_notes`
+row in the whole table is still there — no student in the database has
+more than 2 notes ever (so the panel's `initialLimit={2}`/"Show more"
+collapse, checked as a first suspect, was never actually hiding
+anything). Checked the `audit_log` (which tracks every `students` table
+insert/update/delete) for the last week too — no real student got
+deleted or recreated either, just a concurrent session's own diagnostic
+test student and unrelated tier/profile updates. Couldn't reproduce an
+actual missing row; didn't yet get the specific student name from you
+to check further, so if this turns out to be more than the design
+change below, that's still open — let me know the student and I'll dig
+into that one row specifically.
+
+Regardless, implemented the rule you stated as its own, independently
+correct change: migration 0095 drops the one RLS policy (0022) that let
+a student `select` their own `homework_notes` — every coach/admin
+select+insert policy (0022, 0036, 0094) is untouched, so nothing about
+who can write notes or which students a given coach can see notes for
+changes at all. Also removed the student dashboard's homework-note
+"spotlight" card entirely
+([student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>))
+— it queried `homework_notes` directly with the student's own session,
+which would just silently return empty once the policy's gone, so
+there was no reason to keep querying for it.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here. See Action needed below: migration 0095 needs to run and
+be confirmed before students actually stop seeing notes (the dashboard
+card is already gone regardless, so this only matters if a student
+could otherwise reach `/api/notes` directly).
+
 ## Fixed Recordings page dropdown staying empty for same-day sessions (2026-09-07)
 
 You caught this live: Celine had several attended sessions today
@@ -5826,6 +5864,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0095 needs to run** — drops the RLS policy that let a
+student `select` their own `homework_notes` (see entry above). Not yet
+applied or confirmed. Coach/admin read+write access is unaffected
+either way; this only changes whether a student's own session can read
+that table directly (the dashboard card that showed it to students is
+already removed regardless).
 
 **Migration 0094 confirmed applied** (2026-09-04) — `exercise_assignments`
 and `homework_notes` RLS now recognize a group-lesson-only coach
