@@ -12,7 +12,10 @@ export default function TimeZoneNavControl() {
   const { timeZone, setTimeZone } = useTimeZone();
 
   return (
-    <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+    // flex-wrap so this degrades to two lines instead of overflowing when
+    // squeezed into a narrow container (the admin sidebar footer, ~260px,
+    // vs. the wide header bar this was originally sized for).
+    <label className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-muted)]">
       <span className="hidden sm:inline">Viewing in</span>
       <span className="font-medium text-[var(--text)]">{timezoneAbbreviation(timeZone)}</span>
       <TimeZoneSelect

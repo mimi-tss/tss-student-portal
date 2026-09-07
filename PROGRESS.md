@@ -3,6 +3,34 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed admin sidebar footer overlap from the new theme toggle (2026-09-07)
+
+You caught this live in a screenshot: the admin sidebar's bottom area
+(avatar, theme toggle, "Fix stuck screen", "↻ Refresh," the timezone
+picker) was overlapping and bleeding past the sidebar's own edge into
+the main content.
+
+Root cause: `.appSidebarFooter` was a single flex row with no wrap
+handling, and every one of those controls
+(SessionResetButton/RefreshButton/TimeZoneNavControl) was originally
+sized for a wide header bar (student/coach), not a ~260px sidebar
+column — cramming 5 of them (4, before yesterday's theme-toggle
+addition tipped it over into visibly broken) into one line with nothing
+allowed to wrap was always going to overflow eventually.
+
+Fixed in [admin.module.css](<app/(admin)/admin.module.css>): the footer
+is now a column — avatar on its own row, the 3 short action buttons in
+a `flex-wrap` row below, the timezone picker (naturally the widest,
+with a full-text select) on its own row after that. Also added
+`flex-wrap` to [TimeZoneNavControl](components/timezone-nav-control.tsx)
+itself, so it degrades to two lines instead of overflowing if it's ever
+squeezed into a narrow container again elsewhere.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration. Not
+live-tested — no login here, but this is a pure CSS/layout fix so the
+risk of it not resolving is low; let me know if it still looks
+cramped.
+
 ## Added an optional light theme, toggle-only (2026-09-04)
 
 You saw Speedtest.net's light mode (a screenshot of both its dark and

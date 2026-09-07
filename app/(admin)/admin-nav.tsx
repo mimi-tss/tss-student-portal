@@ -153,12 +153,18 @@ export default function AdminNav({ initialNeedsReviewCount, role }: { initialNee
       </button>
 
       <div className={styles.appSidebarFooter}>
-        <div className={styles.avatar} style={{ width: 30, height: 30, fontSize: 12, flexShrink: 0 }}>
-          A
+        <div className={styles.appSidebarFooterTop}>
+          <div className={styles.avatar} style={{ width: 30, height: 30, fontSize: 12, flexShrink: 0 }}>
+            A
+          </div>
         </div>
-        {!collapsed && <ThemeToggle />}
-        {!collapsed && <SessionResetButton />}
-        {!collapsed && <RefreshButton />}
+        {!collapsed && (
+          <div className={styles.appSidebarFooterActions}>
+            <ThemeToggle />
+            <SessionResetButton />
+            <RefreshButton />
+          </div>
+        )}
         {!collapsed && <TimeZoneNavControl />}
       </div>
     </div>

@@ -583,7 +583,7 @@
   padding: 9px;
 }
 .appSidebarCollapsed .appSidebarFooter {
-  justify-content: center;
+  align-items: center;
 }
 .appSidebarBrand {
   display: flex;
@@ -683,13 +683,31 @@
   background: var(--surface-2);
   color: var(--text);
 }
+/* Stacked, not a single row — avatar, then the utility buttons
+   (theme/session-reset/refresh), then the timezone picker each get
+   their own line. A single flex row here (the original layout) crammed
+   5 elements — several of them header-width components never designed
+   for a ~260px sidebar column — into one line with no wrap handling,
+   overflowing past the sidebar's own edge (confirmed live, worsened by
+   adding the theme toggle as a 5th element to the same row). */
 .appSidebarFooter {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--border);
   margin-top: 10px;
+}
+.appSidebarFooterTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.appSidebarFooterActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .appMain {
   flex: 1;
