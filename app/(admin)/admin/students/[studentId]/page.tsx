@@ -453,14 +453,16 @@ export default async function AdminStudentPage({
         )}
       </div>
 
-      <div style={{ marginBottom: 24 }}>
-        <AdminUpcomingSessions
-          studentId={student.id}
-          coaches={coaches ?? []}
-          monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
-          yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
-        />
-        <Link href={`/admin/students/${student.id}/sessions`} className={styles.linkBtn} style={{ display: "inline-block", marginTop: 8 }}>
+      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <AdminUpcomingSessions
+            studentId={student.id}
+            coaches={coaches ?? []}
+            monthlyCreditsUsed={monthlyCreditsUsed ?? 0}
+            yearlyCreditsUsed={yearlyCreditsUsed ?? 0}
+          />
+        </div>
+        <Link href={`/admin/students/${student.id}/sessions`} className={styles.linkBtn} style={{ flexShrink: 0 }}>
           See all previous sessions
         </Link>
       </div>
