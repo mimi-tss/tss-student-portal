@@ -37,9 +37,11 @@ function firstName(name: string) {
 }
 
 // Student dashboard: next session + Join button (opens 10 min early),
-// chat, recordings, and the plan/credit summary. See
-// TSS_App_Spec_1.md section 8. Homework notes are coach/admin-only
-// (migration 0095) — deliberately not fetched or shown here anymore.
+// a homework-note spotlight, chat, recordings, and the plan/credit
+// summary. See TSS_App_Spec_1.md section 8. Homework notes are
+// coach/admin-only for the full history (migration 0095) — the student
+// gets only their single most recent one, via the RPC below
+// (migration 0096), never a direct table read.
 export default async function StudentDashboardPage() {
   const supabase = await createClient();
   const {
@@ -67,6 +69,7 @@ export default async function StudentDashboardPage() {
     { data: nextSession },
     { data: availableCredits },
     { count: sessionsThisCycle },
+    { data: spotlightNotes },
     { data: upcomingCycleSessions },
     { data: pendingRequests },
     { data: recurringSchedules },
@@ -108,6 +111,11 @@ export default async function StudentDashboardPage() {
       .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)")
       .gte("scheduled_at", cycleStart.toISOString())
       .lt("scheduled_at", cycleEnd.toISOString()),
+    // Single most recent homework note (pinned first) — the RPC itself
+    // caps this at one row server-side (migration 0096), not just the
+    // UI, since there's no student SELECT policy on homework_notes at
+    // all anymore (0095).
+    supabase.rpc("student_latest_homework_note"),
     // Every scheduled session left in this billing cycle — backs the
     // "Upcoming lessons this cycle" card next to "Your plan", which links
     // to the scheduler rather than offering inline cancel (that's still
@@ -136,6 +144,8 @@ export default async function StudentDashboardPage() {
   const sessionCycleCap = effectiveSessionCycleCap(student.tier, (recurringSchedules ?? []).map((s) => s.cadence));
 
   const hasPendingCancelRequest = (pendingRequests?.length ?? 0) > 0;
+
+  const spotlightNote = spotlightNotes?.[0] ?? null;
 
   const [assignedExercises, upcomingGroupLessons] = await Promise.all([
     listAssignedExercises(supabase, student.id),
@@ -283,6 +293,13 @@ export default async function StudentDashboardPage() {
             </div>
           ))}
         </Link>
+      )}
+
+      {spotlightNote && (
+        <div className={styles.note}>
+          <div className={styles.noteFrom}>Homework Notes</div>
+          <p className={styles.noteText}>{spotlightNote.note}</p>
+        </div>
       )}
 
       <StreakPing initialCount={student.streak_count ?? 0} />

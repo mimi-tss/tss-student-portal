@@ -3,6 +3,35 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Homework notes: students get their single latest note back, not zero (2026-09-07)
+
+Follow-up to the coach/admin-only change above, right after you
+confirmed migration 0095 applied — you clarified students should still
+see their *most recent* note (same as the old dashboard "spotlight"
+card), just not the full past history.
+
+RLS can't express "only the newest row" in a plain SELECT policy (a
+`using` clause runs per-row, no `order by`/`limit`), so reopening
+student SELECT on `homework_notes` would put the full history right
+back within reach. Instead, migration 0096 adds
+`student_latest_homework_note()` — a security-definer function (same
+bypass-RLS-internally pattern as `auth_student_id()`/`auth_coach_id()`,
+0007) that returns exactly one row: the calling student's own most
+recent note, pinned first, same ordering the removed spotlight card
+used. 0095's policy drop stays as-is — there's still no student SELECT
+policy on `homework_notes` at all, so this RPC is the *only* path a
+student has to read any note, and it's capped at one by construction,
+not just by the UI.
+
+Restored the student dashboard's spotlight card
+([student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>)),
+now sourced from `supabase.rpc("student_latest_homework_note")` instead
+of a direct `.from("homework_notes")` query.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here. See Action needed below: migration 0096 needs to run and
+be confirmed.
+
 ## Session history follow-ups: spend a credit on a backfilled session, fix cramped link (2026-09-07)
 
 Two quick follow-ups to the session-history page below, both from you
@@ -5865,12 +5894,15 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0095 needs to run** — drops the RLS policy that let a
-student `select` their own `homework_notes` (see entry above). Not yet
-applied or confirmed. Coach/admin read+write access is unaffected
-either way; this only changes whether a student's own session can read
-that table directly (the dashboard card that showed it to students is
-already removed regardless).
+**Migration 0096 needs to run** — adds `student_latest_homework_note()`,
+the security-definer function that lets a student read back their
+single most recent note now that 0095 removed direct table access (see
+entry above). The dashboard's spotlight card calls this RPC, so it'll
+error/no-op for students until this runs.
+
+**Migration 0095 confirmed applied** (2026-09-07) — the RLS policy that
+let a student `select` their own `homework_notes` is gone; coach/admin
+read+write access is unaffected.
 
 **Migration 0094 confirmed applied** (2026-09-04) — `exercise_assignments`
 and `homework_notes` RLS now recognize a group-lesson-only coach
