@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found why admin chat send has been silently broken since 0092 (2026-09-08)
+
+You reported a chat message failing to send ("Couldn't send that message
+— please try again.") from Mimi Orac's admin student page. Investigated
+against real production, not just the code:
+
+- The message never landed in `chat_messages` — confirmed by direct
+  query, ruling out "it actually sent, the UI just didn't refresh."
+- Reproduced the exact same send (same student, same coach's thread,
+  same body text including the `youtu.be` link) as both the real coach
+  (Nikki Hollins, different student/thread, unrelated) and as the real
+  student (Mimi Orac herself) via a diagnostic session — both succeeded
+  cleanly. So it wasn't the link, the content, or those two roles.
+- Reproduced it **as admin** the same way — failed immediately with
+  Postgres `42501: new row violates row-level security policy for
+  table "chat_messages"`. Confirmed it's not student-specific either:
+  the same failure hits a plain "hi" into a completely unrelated
+  thread.
+
+Root cause: [0092_group_lesson_chat_access.sql](supabase/migrations/0092_group_lesson_chat_access.sql)
+rewrote the "participants can send messages in their own thread" INSERT
+policy on `chat_messages` to add the new
+`auth_coach_group_lesson_student_ids()` clause — but dropped the
+`is_admin()` branch that migration 0036 had put in that same policy.
+The SELECT policies on `chat_threads` and `chat_messages` both kept
+their own `is_admin()` branch (which is why loading the chat panel and
+reading messages as admin still worked, masking this) — only this one
+INSERT policy lost it. Since 0092 shipped on 2026-09-04, **admin has
+been unable to send any chat message to any student**, silently, until
+today.
+
+New migration [0099_fix_admin_chat_send.sql](supabase/migrations/0099_fix_admin_chat_send.sql)
+just restores the `is_admin()` branch — purely additive, nothing
+removed, coach/student send behavior unchanged. **I can't apply this
+myself** (no direct Postgres/management credential here, only the REST
+service-role key, which can't run DDL) — see Action needed below.
+
 ## Removed pinning from homework notes (2026-09-08)
 
 Follow-up to explaining what pin did (keep a note at the top of the
@@ -6103,6 +6140,32 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0099 needs to run — this one's urgent, it's why chat send is broken for you right now.**
+Fixes admin's chat-send RLS policy (see entry above). Run this in the
+Supabase SQL editor:
+
+```sql
+drop policy "participants can send messages in their own thread" on chat_messages;
+create policy "participants can send messages in their own thread"
+  on chat_messages for insert
+  with check (
+    sender_profile_id = auth.uid()
+    and (
+      is_admin()
+      or thread_id in (
+        select id from chat_threads
+        where student_id in (select id from students where profile_id = auth.uid())
+           or coach_id = auth_coach_id()
+           or student_id in (select auth_coach_student_ids())
+           or student_id in (select auth_coach_group_lesson_student_ids())
+      )
+    )
+  );
+```
+
+Once run, retry sending in Mimi Orac's chat panel — should go through
+immediately, no deploy needed (this is a database policy change only).
 
 **Migration 0098 needs to run** — drops `homework_notes.pinned` and
 redefines `student_latest_homework_note()` to order by `created_at`
