@@ -5894,11 +5894,10 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0096 needs to run** — adds `student_latest_homework_note()`,
-the security-definer function that lets a student read back their
-single most recent note now that 0095 removed direct table access (see
-entry above). The dashboard's spotlight card calls this RPC, so it'll
-error/no-op for students until this runs.
+**Migration 0096 confirmed applied** (2026-09-08) — `student_latest_homework_note()`
+is live; the dashboard's spotlight card should now show each student
+their own single most recent note again (pinned first), with no way to
+reach the rest of the history.
 
 **Migration 0095 confirmed applied** (2026-09-07) — the RLS policy that
 let a student `select` their own `homework_notes` is gone; coach/admin
