@@ -3,6 +3,28 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Removed pinning from homework notes (2026-09-08)
+
+Follow-up to explaining what pin did (keep a note at the top of the
+coach/admin list, and — since 0096 — override which note a student's
+single spotlight shows). You asked to remove it outright: whichever
+note is actually newest should always be what the student sees, no
+override.
+
+Migration 0098 drops `homework_notes.pinned` and redefines
+`student_latest_homework_note()` (0096) to order by `created_at` alone
+(had to `drop function` first, not `create or replace` — Postgres
+won't let that change a function's return columns in place). Removed
+the pin checkbox/📌 badge from
+[NotesPanel](components/notes-panel.tsx) and the pinned param/ordering
+from [/api/notes](app/api/notes/route.ts) — coach/admin's list is now
+plain newest-first too, same as the student's single note always was
+meant to be.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here. See Action needed below: migration 0098 needs to run and
+be confirmed.
+
 ## Built a standalone Stripe billing site — signup, self-serve plan management, Kajabi content-access sync (2026-09-08)
 
 You want billing handled by Stripe instead of Kajabi payments — a
@@ -6081,6 +6103,10 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0098 needs to run** — drops `homework_notes.pinned` and
+redefines `student_latest_homework_note()` to order by `created_at`
+alone (see entry above). Not yet applied or confirmed.
 
 **Migration 0097 — NOT yet confirmed applied** (2026-09-08) —
 [0097_stripe_billing.sql](supabase/migrations/0097_stripe_billing.sql).

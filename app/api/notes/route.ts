@@ -37,9 +37,8 @@ export async function GET(req: NextRequest) {
 
   const { data: notes, error } = await supabase
     .from("homework_notes")
-    .select("id, note, pinned, created_at, coach_id, coaches(name)")
+    .select("id, note, created_at, coach_id, coaches(name)")
     .eq("student_id", studentId)
-    .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -56,7 +55,7 @@ export async function GET(req: NextRequest) {
 // (nullable since migration 0036) — attributed to "Admin" in the UI
 // instead of a specific coach's name.
 export async function POST(req: NextRequest) {
-  const { studentId, note, pinned } = await req.json();
+  const { studentId, note } = await req.json();
 
   if (!studentId || !note?.trim()) {
     return NextResponse.json({ error: "studentId and note required" }, { status: 400 });
@@ -93,7 +92,6 @@ export async function POST(req: NextRequest) {
       student_id: studentId,
       coach_id: coach?.id ?? null,
       note: note.trim(),
-      pinned: !!pinned,
     })
     .select("id")
     .single();

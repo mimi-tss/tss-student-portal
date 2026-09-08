@@ -6,7 +6,6 @@ import { FormattedDateTime } from "./formatted-time";
 interface Note {
   id: string;
   note: string;
-  pinned: boolean;
   created_at: string;
   coach_id: string;
   coaches: { name: string } | { name: string }[] | null;
@@ -40,7 +39,6 @@ export default function NotesPanel({
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
-  const [pinned, setPinned] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +61,7 @@ export default function NotesPanel({
     const res = await fetch("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentId, note: text.trim(), pinned }),
+      body: JSON.stringify({ studentId, note: text.trim() }),
     });
 
     setSaving(false);
@@ -75,7 +73,6 @@ export default function NotesPanel({
     }
 
     setText("");
-    setPinned(false);
     await load();
   }
 
@@ -96,15 +93,7 @@ export default function NotesPanel({
             placeholder="Add a homework note…"
             className="mb-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
           />
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
-              <input
-                type="checkbox"
-                checked={pinned}
-                onChange={(e) => setPinned(e.target.checked)}
-              />
-              Pin this note
-            </label>
+          <div className="flex items-center justify-end">
             <button
               onClick={handleAdd}
               disabled={saving || !text.trim()}
@@ -125,10 +114,7 @@ export default function NotesPanel({
         <ul className="space-y-2">
           {visible.map((n) => (
             <li key={n.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
-              <p className="whitespace-pre-wrap">
-                {n.pinned && <span className="mr-1 text-amber-600">📌</span>}
-                {n.note}
-              </p>
+              <p className="whitespace-pre-wrap">{n.note}</p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {coachName(n)} · <FormattedDateTime value={n.created_at} />
               </p>

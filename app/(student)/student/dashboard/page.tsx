@@ -111,10 +111,10 @@ export default async function StudentDashboardPage() {
       .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,paused,holiday)")
       .gte("scheduled_at", cycleStart.toISOString())
       .lt("scheduled_at", cycleEnd.toISOString()),
-    // Single most recent homework note (pinned first) — the RPC itself
-    // caps this at one row server-side (migration 0096), not just the
-    // UI, since there's no student SELECT policy on homework_notes at
-    // all anymore (0095).
+    // Single most recent homework note, whichever is actually newest
+    // (no pinning — migration 0098) — the RPC itself caps this at one
+    // row server-side (migration 0096), not just the UI, since there's
+    // no student SELECT policy on homework_notes at all anymore (0095).
     supabase.rpc("student_latest_homework_note"),
     // Every scheduled session left in this billing cycle — backs the
     // "Upcoming lessons this cycle" card next to "Your plan", which links
