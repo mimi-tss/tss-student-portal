@@ -36,9 +36,10 @@ today.
 
 New migration [0099_fix_admin_chat_send.sql](supabase/migrations/0099_fix_admin_chat_send.sql)
 just restores the `is_admin()` branch — purely additive, nothing
-removed, coach/student send behavior unchanged. **I can't apply this
-myself** (no direct Postgres/management credential here, only the REST
-service-role key, which can't run DDL) — see Action needed below.
+removed, coach/student send behavior unchanged. Couldn't apply it
+myself (no direct Postgres/management credential here, only the REST
+service-role key, which can't run DDL) — you ran it in the Supabase SQL
+editor and confirmed sending to Mimi as admin now works.
 
 ## Removed pinning from homework notes (2026-09-08)
 
@@ -6141,31 +6142,10 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0099 needs to run — this one's urgent, it's why chat send is broken for you right now.**
-Fixes admin's chat-send RLS policy (see entry above). Run this in the
-Supabase SQL editor:
-
-```sql
-drop policy "participants can send messages in their own thread" on chat_messages;
-create policy "participants can send messages in their own thread"
-  on chat_messages for insert
-  with check (
-    sender_profile_id = auth.uid()
-    and (
-      is_admin()
-      or thread_id in (
-        select id from chat_threads
-        where student_id in (select id from students where profile_id = auth.uid())
-           or coach_id = auth_coach_id()
-           or student_id in (select auth_coach_student_ids())
-           or student_id in (select auth_coach_group_lesson_student_ids())
-      )
-    )
-  );
-```
-
-Once run, retry sending in Mimi Orac's chat panel — should go through
-immediately, no deploy needed (this is a database policy change only).
+**Migration 0099 confirmed applied and live-retested** (2026-09-08) —
+restored the `is_admin()` branch on the chat_messages send policy. User
+ran it in the Supabase SQL editor, then retried sending to Mimi Orac
+as admin — confirmed working. Closed.
 
 **Migration 0098 needs to run** — drops `homework_notes.pinned` and
 redefines `student_latest_homework_note()` to order by `created_at`
