@@ -3,6 +3,107 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Extended the billing site into a full self-managed dashboard — pause/cancel/card/invoices, dual Stripe accounts, a booking kill-switch (2026-09-08)
+
+Follow-up to the same-session Stripe billing build above. You wanted more
+than a redirect to Stripe's hosted Portal: live subscription detail
+(amount, next charge, card, a 4-state status), pause-until-a-date,
+cancel, an embedded card-update UI (Stripe's Payment Element, not the
+hosted Portal), invoice downloads, and a "kill switch" the booking flow
+can check — all still on `billing.tarasimonstudios.com`. The real
+architecture change: **the studio has two Stripe accounts** — a legacy
+one ("Opus") holding pre-migration customers, and the current one
+("own") every new signup already goes through. Confirmed with you before
+touching code: same repo/extends the existing build, and it's one
+business on two accounts (not two businesses), Opus checked first when
+looking up a customer by email.
+
+**Schema**: one column, not parallel ID fields —
+[0102_stripe_dual_account.sql](supabase/migrations/0102_stripe_dual_account.sql)
+adds `students.stripe_account` (`'opus' | 'own'`), since
+`stripe_customer_id`/`stripe_subscription_id` (0097) are just opaque IDs
+either way. **Not yet confirmed applied** — see Action needed below.
+
+**Dual clients, same lazy-Proxy pattern already forced by a real build
+break earlier this session** — [lib/stripe/client.ts](lib/stripe/client.ts)
+now builds both `stripe` (own) and `stripeOpus` the same lazy way, plus
+`getStripeClient(account)`. New [lib/stripe/accounts.ts](lib/stripe/accounts.ts)
+does the cross-account customer lookup by email (Opus first).
+
+**Lazy link-on-first-view, not a backfill.** A legacy Opus customer
+logging into `/billing/account` has no `stripe_customer_id` in our DB
+yet. New [lib/billing/student-stripe-link.ts](lib/billing/student-stripe-link.ts)'s
+`resolveBillingStudent()` — called by every new `/api/billing/*` route —
+looks them up across both accounts on first call and persists the
+result (via the service-role client; confirmed `students` has no
+self-UPDATE RLS policy, only admin does). No one-time migration script,
+no need to have every legacy customer's Stripe ID upfront.
+
+**Webhook now verifies against two secrets.** [app/api/webhooks/stripe/route.ts](app/api/webhooks/stripe/route.ts)
+tries the "own" secret, then Opus's, tags whichever matched, and threads
+that through every handler — student lookups now scope on
+`(stripe_customer_id, stripe_account)` together, not just the ID alone
+(cheap insurance against a cross-account ID collision). Also added
+native pause detection (`subscription.pause_collection` presence maps to
+our `subscription_status = "paused"`, checked ahead of the terminal-status
+mapping since pausing doesn't change Stripe's own `status` field).
+
+**New self-built UI**, replacing the old redirect-only account page:
+[subscription-client.tsx](app/billing/account/subscription-client.tsx)
+fetches live detail from Stripe (status/amount/next-charge/card — never
+stored locally, and the 4-state display status in
+[lib/stripe/status.ts](lib/stripe/status.ts) is finer-grained than the
+3-state DB enum), plus pause/cancel actions and a link to the hosted
+Portal as a fallback for anything not covered here.
+[payment-method-client.tsx](app/billing/account/payment-method-client.tsx)
+is this repo's first-ever client-side Stripe.js usage (confirmed no
+precedent existed) — a `SetupIntent` + Payment Element, `redirect:
+"if_required"` so the common non-3DS case never leaves the page, then a
+confirm route sets the new card as default on both the customer and the
+subscription. [invoices-client.tsx](app/billing/account/invoices-client.tsx)
+links straight to Stripe's own hosted PDF URLs, no proxying.
+
+**Pause uses Stripe's own scheduled resume** (`pause_collection.resumes_at`)
+— confirmed via the installed SDK's types this is a real field Stripe
+respects on its own; no cron needed here to un-pause. **Cancel defaults
+to end-of-period**, matching every other cancellation path in this app —
+flagging that default since the request didn't specify immediate vs.
+scheduled.
+
+**Kill-switch closed a real gap, not just added a stub.** The one
+existing booking gate ([app/api/booking/book/route.ts:65](app/api/booking/book/route.ts))
+only ever checked `subscription_status === "paused"` — a self-cancelled
+or past-due (DNC) student could still book. New
+[lib/billing/subscription-gate.ts](lib/billing/subscription-gate.ts)'s
+`canBookLessons()` is now that route's actual gate (admin still exempt)
+and blocks all three states. **This is a real behavior change** —
+previously-permitted booking now blocked for cancelled/DNC students —
+flagging plainly since that's the actual point of a kill switch.
+
+Installed `@stripe/stripe-js` + `@stripe/react-stripe-js` (client-side,
+new to this repo). `npx tsc --noEmit -p .` and `next build` both clean.
+Verified what's testable without real Stripe test-mode keys: the
+kill-switch's 4 cases directly (paused/cancelled/dnc/active all resolve
+correctly), and the webhook's dual-secret path still fails closed with a
+clean 400 (not a crash) when neither secret is configured, same smoke
+test used for the first webhook build.
+
+**Not yet done / needs you:**
+- Migration 0102 **not yet confirmed applied** — see Action needed below.
+- Real Opus Stripe Dashboard access: `OPUS_STRIPE_SECRET_KEY`,
+  `OPUS_STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_OPUS_STRIPE_PUBLISHABLE_KEY`
+  in Vercel, plus pointing Opus's own webhook endpoint at
+  `/api/webhooks/stripe` (same URL as the current account — the route
+  now tries both secrets).
+- No Stripe CLI or test-mode keys exist in this environment for either
+  account — pause/cancel/card-update/invoices are compile-verified and
+  logically sound but not exercised against a real Stripe account from
+  here. Worth a real click-through once both accounts' test-mode keys
+  are in Vercel.
+- The booking-gate behavior change (cancelled/DNC now actually blocks
+  self-service booking) hasn't been tested against a real cancelled or
+  DNC student in the live app — worth a quick real check.
+
 ## Added "Unmatch" — Recordings had no way to undo a wrong auto-match (2026-09-08)
 
 You reported "Imelda Villa" / "Lana part 1" / "Lana part 2" missing from
@@ -6251,6 +6352,12 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0102 — NOT yet confirmed applied** (2026-09-08) —
+[0102_stripe_dual_account.sql](supabase/migrations/0102_stripe_dual_account.sql).
+Adds `students.stripe_account` (`'opus' | 'own'`) — needed before the
+new pause/cancel/card-update/invoices billing routes can resolve which
+Stripe account a student belongs to. Please confirm once applied.
 
 **Migrations 0100 and 0101 need to run** — 0100 creates the `coach_notes`
 table + RLS (coach/admin only, never student); 0101 adds `coach_notes` to

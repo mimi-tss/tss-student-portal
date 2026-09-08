@@ -15,6 +15,7 @@ export type SessionStatus =
   | "paused";
 export type MakeupCreditType = "student-fault" | "studio-planned" | "studio-emergency";
 export type Role = "student" | "coach" | "admin" | "admin_finance";
+export type StripeAccount = "opus" | "own";
 
 export interface Student {
   id: string;
@@ -27,6 +28,7 @@ export interface Student {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_price_id: string | null;
+  stripe_account: StripeAccount | null;
 }
 
 export interface Coach {

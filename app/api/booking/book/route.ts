@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
+import { canBookLessons } from "@/lib/billing/subscription-gate";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("assigned_coach_id, tier, session_duration_minutes, subscription_status")
+    .select("assigned_coach_id, tier, session_duration_minutes, subscription_status, payment_status")
     .eq("id", studentId)
     .single();
 
@@ -57,16 +58,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "student not found" }, { status: 404 });
   }
 
-  // A paused student can't attend anything, credit-funded or not — they
-  // have to be active again to use a makeup credit (spec: "must use
-  // their makeups while active"). Admin can still override for a
-  // one-off exception, same "admin ⊇ student" exemption this route
-  // already grants for the credit-required rule below.
-  if (!isAdmin && student.subscription_status === "paused") {
-    return NextResponse.json(
-      { error: "Your account is paused — sessions and makeup credits can't be booked until you're active again." },
-      { status: 403 },
-    );
+  // A paused, cancelled, or past-due (DNC) student can't attend anything,
+  // credit-funded or not — they have to be in good standing again to use
+  // a makeup credit (spec: "must use their makeups while active"). Same
+  // gate the billing kill-switch is built around
+  // (lib/billing/subscription-gate.ts) — this route is its first real
+  // caller. Cancelled/DNC used to fall through this check entirely
+  // (only "paused" was ever tested), a real gap now closed. Admin can
+  // still override for a one-off exception, same "admin ⊇ student"
+  // exemption this route already grants for the credit-required rule
+  // below.
+  if (!isAdmin) {
+    const gate = canBookLessons(student);
+    if (!gate.allowed) {
+      return NextResponse.json({ error: gate.reason }, { status: 403 });
+    }
   }
 
   let coachId: string;
