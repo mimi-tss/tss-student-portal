@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed Unmatch not actually reopening the candidate for Imelda (2026-09-08)
+
+You unmatched Imelda's wrongly-matched recording (shipped a few hours
+earlier) but she still didn't show up as a pickable candidate
+afterward. Checked live: `attention_items` had **zero** rows for her
+session, not a resolved one — because she was matched via the
+immediate day+session auto-match, which attaches a recording the
+moment it syncs in and never needed a `recording_missing` tracking row
+to exist first. `unmatchRecording`'s reopen step was a plain `UPDATE`
+on that row, assuming one already existed to flip back to
+`needs_action` — with none there, it silently did nothing.
+
+Fixed in [recording-matching.ts](lib/admin/recording-matching.ts):
+`unmatchRecording` now calls the same `attention_item_upsert_recording_missing`
+RPC the background sync uses (creates the row fresh if it's missing),
+then runs the same `UPDATE` as before to force it open either way —
+covers both "never existed" and "existed but resolved."
+
+Also checked the actual current state of your two Nikki/Imelda files:
+the wrong one (`0fae5e18`) is now `dismissed` (not matched), and the
+other (`dd371e9f`) is still sitting unmatched with nothing pointing to
+it — that's the one that should go to Imelda. Since it's dated
+2026-09-07, the "already-unmatched-recording bypasses the 6h grace
+period" fix from earlier this week already applies to it — visiting
+Needs Review or Overview once (either page re-syncs on every load)
+should surface her as a candidate immediately without waiting for the
+2-hour cron, then Recordings' dropdown should have her.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here.
+
 ## Collapsed "Recently matched" behind a toggle + search (2026-09-08)
 
 Direct follow-up to adding Unmatch — you caught it live: the 7-day

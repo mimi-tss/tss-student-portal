@@ -398,7 +398,31 @@ export async function unmatchRecording(
 
   if (error) return { success: false, error: error.message };
 
-  if (recording.matched_session_id) {
+  if (recording.matched_session_id && recording.matched_student_id) {
+    // Confirmed live this session_id can have NO recording_missing row
+    // at all — a day-matched session gets auto-attached the moment a
+    // recording syncs in, with no grace period wait, so the item that
+    // would normally track "still missing" never gets a chance to
+    // exist in the first place. The plain UPDATE below only fixes the
+    // case where one already exists and is resolved; the upsert RPC
+    // handles "never existed" by inserting fresh (defaults to
+    // needs_action). Running both, in order, covers every prior state.
+    const { data: session } = await admin
+      .from("sessions")
+      .select("scheduled_at, students(name), coaches:actual_coach_id(timezone)")
+      .eq("id", recording.matched_session_id)
+      .maybeSingle();
+    if (session) {
+      const timezone = (session.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
+      const [y, m, d] = zonedYearMonthDay(new Date(session.scheduled_at), timezone);
+      const sessionDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const studentName = (session.students as unknown as { name: string } | null)?.name ?? "Student";
+      await admin.rpc("attention_item_upsert_recording_missing", {
+        p_session_id: recording.matched_session_id,
+        p_student_id: recording.matched_student_id,
+        p_summary: `${studentName}'s session on ${sessionDate} has no recording yet`,
+      });
+    }
     await admin
       .from("attention_items")
       .update({ status: "needs_action", resolved_at: null })
