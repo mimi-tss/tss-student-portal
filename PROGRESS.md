@@ -3,6 +3,22 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Collapsed "Recently matched" behind a toggle + search (2026-09-08)
+
+Direct follow-up to adding Unmatch — you caught it live: the 7-day
+window across every coach dumped 20+ rows onto the page by default,
+making the one recording you actually needed to fix hard to find.
+
+[recordings-client.tsx](<app/(admin)/admin/recordings/recordings-client.tsx>)
+now hides the whole list behind a "Show recently matched (N)" toggle,
+collapsed by default — most of the time nobody needs to look at it at
+all. Once expanded, a search box filters by student name, coach name,
+or filename (client-side, since the data's already loaded — no new API
+call per keystroke). No backend change; still the same 7-day query.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here.
+
 ## Extended the billing site into a full self-managed dashboard — pause/cancel/card/invoices, dual Stripe accounts, a booking kill-switch (2026-09-08)
 
 Follow-up to the same-session Stripe billing build above. You wanted more

@@ -68,6 +68,8 @@ function formatCandidateDateTime(scheduledAt: string): string {
 export default function RecordingsClient() {
   const [items, setItems] = useState<RecordingItem[] | null>(null);
   const [recentlyMatched, setRecentlyMatched] = useState<RecentlyMatchedItem[]>([]);
+  const [showRecentlyMatched, setShowRecentlyMatched] = useState(false);
+  const [recentlyMatchedSearch, setRecentlyMatchedSearch] = useState("");
   const [autoMatched, setAutoMatched] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
@@ -292,36 +294,54 @@ export default function RecordingsClient() {
 
       {recentlyMatched.length > 0 && (
         <>
-          <h3
-            style={{
-              margin: "24px 0 12px",
-              fontSize: 15,
-              fontWeight: 600,
-              color: "var(--text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}
+          <button
+            onClick={() => setShowRecentlyMatched((s) => !s)}
+            className={styles.linkBtnSmall}
+            style={{ marginTop: 24 }}
           >
-            Recently matched
-          </h3>
-          <p className={styles.panelText} style={{ marginBottom: 8 }}>
-            Last 7 days — undo a wrong match here (e.g. Meet split one lesson into two identically-named files and
-            the wrong one got auto-matched).
-          </p>
-          {recentlyMatched.map((item) => (
-            <div key={item.id} className={styles.naRow}>
-              <div className={styles.naInfo}>
-                <div className={`${styles.naName} ${styles.rowName}`}>{item.fileName}</div>
-                <div className={styles.naSummary}>
-                  {item.coachName ?? "Unrecognized coach"} · {item.recordedDate} → matched to{" "}
-                  <strong>{item.matchedTo}</strong>
-                </div>
-              </div>
-              <button className={styles.dangerBtn} disabled={busyId === item.id} onClick={() => unmatch(item.id)}>
-                Unmatch
-              </button>
-            </div>
-          ))}
+            {showRecentlyMatched ? "Hide" : "Show"} recently matched ({recentlyMatched.length})
+          </button>
+
+          {showRecentlyMatched && (
+            <>
+              <p className={styles.panelText} style={{ margin: "8px 0" }}>
+                Last 7 days — undo a wrong match here (e.g. Meet split one lesson into two identically-named files
+                and the wrong one got auto-matched).
+              </p>
+              <input
+                type="text"
+                value={recentlyMatchedSearch}
+                onChange={(e) => setRecentlyMatchedSearch(e.target.value)}
+                placeholder="Search by student or coach name…"
+                className={styles.inputSmall}
+                style={{ width: "100%", marginBottom: 8, boxSizing: "border-box" }}
+              />
+              {recentlyMatched
+                .filter((item) => {
+                  const q = recentlyMatchedSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    item.matchedTo.toLowerCase().includes(q) ||
+                    (item.coachName ?? "").toLowerCase().includes(q) ||
+                    item.fileName.toLowerCase().includes(q)
+                  );
+                })
+                .map((item) => (
+                  <div key={item.id} className={styles.naRow}>
+                    <div className={styles.naInfo}>
+                      <div className={`${styles.naName} ${styles.rowName}`}>{item.fileName}</div>
+                      <div className={styles.naSummary}>
+                        {item.coachName ?? "Unrecognized coach"} · {item.recordedDate} → matched to{" "}
+                        <strong>{item.matchedTo}</strong>
+                      </div>
+                    </div>
+                    <button className={styles.dangerBtn} disabled={busyId === item.id} onClick={() => unmatch(item.id)}>
+                      Unmatch
+                    </button>
+                  </div>
+                ))}
+            </>
+          )}
         </>
       )}
     </div>
