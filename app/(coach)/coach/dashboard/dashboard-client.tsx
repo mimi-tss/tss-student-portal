@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import NotesPanel from "@/components/notes-panel";
+import CoachNotesPanel from "@/components/coach-notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
@@ -598,6 +599,12 @@ export default function DashboardClient({
               <div className={styles.panel}>
                 <h2>Homework Notes</h2>
                 <NotesPanel studentId={snapshot.id} canAdd initialLimit={2} />
+              </div>
+
+              <div className={styles.panel}>
+                <h2>Coach Notes</h2>
+                <p className="mb-2 text-xs text-[var(--text-muted)]">Visible to coaches and admin only — never the student.</p>
+                <CoachNotesPanel studentId={snapshot.id} />
               </div>
 
               <div className={styles.panel}>

@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added Coach Notes — separate from Homework Notes, never student-visible (2026-09-08)
+
+You asked for a new per-student notes surface on the coach dashboard,
+visible only to coach and admin (never the student, not even a peek),
+in a visibly different color from the existing Homework Notes so a
+coach can tell the two apart at a glance.
+
+New `coach_notes` table (migration 0100) rather than a flag on
+`homework_notes` — same reasoning `staff_notes` (0037) already
+documented for itself: a role-restricted note is one policy bug away
+from leaking if it's a column on a broader-access table instead of its
+own RLS surface. Access mirrors `homework_notes`' three coach
+relationships (1:1 session history, assigned coach, group-lesson
+roster) but written as one policy from the start instead of three
+migrations bolted on incrementally the way `homework_notes`' own
+history actually went. No student policy at all — unlike
+`homework_notes`, which still gives a student their single latest note
+(0096), a coach note is never exposed to the student in any form.
+
+Also added migration 0101: `delete_student_permanently()` needed
+`coach_notes` added to its explicit per-table delete list (same
+no-cascade FK pattern every other student-scoped table here has) —
+deleting a student who'd ever gotten a coach note would otherwise fail
+outright on the foreign key.
+
+New [CoachNotesPanel](components/coach-notes-panel.tsx) (mirrors
+[NotesPanel](components/notes-panel.tsx)'s shape) and
+[/api/coach-notes](app/api/coach-notes/route.ts), wired into both the
+coach dashboard
+([dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>))
+and admin's student detail page
+([page.tsx](<app/(admin)/admin/students/[studentId]/page.tsx>)),
+right below Homework Notes in both places. Styled in `--slot-group`
+(the calendar's existing green, reused rather than adding a new
+token) — a colored left border on each note plus a green "Add note"
+button, versus Homework Notes' plain border and gold button.
+Live-verified the color contrast in the Browser pane, both dark and
+light theme, via a throwaway static test route (removed after).
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested
+against real data — no login here. See Action needed below: migrations
+0100 and 0101 need to run and be confirmed.
+
 ## Found why admin chat send has been silently broken since 0092 (2026-09-08)
 
 You reported a chat message failing to send ("Couldn't send that message
@@ -6141,6 +6184,12 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migrations 0100 and 0101 need to run** — 0100 creates the `coach_notes`
+table + RLS (coach/admin only, never student); 0101 adds `coach_notes` to
+`delete_student_permanently()`'s delete list (see entry above). Not yet
+applied or confirmed. The new Coach Notes panel on the coach dashboard
+and admin's student page will error until these run.
 
 **Migration 0099 confirmed applied and live-retested** (2026-09-08) —
 restored the `is_admin()` branch on the chat_messages send policy. User

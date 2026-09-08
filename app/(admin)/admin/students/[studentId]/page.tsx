@@ -7,6 +7,7 @@ import { formatTenure, formatPlainDate } from "@/lib/format-date";
 import { renewalInfo } from "@/lib/billing/renewal";
 import { FormattedDateTime } from "@/components/formatted-time";
 import NotesPanel from "@/components/notes-panel";
+import CoachNotesPanel from "@/components/coach-notes-panel";
 import ChatPanel from "@/components/chat-panel";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
@@ -482,6 +483,17 @@ export default async function AdminStudentPage({
       <div className={styles.panel}>
         <h2>Homework notes</h2>
         <NotesPanel studentId={student.id} canAdd />
+      </div>
+
+      <div className={styles.panel}>
+        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>Coach notes</h2>
+          <span className={styles.badgeWarn}>Coach & admin only</span>
+        </div>
+        <p className={styles.mutedText} style={{ marginBottom: 12, fontSize: 12 }}>
+          Never visible to the student.
+        </p>
+        <CoachNotesPanel studentId={student.id} />
       </div>
 
       <div className={styles.panel}>
