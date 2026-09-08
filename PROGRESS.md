@@ -3,6 +3,23 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Moved Coach Notes away from Homework Notes (2026-09-08)
+
+Direct follow-up to adding Coach Notes above — you didn't want it
+sitting right next to Homework Notes (looked like the same group of
+panels). Confirmed you meant keep it on the same per-student page, just
+physically separated, not a whole new nav tab.
+
+Moved it to the very end of the panel list on both
+[coach dashboard-client.tsx](<app/(coach)/coach/dashboard/dashboard-client.tsx>)
+(after Shared Folder, with `marginTop: 24` for a visible gap) and
+[admin's student page](<app/(admin)/admin/students/[studentId]/page.tsx>)
+(same position, for consistency between the two). No data/RLS changes —
+purely where the existing `CoachNotesPanel` renders on the page.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here.
+
 ## Added Coach Notes — separate from Homework Notes, never student-visible (2026-09-08)
 
 You asked for a new per-student notes surface on the coach dashboard,

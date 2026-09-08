@@ -486,17 +486,6 @@ export default async function AdminStudentPage({
       </div>
 
       <div className={styles.panel}>
-        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
-          <h2 style={{ margin: 0 }}>Coach notes</h2>
-          <span className={styles.badgeWarn}>Coach & admin only</span>
-        </div>
-        <p className={styles.mutedText} style={{ marginBottom: 12, fontSize: 12 }}>
-          Never visible to the student.
-        </p>
-        <CoachNotesPanel studentId={student.id} />
-      </div>
-
-      <div className={styles.panel}>
         <h2>Chat</h2>
         {user ? (
           <ChatPanel studentId={student.id} currentProfileId={user.id} />
@@ -522,6 +511,17 @@ export default async function AdminStudentPage({
         ) : (
           <p className={styles.mutedText}>No shared folder yet for this student.</p>
         )}
+      </div>
+
+      <div className={styles.panel} style={{ marginTop: 24 }}>
+        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>Coach notes</h2>
+          <span className={styles.badgeWarn}>Coach & admin only</span>
+        </div>
+        <p className={styles.mutedText} style={{ marginBottom: 12, fontSize: 12 }}>
+          Never visible to the student.
+        </p>
+        <CoachNotesPanel studentId={student.id} />
       </div>
     </main>
   );

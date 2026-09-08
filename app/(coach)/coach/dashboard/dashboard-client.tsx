@@ -602,12 +602,6 @@ export default function DashboardClient({
               </div>
 
               <div className={styles.panel}>
-                <h2>Coach Notes</h2>
-                <p className="mb-2 text-xs text-[var(--text-muted)]">Visible to coaches and admin only — never the student.</p>
-                <CoachNotesPanel studentId={snapshot.id} />
-              </div>
-
-              <div className={styles.panel}>
                 <h2>Chat</h2>
                 <ChatPanel studentId={snapshot.id} currentProfileId={currentProfileId} />
               </div>
@@ -633,6 +627,14 @@ export default function DashboardClient({
                 ) : (
                   <p className={styles.panelText}>No shared folder yet for this student.</p>
                 )}
+              </div>
+
+              <div className={styles.panel} style={{ marginTop: 24 }}>
+                <h2>Coach Notes</h2>
+                <p className="mb-2 text-xs text-[var(--text-muted)]">
+                  Your own private notes on this student — visible to coaches and admin only, never the student.
+                </p>
+                <CoachNotesPanel studentId={snapshot.id} />
               </div>
             </div>
           )}
