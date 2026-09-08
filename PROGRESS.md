@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Chat links are now clickable (2026-09-08)
+
+You asked — links pasted into chat (student/coach/admin all share
+[ChatPanel](components/chat-panel.tsx)) rendered as plain text before
+this, no way to tap/click through.
+
+Added a small `linkifyText` helper: finds `http(s)://` and bare `www.`
+URLs in a message body, trims trailing sentence punctuation off the
+match so `(see https://example.com).` doesn't pull the `).` into the
+href, and renders each as a real `<a target="_blank">` in the sender's
+existing bubble color (matching the attachment-link styling already
+used lower in the same component). Everything else in the message stays
+plain text, unchanged.
+
+Live-verified in the Browser pane against 5 real cases (a bare link
+mid-sentence, a `www.` link, plain text with no link, two links in one
+message, and a link immediately followed by closing punctuation) via a
+throwaway test route — confirmed each produces exactly the right `<a
+href>` and gets removed afterward, same pattern used for the earlier
+error-boundary testing. `npx tsc --noEmit -p .` on this file specifically
+is clean.
+
+**Note**: a full-repo `tsc`/`next build` isn't clean right now, but not
+because of this change — a concurrent session has uncommitted Stripe
+billing + Kajabi sync work in progress (`lib/stripe/`, `lib/kajabi/sync.ts`,
+a new `attention_items` kind `kajabi_grant_failed` not yet wired into
+[attention-item-row.tsx](<app/(admin)/admin/attention-item-row.tsx>)) sitting
+on disk. Also flagging: that session's new migration is named
+`0096_stripe_billing.sql`, colliding with this session's already-committed
+`0096_student_latest_homework_note.sql` — whoever picks that work back up
+will need to renumber it to `0097` before committing.
+
 ## Fixed exercises "cannot be loaded" — mislabeled Content-Type, not a Drive problem (2026-09-08)
 
 Kimberly Johnson messaged her coach that assigned exercises wouldn't

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FormattedDateTime } from "./formatted-time";
 
@@ -26,6 +27,38 @@ function filenameFromPath(path: string) {
 function isImage(path: string) {
   const lower = path.toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+const URL_PATTERN_SOURCE = String.raw`((?:https?:\/\/|www\.)[^\s<>"]+)`;
+// Trailing punctuation a sentence naturally ends a link with ("check
+// this out: https://example.com.") shouldn't be swallowed into the
+// href — trimmed off and rendered back as plain text after the link.
+const TRAILING_PUNCTUATION = /[.,!?;:)\]}]+$/;
+
+// A fresh RegExp per call (rather than one shared module-level constant)
+// sidesteps the global flag's own lastIndex statefulness entirely —
+// String.split doesn't need that subtlety reasoned about.
+function linkifyText(text: string, linkClassName: string): ReactNode[] {
+  const parts = text.split(new RegExp(URL_PATTERN_SOURCE, "gi"));
+  return parts.map((part, i) => {
+    // split() with a single capturing group guarantees matches land at
+    // odd indices — every even index is surrounding plain text.
+    if (i % 2 === 0) return part;
+
+    const trailingMatch = part.match(TRAILING_PUNCTUATION);
+    const trailing = trailingMatch ? trailingMatch[0] : "";
+    const url = trailing ? part.slice(0, -trailing.length) : part;
+    const href = url.startsWith("http") ? url : `https://${url}`;
+
+    return (
+      <Fragment key={i}>
+        <a href={href} target="_blank" rel="noopener noreferrer" className={linkClassName}>
+          {url}
+        </a>
+        {trailing}
+      </Fragment>
+    );
+  });
 }
 
 export default function ChatPanel({
@@ -177,7 +210,11 @@ export default function ChatPanel({
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div className={bubbleClass}>
                 {!mine && <p className="mb-0.5 text-xs font-medium opacity-70">{senderName}</p>}
-                {m.body && <p className="whitespace-pre-wrap">{m.body}</p>}
+                {m.body && (
+                  <p className="whitespace-pre-wrap">
+                    {linkifyText(m.body, `underline ${mine ? "text-[var(--gold-text)]" : "text-[var(--gold)]"}`)}
+                  </p>
+                )}
                 {m.attachment_url && (
                   <div className="mt-1">
                     {attachmentUrl && isImage(m.attachment_url) ? (
