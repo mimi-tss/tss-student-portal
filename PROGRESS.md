@@ -6353,17 +6353,25 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0102 — NOT yet confirmed applied** (2026-09-08) —
-[0102_stripe_dual_account.sql](supabase/migrations/0102_stripe_dual_account.sql).
-Adds `students.stripe_account` (`'opus' | 'own'`) — needed before the
-new pause/cancel/card-update/invoices billing routes can resolve which
-Stripe account a student belongs to. Please confirm once applied.
+**Migrations 0096–0102 confirmed applied** (2026-09-08) — user replied
+"successful"; verified directly against the real Supabase project rather
+than assumed (service-role check of each migration's actual effect, per
+this project's own verify-against-real-DB convention), all present:
+- **0102** — `students.stripe_account` column exists. The new pause/
+  cancel/card-update/invoices billing routes can now resolve which
+  Stripe account a student belongs to.
+- **0101** — `delete_student_permanently()` includes `coach_notes` in
+  its delete list.
+- **0100** — `coach_notes` table exists. The Coach Notes panel on the
+  coach dashboard and admin's student page should work now.
+- **0099** — already confirmed+live-retested in the prior entry below.
+- **0098** — `homework_notes.pinned` column confirmed gone.
+- **0097** — `students.stripe_customer_id`/`stripe_subscription_id`/
+  `stripe_price_id` confirmed present, and `attention_items`'s kind
+  constraint accepts `kajabi_grant_failed`.
+- **0096** — `student_latest_homework_note()` function confirmed present.
 
-**Migrations 0100 and 0101 need to run** — 0100 creates the `coach_notes`
-table + RLS (coach/admin only, never student); 0101 adds `coach_notes` to
-`delete_student_permanently()`'s delete list (see entry above). Not yet
-applied or confirmed. The new Coach Notes panel on the coach dashboard
-and admin's student page will error until these run.
+All closed — nothing outstanding from this batch.
 
 **Migration 0099 confirmed applied and live-retested** (2026-09-08) —
 restored the `is_admin()` branch on the chat_messages send policy. User
