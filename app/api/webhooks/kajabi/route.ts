@@ -115,9 +115,17 @@ export async function POST(req: NextRequest) {
 
       const { data: priorStudent } = await admin
         .from("students")
-        .select("tier")
+        .select("tier, stripe_customer_id")
         .eq("kajabi_customer_id", String(purchase.member_id))
         .maybeSingle();
+
+      // Stripe is the sole source of truth for tier/subscription_status/
+      // payment_status once a student has a stripe_customer_id (see
+      // supabase/migrations/0097_stripe_billing.sql) — a Kajabi purchase
+      // event for that same contact (unlikely in practice, since a
+      // Stripe-signed-up student has no reason to also buy through
+      // Kajabi checkout, but not impossible) must never clobber it.
+      if (priorStudent?.stripe_customer_id) break;
 
       const { data: student } = await admin
         .from("students")

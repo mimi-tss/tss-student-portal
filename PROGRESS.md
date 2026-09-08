@@ -3,6 +3,124 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Built a standalone Stripe billing site — signup, self-serve plan management, Kajabi content-access sync (2026-09-08)
+
+You want billing handled by Stripe instead of Kajabi payments — a
+separate, Spotify/Netflix-style site (own login, opens in a new
+tab/window, not tied to the Kajabi-iframed app session) where students
+sign up and manage upgrade/downgrade/cancel/card-change, still tied back
+into this app (student dashboard shows the real plan, admin sees
+cancellations and can manage billing) and into Kajabi (course/content
+access stays in sync with the Stripe tier). Confirmed with you first:
+no live Kajabi-billed students exist today, so this is net-new plumbing,
+not a migration; new-student signup/checkout is in scope, not just
+existing-student self-serve; Lite is sold self-serve too (still gets
+today's no-portal-access behavior after signup); the new admin Billing
+page is open to every admin, not finance-only.
+
+**Same Next.js app, second Vercel domain** — `billing.tarasimonstudios.com`
+attached to this same project (not a separate repo/deploy). New
+[middleware.ts](middleware.ts) rewrites `billing.*` hostnames to
+`/billing/...` internally; `portal.tarasimonstudios.com` is untouched
+(falls through). Verified locally via `curl -H "Host: billing.tarasimonstudios.com"`
+against a real `next start`: the pricing page renders real content on
+that host and not on the portal host, `/billing/account` correctly
+307s an unauthenticated visitor to `/billing/login`, and
+[app/auth/callback/page.tsx](app/auth/callback/page.tsx) (the shared
+magic-link session-hash handler used by both hosts) is reachable
+un-rewritten on both — it now takes an `error_redirect` query param so a
+failed billing-site login bounces to `/billing/login` instead of the
+main app's `/login`. Session cookies are host-only by default (no
+`Domain` set anywhere), so a billing.* login is invisible to portal.*
+and vice versa — exactly the "own login" ask, with no new cookie code.
+
+**Stripe is the sole source of truth** for `tier`/`subscription_status`/
+`payment_status`/`billing_anniversary_date` on any student with
+`stripe_customer_id` set (new columns + a `stripe_events` idempotency
+table, [0097_stripe_billing.sql](supabase/migrations/0097_stripe_billing.sql)
+— **renumbered from 0096 mid-session** after finding a concurrent
+session had already taken and gotten 0096 confirmed-applied for an
+unrelated homework-notes function; renamed before it ever reached you
+for confirmation, so nothing conflicts). [app/api/webhooks/stripe/route.ts](app/api/webhooks/stripe/route.ts)
+verifies Stripe's real HMAC signature (unlike Kajabi's unsigned
+`?secret=` workaround) and handles `checkout.session.completed`
+(one-time fulfillment — student upsert matched by EMAIL first since
+`stripe_customer_id` can't exist yet on a first purchase, auth user +
+profile provisioning, mirrors the Kajabi webhook's own `purchase.created`
+block), `customer.subscription.created`/`.updated` (authoritative
+tier/status sync, scheduled-cancellation detection via
+`cancel_at_period_end`), `customer.subscription.deleted`, and both
+`invoice.payment_*` events.
+
+**Real gap closed along the way**: neither existing cancellation path
+(student self-serve, admin-flagged, or the Kajabi cron) ever pinged
+Slack — cancellations only ever produced an in-app Needs Review card.
+Confirmed by reading `lib/notifications/create.ts`: `notifyStaff()`
+existed but was only ever called from the recording-scan/weekly-digest
+crons. Wired it into the new Stripe cancellation/subscription-ended
+paths, since those can happen with zero admin action prompting them.
+
+**Kajabi's job narrows to course-content access only.** Added
+`grantKajabiOffer`/`revokeKajabiOffer` to [lib/kajabi/client.ts](lib/kajabi/client.ts)
+— **the one piece of this build not verified against Kajabi's real
+API**, flagged in the code itself the same way `updateKajabiContactField`
+already flags its own unconfirmed shape; the read-side equivalent
+(`getKajabiContactOfferIds`) was confirmed live, the write side wasn't.
+New [lib/kajabi/sync.ts](lib/kajabi/sync.ts) calls them from the Stripe
+webhook, wrapped in try/catch so a Kajabi outage never blocks or rolls
+back the Stripe-side write — failure creates a new `kajabi_grant_failed`
+Needs Review item instead. The existing Kajabi webhook's tier-upsert
+block and the `kajabi-sync` cron's cancellation-detection block are both
+now guarded on `stripe_customer_id is not null` (skip if set) rather
+than deleted — currently a no-op in practice (no live Kajabi-billed
+student has one), kept defensive.
+
+**Admin**: new [Billing page](<app/(admin)/admin/billing/page.tsx>)
+(added to the sidebar's More section) lists Stripe-billed students with
+an "Open in Stripe Dashboard" deep link and an admin-triggered "send a
+billing portal link" action; cancellations link out to the existing
+Needs Review queue rather than duplicating a list. `/api/admin/set-tier`
+(already a documented "blind overwrite, next real event undoes it"
+stopgap) now explicitly rejects the override for any Stripe-billed
+student instead of silently getting reverted by the next unrelated
+Stripe webhook.
+
+Installed the official `stripe` npm package (v22.6.1) — pinned
+`apiVersion: "2026-08-26.dahlia"` matching that SDK's own default, so an
+account-level Stripe API upgrade can't silently change webhook payload
+shapes later. **Caught and fixed a real build break**: a top-level
+`new Stripe(...)` in `lib/stripe/client.ts` threw immediately whenever
+`STRIPE_SECRET_KEY` is unset, and `next build`'s page-data collection
+loads every route module regardless of whether its code path runs
+during build — confirmed live via a failed build, fixed by making the
+client a lazily-constructed Proxy instead of a module-scope singleton.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified everything
+testable without real Stripe/Kajabi credentials or a browser session
+(see list below) — the rest needs your own click-through, same standing
+limitation as every login-dependent feature here.
+
+**Not yet done / needs you:**
+- Migration 0097 is **not yet confirmed applied** — see Action needed below.
+- Real Stripe setup, entirely outside this repo: Products/Prices per
+  tier (test mode first) in the Stripe Dashboard, the Billing Portal's
+  allowed actions (which prices are switchable, immediate-vs-end-of-cycle
+  cancellation), the webhook endpoint itself pointed at
+  `/api/webhooks/stripe`, and all the `STRIPE_*`/`NEXT_PUBLIC_BILLING_URL`
+  env vars in Vercel (see updated `.env.example`).
+- `billing.tarasimonstudios.com` needs attaching as a second domain on
+  the Vercel project + a DNS record at the registrar — infra, not code.
+- The Kajabi offer grant/revoke endpoint shape is unconfirmed — verify
+  against Kajabi's real API docs (or a live test call) before relying on
+  content-access sync actually working; failures surface as a
+  `kajabi_grant_failed` Needs Review item rather than failing loudly, so
+  this could sit silently wrong until someone checks Needs Review or a
+  student reports missing course access.
+- The full "sign up on Stripe → welcome email → log into billing site →
+  Kajabi course unlocked" journey needs a real end-to-end click-through
+  once test-mode Stripe is configured — inherently multi-system, can't
+  be verified from here.
+
 ## Chat links are now clickable (2026-09-08)
 
 You asked — links pasted into chat (student/coach/admin all share
@@ -5963,6 +6081,18 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0097 — NOT yet confirmed applied** (2026-09-08) —
+[0097_stripe_billing.sql](supabase/migrations/0097_stripe_billing.sql).
+Adds `students.stripe_customer_id`/`stripe_subscription_id`/`stripe_price_id`,
+a new `stripe_events` idempotency table, and extends `attention_items`'s
+kind check constraint with `kajabi_grant_failed`. Needed before any of
+the new Stripe billing code (checkout, webhook, admin Billing page) can
+actually write to the database — none of it will work until this is
+applied. Renumbered from 0096 mid-session after a concurrent session had
+already taken that number for an unrelated homework-notes migration
+(confirmed applied below) — this is 0097, not 0096. Please confirm once
+applied.
 
 **Migration 0096 confirmed applied** (2026-09-08) — `student_latest_homework_note()`
 is live; the dashboard's spotlight card should now show each student

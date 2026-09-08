@@ -27,6 +27,7 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   recording_missing: "Missing Recording",
   fifth_week_available: "5th Week",
   group_lesson_understaffed: "Group Class Cancelled",
+  kajabi_grant_failed: "Kajabi Sync Failed",
 };
 
 export const KIND_CLASS: Record<AttentionKind, string> = {
@@ -48,6 +49,7 @@ export const KIND_CLASS: Record<AttentionKind, string> = {
   recording_missing: styles.naKindCredit,
   fifth_week_available: styles.naKindTrial,
   group_lesson_understaffed: styles.naKindCancel,
+  kajabi_grant_failed: styles.naKindDnc,
 };
 
 export const STATUS_TABS: { status: AttentionStatus; label: string }[] = [

@@ -22,12 +22,18 @@ function CallbackHandler() {
 
   useEffect(() => {
     const redirectTo = searchParams.get("redirect_to") ?? "/student/dashboard";
+    // Shared across hosts (portal.* and billing.*, same deployment — see
+    // middleware.ts, which deliberately excludes this path from its
+    // hostname rewrite so it's reachable identically on both) — the
+    // billing site's own login lives at /billing/login, not /login, so a
+    // failure there needs to bounce back to the right place.
+    const errorRedirect = searchParams.get("error_redirect") ?? "/login";
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
     const access_token = hashParams.get("access_token");
     const refresh_token = hashParams.get("refresh_token");
 
     if (!access_token || !refresh_token) {
-      router.replace("/login?error=session_failed");
+      router.replace(`${errorRedirect}?error=session_failed`);
       return;
     }
 
@@ -44,7 +50,7 @@ function CallbackHandler() {
             if (logError) console.error("login event log failed", logError);
           });
       }
-      router.replace(error ? "/login?error=session_failed" : redirectTo);
+      router.replace(error ? `${errorRedirect}?error=session_failed` : redirectTo);
     });
   }, [router, searchParams]);
 

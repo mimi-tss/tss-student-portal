@@ -23,7 +23,8 @@ export type AttentionKind =
   | "recording_unmatched"
   | "recording_missing"
   | "fifth_week_available"
-  | "group_lesson_understaffed";
+  | "group_lesson_understaffed"
+  | "kajabi_grant_failed";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 

@@ -1,0 +1,201 @@
+/* Standalone site — billing.tarasimonstudios.com, served from this same
+   deployment via middleware.ts's hostname rewrite. Not nested under
+   student/coach/admin (no shared session with them, own login) but
+   composes the same shared tokens every route group's own module does,
+   so it still looks like part of the same product. */
+.root {
+  composes: tokens from "../theme-tokens.module.css";
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.brand {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.centerCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  margin: 0 0 40px;
+}
+
+.tierGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tierCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tierName {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+}
+
+.tierDesc {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.errorText {
+  color: var(--coral);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.helpText {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+
+.successText {
+  color: #4ade80;
+  font-size: 13px;
+  margin: 16px 0 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.codeInput {
+  font-size: 22px;
+  letter-spacing: 8px;
+  text-align: center;
+  font-family: inherit;
+}
+
+.cta {
+  background: var(--gold);
+  color: var(--gold-text);
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+.linkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.statRow:last-child {
+  border-bottom: none;
+}
+
+.statLabel {
+  color: var(--text-muted);
+}
+
+.badge {
+  display: inline-block;
+  background: var(--gold-dim);
+  color: var(--gold);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}

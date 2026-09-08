@@ -99,6 +99,63 @@ export async function getKajabiContactOfferIds(email: string): Promise<string[]>
   return offers.map((o) => o.id);
 }
 
+// Grants/revokes a specific offer for a contact, identified by email —
+// used to keep Kajabi course/content access in sync with a student's
+// Stripe-billed tier (see lib/kajabi/sync.ts). NOT confirmed against
+// Kajabi's real API docs the way updateKajabiContactField/
+// getKajabiContactOfferIds above were (both verified via actual test
+// purchases) — Kajabi's public API is assumed offer-grant based, mirrored
+// on how offers show up in relationships.offers.data (read side, already
+// confirmed). Verify the real endpoint path/shape against
+// help.kajabi.com/api-reference before relying on this in production;
+// callers already wrap both of these in try/catch (lib/kajabi/sync.ts)
+// specifically because this is the one unverified piece.
+async function findKajabiContactIdByEmail(email: string): Promise<string | null> {
+  const url = new URL(`${KAJABI_API_BASE}/contacts`);
+  url.searchParams.set("filter[email]", email);
+
+  const res = await fetch(url, { headers: await kajabiHeaders() });
+  if (!res.ok) {
+    throw new Error(`Kajabi contact lookup failed (${res.status}): ${await res.text()}`);
+  }
+
+  const body = (await res.json()) as { data: { id: string }[] };
+  return body.data[0]?.id ?? null;
+}
+
+export async function grantKajabiOffer(email: string, offerId: string): Promise<void> {
+  const contactId = await findKajabiContactIdByEmail(email);
+  if (!contactId) {
+    throw new Error(`No Kajabi contact found for ${email} — can't grant offer ${offerId}`);
+  }
+
+  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/offers`, {
+    method: "POST",
+    headers: await kajabiHeaders(),
+    body: JSON.stringify({ offer_id: offerId }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Kajabi offer grant failed (${res.status}): ${await res.text()}`);
+  }
+}
+
+export async function revokeKajabiOffer(email: string, offerId: string): Promise<void> {
+  const contactId = await findKajabiContactIdByEmail(email);
+  if (!contactId) {
+    throw new Error(`No Kajabi contact found for ${email} — can't revoke offer ${offerId}`);
+  }
+
+  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/offers/${offerId}`, {
+    method: "DELETE",
+    headers: await kajabiHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Kajabi offer revoke failed (${res.status}): ${await res.text()}`);
+  }
+}
+
 // Kajabi doesn't sign webhook payloads at all, so there's no header to
 // verify against — the standard workaround when a sender doesn't support
 // signing: embed a shared secret directly in the webhook URL we give

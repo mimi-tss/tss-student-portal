@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const { data: students } = await admin
     .from("students")
-    .select("id, name, email, subscription_status, session_duration_minutes, billing_anniversary_date")
+    .select("id, name, email, subscription_status, session_duration_minutes, billing_anniversary_date, stripe_customer_id")
     .not("kajabi_customer_id", "is", null)
     .neq("subscription_status", "cancelled");
 
@@ -60,7 +60,14 @@ export async function GET(req: NextRequest) {
     const stillHasTierOffer = offerIds.some((id) => id in TIER_BY_OFFER_ID);
     const stillHasAddon60 = offerIds.includes(OFFER_IDS.ADDON_60MIN);
 
-    if (!stillHasTierOffer) {
+    // Stripe is the sole source of truth for subscription_status once a
+    // student has a stripe_customer_id — customer.subscription.deleted
+    // (real, signed, reliably delivered by Stripe, unlike Kajabi) already
+    // covers this. Currently a no-op in practice (no live Kajabi-billed
+    // student has a stripe_customer_id), kept defensive in case that
+    // ever changes. The 60-min add-on check below stays unguarded — it's
+    // Kajabi-native and tier-independent either way.
+    if (!stillHasTierOffer && !student.stripe_customer_id) {
       await admin.from("students").update({ subscription_status: "cancelled" }).eq("id", student.id);
       updated++;
 

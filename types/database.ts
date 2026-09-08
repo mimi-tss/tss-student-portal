@@ -24,6 +24,9 @@ export interface Student {
   tier: Tier;
   subscription_status: SubscriptionStatus;
   payment_status: PaymentStatus;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
 }
 
 export interface Coach {
