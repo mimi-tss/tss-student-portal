@@ -3,6 +3,44 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed exercises "cannot be loaded" — mislabeled Content-Type, not a Drive problem (2026-09-08)
+
+Kimberly Johnson messaged her coach that assigned exercises wouldn't
+load. Checked her actual assignments against production before
+guessing: all 7 of her exercise files exist in Drive, aren't trashed,
+and the service account can read both metadata and the full byte
+stream cleanly (fetched one end-to-end — 1,558,099 bytes, matching
+Drive's own reported size exactly). So the file itself was never the
+problem.
+
+What Drive *does* report for every one of them: `mimeType: "video/mp4"`
+— these are audio-only recordings saved in an mp4 container (voice-memo
+apps commonly do this), and this codebase already knew and documented
+that exact quirk for the exercises-library sync filter
+([listAudioFilesInFolder](lib/google/drive.ts)'s own comment, "Drive
+tags video/mp4 regardless of there being no video track"). But
+[getDriveFileStream](lib/google/drive.ts), which
+[app/api/exercises/[id]/audio/route.ts](<app/api/exercises/[id]/audio/route.ts>)
+uses to proxy playback, forwarded that raw `video/mp4` straight through
+as the response's `Content-Type` header for an `<audio>` element — a
+mismatch some browsers tolerate by sniffing the actual codec anyway,
+but that iOS Safari in particular is known to flatly refuse, with
+exactly the generic "cannot be loaded" a student would report and
+nothing useful server-side to go on. Since the entire exercises
+library is `.mp4` per that same original comment, this plausibly
+affects every student on a strict client, not just Kimberly.
+
+Fixed by normalizing `video/mp4` to `audio/mp4` in
+`getDriveFileStream` before it's ever used as a response header —
+confirmed this is the only caller of that function in the app, so
+nothing that actually serves real video content is affected.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration. Not
+live-tested against a real browser session (no login here) — the fix
+is based on directly reproducing Drive's own mislabeling against her
+real assigned files, not a guess from the error message alone. Worth
+confirming with Kimberly that exercises play now once this deploys.
+
 ## Homework notes: students get their single latest note back, not zero (2026-09-07)
 
 Follow-up to the coach/admin-only change above, right after you

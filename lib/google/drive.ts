@@ -67,9 +67,22 @@ export async function getDriveFileStream(fileId: string) {
     drive.files.get({ fileId, alt: "media", supportsAllDrives: true }, { responseType: "stream" }),
   ]);
 
+  // Drive reports every audio-only recording saved in an mp4 container as
+  // video/mp4 (see listAudioFilesInFolder's own comment above — the
+  // entire exercises library is like this) — confirmed live this is
+  // exactly what breaks playback for a real student (Kimberly Johnson):
+  // the file streams and decodes fine, but a browser's own <audio>
+  // element can refuse a response whose Content-Type says video/* (iOS
+  // Safari in particular does this outright), reporting a generic
+  // "cannot be loaded" with no server-side error at all. Corrected here,
+  // not at the source in Drive, since the file genuinely has no video
+  // track and audio/mp4 is what it actually is.
+  const rawMimeType = meta.data.mimeType ?? "audio/mpeg";
+  const mimeType = rawMimeType === "video/mp4" ? "audio/mp4" : rawMimeType;
+
   return {
     stream: media.data as unknown as NodeJS.ReadableStream,
-    mimeType: meta.data.mimeType ?? "audio/mpeg",
+    mimeType,
     name: meta.data.name ?? "exercise",
   };
 }
