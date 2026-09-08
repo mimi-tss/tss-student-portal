@@ -28,14 +28,42 @@ export async function GET() {
 
   const admin = createAdminClient();
 
-  const [{ data: unmatched }, { data: matchedRows }] = await Promise.all([
+  // A short, recent-only window — same "don't recreate an overwhelming
+  // queue" reasoning as every other lookback in this file (see
+  // RECORDING_MISSING_LOOKBACK_DAYS/CANDIDATE_LOOKBACK_DAYS). This list
+  // only exists to make a wrong match (see unmatchRecording) fixable
+  // soon after it happens, not to be a full historical audit log.
+  const recentlyMatchedCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: unmatched }, { data: matchedRows }, { data: recentlyMatchedRows }] = await Promise.all([
     admin
       .from("meet_recordings")
       .select("id, coach_id, drive_file_id, file_name, recorded_date, drive_created_at, coaches(name)")
       .eq("status", "unmatched")
       .order("recorded_date", { ascending: false }),
     admin.from("meet_recordings").select("matched_session_id, matched_group_lesson_id").eq("status", "matched"),
+    admin
+      .from("meet_recordings")
+      .select(
+        "id, file_name, recorded_date, matched_at, match_method, coaches(name), students:matched_student_id(name), group_lessons:matched_group_lesson_id(topic)",
+      )
+      .eq("status", "matched")
+      .gte("matched_at", recentlyMatchedCutoff)
+      .order("matched_at", { ascending: false }),
   ]);
+
+  const recentlyMatched = (recentlyMatchedRows ?? []).map((r) => ({
+    id: r.id,
+    fileName: r.file_name,
+    recordedDate: r.recorded_date,
+    matchedAt: r.matched_at,
+    matchMethod: r.match_method,
+    coachName: (r.coaches as unknown as { name: string } | null)?.name ?? null,
+    matchedTo:
+      (r.students as unknown as { name: string } | null)?.name ??
+      (r.group_lessons as unknown as { topic: string | null } | null)?.topic ??
+      "Group lesson",
+  }));
 
   const alreadyMatchedSessionIds = new Set(
     (matchedRows ?? []).map((r) => r.matched_session_id as string).filter(Boolean),
@@ -67,5 +95,5 @@ export async function GET() {
     }),
   );
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items, recentlyMatched });
 }

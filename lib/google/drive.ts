@@ -255,6 +255,29 @@ export async function createDriveShortcut(
   };
 }
 
+// Locates the shortcut inside a student's folder that points at a given
+// target file — the reverse lookup createDriveShortcut has no need for
+// (it only ever creates), but unmatching a wrongly-matched recording
+// does: attachRecordingToStudent never stored the shortcut's own id
+// anywhere, only the target recording's drive_file_id, so undoing a
+// match means searching the folder for whichever shortcut targets it.
+// Returns null rather than throwing when nothing matches — the shortcut
+// may have already been manually removed, which shouldn't block the
+// rest of an unmatch from proceeding.
+export async function findShortcutTargeting(folderId: string, targetFileId: string): Promise<string | null> {
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.shortcut'`,
+    corpora: "drive",
+    driveId: STUDENT_DRIVES_ID,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
+    fields: "files(id, shortcutDetails)",
+  });
+  const found = (res.data.files ?? []).find((f) => f.shortcutDetails?.targetId === targetFileId);
+  return found?.id ?? null;
+}
+
 // Finds (or creates once) the "Archive" subfolder inside a student's
 // own Drive folder — no new students column needed, always derivable
 // from the student's existing drive_folder_id on demand.

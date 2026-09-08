@@ -4,6 +4,8 @@ import {
   createDriveShortcut,
   findGeminiNotesForRecording,
   exportDocText,
+  findShortcutTargeting,
+  removeStudentFolderItem,
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
@@ -317,6 +319,94 @@ export async function attachRecordingToGroupLesson(
   await resolveAttentionItemsForRecording(admin, recordingId);
 
   return { success: true, notified, skipped };
+}
+
+// Undoes a wrong match — confirmed live this was needed when Meet
+// split one lesson's recording into two separate files with the exact
+// same name/timestamp (a connection drop/restart mid-session): the
+// first one to sync auto-matched to the real student via the normal
+// day+session pass, but it turned out to be the wrong file (a short
+// false-start fragment, not the actual lesson) — and there was no way
+// to correct it, since attachRecordingToStudent/ToGroupLesson never
+// stored which shortcut they created, only the recording's own
+// drive_file_id and the DB's matched_* columns.
+//
+// Best-effort on the Drive side (missing shortcut, already-removed
+// folder, any Drive API failure) — the DB-level correction below is
+// what actually unblocks re-matching, and shouldn't be held hostage by
+// a Drive cleanup step that's a nice-to-have, not the core fix.
+// Re-opens the session's own recording_missing item explicitly (not
+// left to syncRecordingAttentionItems' own next pass) — that function's
+// upsert is on-conflict-do-nothing, so a previously-resolved row would
+// otherwise never flip back to needs_action on its own.
+export async function unmatchRecording(
+  admin: SupabaseClient,
+  recordingId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: recording } = await admin
+    .from("meet_recordings")
+    .select("drive_file_id, status, matched_student_id, matched_session_id, matched_group_lesson_id")
+    .eq("id", recordingId)
+    .single();
+
+  if (!recording || recording.status !== "matched") {
+    return { success: false, error: "recording not found or not currently matched" };
+  }
+
+  if (recording.matched_student_id) {
+    const { data: student } = await admin
+      .from("students")
+      .select("drive_folder_id")
+      .eq("id", recording.matched_student_id)
+      .maybeSingle();
+    if (student?.drive_folder_id) {
+      try {
+        const shortcutId = await findShortcutTargeting(student.drive_folder_id, recording.drive_file_id);
+        if (shortcutId) await removeStudentFolderItem(student.drive_folder_id, shortcutId);
+      } catch (err) {
+        console.error(`unmatchRecording: couldn't remove Drive shortcut for recording ${recordingId}`, err);
+      }
+    }
+  } else if (recording.matched_group_lesson_id) {
+    const { data: registrations } = await admin
+      .from("group_lesson_registrations")
+      .select("students(drive_folder_id)")
+      .eq("group_lesson_id", recording.matched_group_lesson_id);
+    for (const row of registrations ?? []) {
+      const folderId = (row.students as unknown as { drive_folder_id: string | null } | null)?.drive_folder_id;
+      if (!folderId) continue;
+      try {
+        const shortcutId = await findShortcutTargeting(folderId, recording.drive_file_id);
+        if (shortcutId) await removeStudentFolderItem(folderId, shortcutId);
+      } catch (err) {
+        console.error(`unmatchRecording: couldn't remove Drive shortcut for recording ${recordingId}`, err);
+      }
+    }
+  }
+
+  const { error } = await admin
+    .from("meet_recordings")
+    .update({
+      status: "unmatched",
+      matched_student_id: null,
+      matched_session_id: null,
+      matched_group_lesson_id: null,
+      match_method: null,
+      matched_at: null,
+    })
+    .eq("id", recordingId);
+
+  if (error) return { success: false, error: error.message };
+
+  if (recording.matched_session_id) {
+    await admin
+      .from("attention_items")
+      .update({ status: "needs_action", resolved_at: null })
+      .eq("session_id", recording.matched_session_id)
+      .eq("kind", "recording_missing");
+  }
+
+  return { success: true };
 }
 
 export async function dismissRecording(

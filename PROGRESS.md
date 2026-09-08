@@ -3,6 +3,56 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added "Unmatch" — Recordings had no way to undo a wrong auto-match (2026-09-08)
+
+You reported "Imelda Villa" / "Lana part 1" / "Lana part 2" missing from
+the unmatched-recordings dropdown, then that it turned out to be "the
+wrong recording that was matched." Investigated against real production
+data (not guessed) before building anything:
+
+- Lana's two recordings were already matched by the time I looked —
+  `matched_at` timestamps from minutes earlier — so that part had
+  already resolved itself once her session's Needs Review item existed
+  and she showed up as a pickable candidate.
+- Imelda's case was real and different: Google Meet had generated
+  **two separate files with the identical name**
+  (`fyj-rnyj-hvq (2026-09-07 20:33 GMT-4)`) for her one lesson —
+  confirmed both exist in `meet_recordings` with different
+  `drive_file_id`s, ~1.5 hours apart in when each synced in. The first
+  one auto-matched to her via the normal day+session pass; the second,
+  real one landed unmatched with nowhere to go, because once a session
+  is matched this app excludes it from every dropdown everywhere — and
+  there was no "undo" anywhere in the app. You confirmed live: the one
+  that got auto-matched was the wrong file.
+
+Root cause across both symptoms is the same missing capability: no way
+to correct a match once made. Added it:
+
+- [unmatchRecording](lib/admin/recording-matching.ts) — resets the
+  `meet_recordings` row back to `unmatched`, best-effort removes the
+  wrong shortcut from the (group of) student's Drive folder (new
+  [findShortcutTargeting](lib/google/drive.ts) helper — the original
+  match never stored the shortcut's own Drive id anywhere, only the
+  recording's, so undoing it means searching the folder for whichever
+  shortcut points at it), and explicitly re-opens the session's
+  `recording_missing` Needs Review item (its own upsert RPC is
+  on-conflict-do-nothing, so a previously-resolved row would otherwise
+  never flip back to `needs_action` on its own).
+- New [/api/admin/meet-recordings/unmatch](app/api/admin/meet-recordings/unmatch/route.ts)
+  route, admin-only.
+- Recordings page now also shows a **Recently matched** list (last 7
+  days, same "don't recreate an overwhelming queue" reasoning as this
+  file's other lookback windows) with an Unmatch button per row —
+  [recordings-client.tsx](<app/(admin)/admin/recordings/recordings-client.tsx>).
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here, and this specifically touches real Drive folder content,
+so Imelda's actual mismatch still needs you to click Unmatch on the
+wrong file yourself once this deploys, then pick the correct one from
+the now-reopened dropdown — didn't want to touch her family's Drive
+folder directly from a script. No migration — pure application code,
+existing columns already supported being reset to unmatched.
+
 ## Moved Coach Notes away from Homework Notes (2026-09-08)
 
 Direct follow-up to adding Coach Notes above — you didn't want it

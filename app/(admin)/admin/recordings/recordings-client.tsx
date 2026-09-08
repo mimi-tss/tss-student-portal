@@ -29,6 +29,16 @@ interface RecordingItem {
   groupLessonCandidates: GroupLessonCandidate[];
 }
 
+interface RecentlyMatchedItem {
+  id: string;
+  fileName: string;
+  recordedDate: string;
+  matchedAt: string;
+  matchMethod: string | null;
+  coachName: string | null;
+  matchedTo: string;
+}
+
 // Encodes which picker option was chosen into one <select> value, since
 // a recording's manual match can go to either a 1:1 session or a group
 // lesson from the same dropdown — "s:<id>" / "g:<id>" rather than two
@@ -57,6 +67,7 @@ function formatCandidateDateTime(scheduledAt: string): string {
 
 export default function RecordingsClient() {
   const [items, setItems] = useState<RecordingItem[] | null>(null);
+  const [recentlyMatched, setRecentlyMatched] = useState<RecentlyMatchedItem[]>([]);
   const [autoMatched, setAutoMatched] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
@@ -71,7 +82,10 @@ export default function RecordingsClient() {
     setError(null);
     fetch("/api/admin/meet-recordings")
       .then((res) => res.json())
-      .then((data) => setItems(data.items ?? []))
+      .then((data) => {
+        setItems(data.items ?? []);
+        setRecentlyMatched(data.recentlyMatched ?? []);
+      })
       .catch(() => setError("Couldn't load recordings — try again."));
   }
 
@@ -165,6 +179,31 @@ export default function RecordingsClient() {
     }
   }
 
+  async function unmatch(recordingId: string) {
+    if (!window.confirm("Undo this match? The recording goes back to the unmatched queue so it can be matched again.")) {
+      return;
+    }
+    setBusyId(recordingId);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/meet-recordings/unmatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordingId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't undo that match.");
+        return;
+      }
+      load();
+    } catch {
+      setError("Couldn't undo that match — try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className={styles.panel}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -250,6 +289,41 @@ export default function RecordingsClient() {
           </button>
         </div>
       ))}
+
+      {recentlyMatched.length > 0 && (
+        <>
+          <h3
+            style={{
+              margin: "24px 0 12px",
+              fontSize: 15,
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            Recently matched
+          </h3>
+          <p className={styles.panelText} style={{ marginBottom: 8 }}>
+            Last 7 days — undo a wrong match here (e.g. Meet split one lesson into two identically-named files and
+            the wrong one got auto-matched).
+          </p>
+          {recentlyMatched.map((item) => (
+            <div key={item.id} className={styles.naRow}>
+              <div className={styles.naInfo}>
+                <div className={`${styles.naName} ${styles.rowName}`}>{item.fileName}</div>
+                <div className={styles.naSummary}>
+                  {item.coachName ?? "Unrecognized coach"} · {item.recordedDate} → matched to{" "}
+                  <strong>{item.matchedTo}</strong>
+                </div>
+              </div>
+              <button className={styles.dangerBtn} disabled={busyId === item.id} onClick={() => unmatch(item.id)}>
+                Unmatch
+              </button>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
