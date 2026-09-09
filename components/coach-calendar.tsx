@@ -398,7 +398,21 @@ export default function CoachCalendar({
       }
     }
 
-    return { rowStartMinutes: min, rowEndMinutes: max };
+    // Rounded out to a clean SLOT_MINUTES boundary — a group lesson (see
+    // above) can start at any real-world minute, not just :00/:30, and
+    // leaving min/max un-rounded shifted every row in the whole grid by
+    // that same remainder (confirmed live: a lesson at, say, :41 turned
+    // every row label into things like "8:11 AM"/"8:41 AM" instead of
+    // clean half-hours). Worse, it silently broke every session's own
+    // name label too — isSessionStart/isGroupStart below compare a
+    // row's exact instant against the event's real scheduled_at, so an
+    // off-boundary axis meant no row ever exactly matched a normally
+    // (on-the-half-hour) scheduled session, and its label never
+    // rendered at all despite the colored block still showing.
+    return {
+      rowStartMinutes: Math.floor(min / SLOT_MINUTES) * SLOT_MINUTES,
+      rowEndMinutes: Math.ceil(max / SLOT_MINUTES) * SLOT_MINUTES,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, coachTimeZone, gridTimeZone, weekStartKey]);
 
@@ -447,7 +461,13 @@ export default function CoachCalendar({
       return slotStart < gEnd && slotEnd > gStart;
     });
     if (groupLesson) {
-      const isGroupStart = slotStart.getTime() === new Date(groupLesson.scheduledAt).getTime();
+      // Falls within this slot's range rather than an exact match — a
+      // group lesson isn't restricted to :00/:30 starts (see the
+      // row-range comment above), so an odd-minute start would
+      // otherwise never exactly equal any row's own instant and its
+      // label would never render, even once the axis itself lines up.
+      const gStartTime = new Date(groupLesson.scheduledAt).getTime();
+      const isGroupStart = gStartTime >= slotStart.getTime() && gStartTime < slotEnd.getTime();
       return { type: "group" as const, groupLesson, isGroupStart };
     }
 
@@ -459,7 +479,11 @@ export default function CoachCalendar({
       return slotStart < sEnd && slotEnd > sStart;
     });
     if (session) {
-      const isStart = slotStart.getTime() === new Date(session.scheduledAt).getTime();
+      // Same range-containment reasoning as the group lesson check above
+      // — a session is normally on a clean half-hour, but shouldn't
+      // silently lose its label if it's ever not.
+      const sessionStartTime = new Date(session.scheduledAt).getTime();
+      const isStart = sessionStartTime >= slotStart.getTime() && sessionStartTime < slotEnd.getTime();
       // A no-notice (late) cancellation stays blocked, not reopened —
       // shown the same "held, no booking" grey as a paused student's
       // reserved slot below, not the normal purple "booked" color,
@@ -494,7 +518,9 @@ export default function CoachCalendar({
       return slotStart < hEnd && slotEnd > hStart;
     });
     if (heldSlot) {
-      const isHeldStart = slotStart.getTime() === new Date(heldSlot.scheduledAt).getTime();
+      // Same range-containment reasoning as session/group above.
+      const heldStartTime = new Date(heldSlot.scheduledAt).getTime();
+      const isHeldStart = heldStartTime >= slotStart.getTime() && heldStartTime < slotEnd.getTime();
       return {
         type: "held" as const,
         reason: `Reserved — ${heldSlot.studentName} (paused)`,
@@ -508,7 +534,9 @@ export default function CoachCalendar({
       return slotStart < bEnd && slotEnd > bStart;
     });
     if (block) {
-      const isBlockStart = slotStart.getTime() === new Date(block.start_at).getTime();
+      // Same range-containment reasoning as session/group above.
+      const blockStartTime = new Date(block.start_at).getTime();
+      const isBlockStart = blockStartTime >= slotStart.getTime() && blockStartTime < slotEnd.getTime();
       return { type: "block" as const, block, isBlockStart };
     }
 

@@ -3,6 +3,46 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed coach-calendar week view: off-boundary rows + missing names (2026-09-09)
+
+You reported Tara's week view showing rows at :11/:41 instead of :00/:30,
+and no student names anywhere on the grid. Traced it to leftover test
+data — 3 "Diagnostic SelfCancel Topic" group lessons on Tara's real
+calendar (odd timestamps like `5:41:57 UTC`), left behind by a
+concurrent session's testing of a self-cancel flow, confirmed zero real
+registrations on any of them. They'd already been cleaned up by the
+time I went to delete them (the same session finishing its own
+cleanup) — verified nothing diagnostic remains anywhere.
+
+Fixed the actual code bug this exposed, since it's a real robustness
+gap regardless of what triggered it this time — any odd-minute-start
+event (test data today, but nothing stops a real one from landing off
+the half-hour) breaks the whole week's grid in
+[coach-calendar.tsx](components/coach-calendar.tsx):
+1. `rowStartMinutes`/`rowEndMinutes` were the raw min/max of every
+   working-hours window and group lesson's real start/end time, with no
+   rounding — one event 11 minutes off a clean boundary shifted every
+   row's label for the *entire visible week*, not just that event's own
+   day.
+2. Every "show this event's name" check (`isSessionStart`,
+   `isGroupStart`, `isHeldStart`, `isBlockStart`) was an exact
+   `getTime() === getTime()` match against the row grid — once the axis
+   was off-boundary, no row's instant ever exactly equaled a normal,
+   on-the-half-hour session's real start time, so its label silently
+   never rendered even though the colored block still did (the
+   overlap/coloring check was always range-based, never exact-match,
+   which is why colors kept working while labels didn't).
+
+Fixed both: floor/ceil the row axis to the nearest `SLOT_MINUTES` (30)
+boundary before generating rows, and changed all four start checks from
+exact-time equality to "does this event's real start fall within this
+row's range" — robust to any event's start time, not just clean ones.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here, and the specific triggering data is already gone; the
+fix itself is straightforward arithmetic/range-containment reasoning,
+not something requiring a live repro to trust. No migration.
+
 ## Coach Slack pings on group-lesson signup; students can now self-cancel with a 24h rule (2026-09-08)
 
 Two asks in one message.
