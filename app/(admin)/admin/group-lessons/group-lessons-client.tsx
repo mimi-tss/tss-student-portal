@@ -518,12 +518,24 @@ function GroupLessonHistory() {
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {lessons.map((lesson) => (
           <div key={lesson.id} className={styles.panel} style={{ marginBottom: 0 }}>
-            <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
-            <p className={styles.mutedText}>
-              <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach{" "}
-              {lesson.coachName} · {lesson.attendees.length}
-              {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div>
+                <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
+                <p className={styles.mutedText}>
+                  <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach{" "}
+                  {lesson.coachName} · {lesson.attendees.length}
+                  {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
+                </p>
+              </div>
+              {!lesson.cancelledAt && (
+                <CancelGroupLessonButton
+                  groupLessonId={lesson.id}
+                  hasTopic={!!lesson.topic?.trim()}
+                  registeredCount={lesson.attendees.filter((a) => a.status === "registered").length}
+                  onCancelled={load}
+                />
+              )}
+            </div>
             {lesson.cancelledAt ? (
               <p className={styles.errorText} style={{ marginTop: 4 }}>
                 Cancelled <FormattedDateTime value={lesson.cancelledAt} />
@@ -715,33 +727,8 @@ function GroupLessonCard({
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelMode, setCancelMode] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
-
-  async function handleCancel() {
-    if (!cancelReason.trim()) return;
-    setCancelling(true);
-    setCancelError(null);
-
-    const res = await fetch("/api/admin/cancel-group-lesson", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ groupLessonId: lesson.id, reason: cancelReason.trim() }),
-    });
-    setCancelling(false);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setCancelError(body.error ?? "Couldn't cancel that lesson.");
-      return;
-    }
-
-    onRegistered();
-  }
 
   async function handleRemove(registrationId: string) {
     setRemovingId(registrationId);
@@ -797,47 +784,13 @@ function GroupLessonCard({
             {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
           </p>
         </div>
-        {!cancelMode && (
-          <button onClick={() => setCancelMode(true)} className={styles.dangerLink} style={{ flexShrink: 0 }}>
-            Cancel lesson
-          </button>
-        )}
+        <CancelGroupLessonButton
+          groupLessonId={lesson.id}
+          hasTopic={!!lesson.topic?.trim()}
+          registeredCount={lesson.attendees.filter((a) => a.status === "registered").length}
+          onCancelled={onRegistered}
+        />
       </div>
-
-      {cancelMode && (
-        <div className={styles.warnPanel} style={{ marginBottom: 12 }}>
-          <p style={{ marginBottom: 4, fontWeight: 600 }}>Cancel this group lesson — reason required</p>
-          <p className={styles.mutedText} style={{ marginBottom: 8 }}>
-            Notifies nobody automatically and refunds nothing — handle attendee refunds directly, outside the app,
-            same as always for group lessons.
-          </p>
-          <textarea
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            rows={2}
-            placeholder="Why is this lesson being cancelled?"
-            className={styles.input}
-            style={{ display: "block", width: "100%", marginBottom: 8 }}
-          />
-          {cancelError && <p className={styles.errorText} style={{ marginBottom: 8 }}>{cancelError}</p>}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={handleCancel} disabled={cancelling || !cancelReason.trim()} className={styles.dangerBtn}>
-              {cancelling ? "Cancelling…" : "Confirm cancel"}
-            </button>
-            <button
-              onClick={() => {
-                setCancelMode(false);
-                setCancelReason("");
-                setCancelError(null);
-              }}
-              disabled={cancelling}
-              className={styles.linkBtnSmall}
-            >
-              Never mind
-            </button>
-          </div>
-        </div>
-      )}
 
       {lesson.attendees.length > 0 && (
         <ul className={styles.list} style={{ marginBottom: 12 }}>
@@ -894,6 +847,111 @@ function GroupLessonCard({
         </div>
       )}
       {error && <p className={styles.errorText} style={{ marginTop: 4 }}>{error}</p>}
+    </div>
+  );
+}
+
+// Shared between the "Upcoming" cards and the past/cancelled history
+// below — a mistaken lesson (a duplicate bootcamp created twice, a wrong
+// coach) is just as often caught after it's already happened as before,
+// and cancel-group-lesson itself has no restriction on scheduled_at, only
+// on not already being cancelled.
+function CancelGroupLessonButton({
+  groupLessonId,
+  hasTopic,
+  registeredCount,
+  onCancelled,
+}: {
+  groupLessonId: string;
+  hasTopic: boolean;
+  registeredCount: number;
+  onCancelled: () => void;
+}) {
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelMode, setCancelMode] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  // Whether the studio owes registered students a makeup is genuinely
+  // case-by-case (a duplicate/mistaken lesson vs. one where students
+  // already got what they paid for some other way) — defaults off so a
+  // routine mistake-cleanup doesn't silently hand out credits nobody
+  // asked for.
+  const [issueCredit, setIssueCredit] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  async function handleCancel() {
+    if (!cancelReason.trim()) return;
+    setCancelling(true);
+    setCancelError(null);
+
+    const res = await fetch("/api/admin/cancel-group-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupLessonId, reason: cancelReason.trim(), issueCredit }),
+    });
+    setCancelling(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setCancelError(body.error ?? "Couldn't cancel that lesson.");
+      return;
+    }
+
+    onCancelled();
+  }
+
+  if (!cancelMode) {
+    return (
+      <button onClick={() => setCancelMode(true)} className={styles.dangerLink} style={{ flexShrink: 0 }}>
+        Cancel lesson
+      </button>
+    );
+  }
+
+  return (
+    <div className={styles.warnPanel} style={{ marginTop: 8, marginBottom: 0 }}>
+      <p style={{ marginBottom: 4, fontWeight: 600 }}>Cancel this group lesson — reason required</p>
+      <p className={styles.mutedText} style={{ marginBottom: 8 }}>
+        Notifies nobody automatically and refunds nothing — handle attendee refunds directly, outside the app, same
+        as always for group lessons.
+      </p>
+      <textarea
+        value={cancelReason}
+        onChange={(e) => setCancelReason(e.target.value)}
+        rows={2}
+        placeholder="Why is this lesson being cancelled? (e.g. duplicate entry, wrong coach)"
+        className={styles.input}
+        style={{ display: "block", width: "100%", marginBottom: 8 }}
+      />
+      {registeredCount > 0 && (
+        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <input
+            type="checkbox"
+            checked={issueCredit}
+            disabled={!hasTopic}
+            onChange={(e) => setIssueCredit(e.target.checked)}
+          />
+          Issue a makeup credit to all {registeredCount} registered student{registeredCount === 1 ? "" : "s"}
+          {!hasTopic && " (needs a topic set on this lesson first)"}
+        </label>
+      )}
+      {cancelError && <p className={styles.errorText} style={{ marginBottom: 8 }}>{cancelError}</p>}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={handleCancel} disabled={cancelling || !cancelReason.trim()} className={styles.dangerBtn}>
+          {cancelling ? "Cancelling…" : "Confirm cancel"}
+        </button>
+        <button
+          onClick={() => {
+            setCancelMode(false);
+            setCancelReason("");
+            setIssueCredit(false);
+            setCancelError(null);
+          }}
+          disabled={cancelling}
+          className={styles.linkBtnSmall}
+        >
+          Never mind
+        </button>
+      </div>
     </div>
   );
 }

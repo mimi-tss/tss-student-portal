@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group lessons: cancel past ones too, optional credit on cancel (2026-09-08)
+
+Two same-day follow-ups to the group-lesson cancel/history work above,
+both from you looking at the real duplicate-bootcamp mess in
+production (several `0/6 registered` "BOOTCAMP N1" entries at the exact
+same time — clearly accidental duplicate creations).
+
+**Cancel from history too**: the history section I'd just shipped was
+read-only by design ("a look-back, not a management view") — but a
+mistake like a duplicate bootcamp is just as often noticed after it
+already happened as before. `cancel-group-lesson` itself has no
+restriction on `scheduled_at`, only on not already being cancelled, so
+this was a UI gap, not a backend one. Extracted the cancel button/confirm
+panel out of `GroupLessonCard` into a shared `CancelGroupLessonButton`
+and added it to each non-cancelled row in the history list too.
+
+**Issue a credit on cancel**: you pointed out some cancellations owe
+registered students a makeup and some don't — genuinely case-by-case,
+not a fixed rule. The `group_lesson_credits` table and its whole
+redeem-by-topic flow already existed (built for the
+group-lesson-understaffed cron's own auto-cancels,
+[lib/group-lesson-credits.ts](lib/group-lesson-credits.ts)) — this is
+the same mechanism, just admin-triggered instead of cron-triggered.
+[cancel-group-lesson](app/api/admin/cancel-group-lesson/route.ts) now
+takes an `issueCredit` flag; when checked, every currently-`registered`
+attendee gets a `group_lesson_credits` row for that lesson's topic.
+`topic` is `not null` on that table and credits redeem by exact topic
+match — so a lesson with no topic set can't ever have a usable credit
+issued against it; the route rejects that combination up front with a
+clear error instead of silently creating a credit nobody could redeem.
+The cancel confirm panel shows the checkbox only when there's at least
+one registered student, and disables it (with an inline hint) when the
+lesson has no topic.
+
+Verified against real production, not just typechecked: created a
+throwaway student + lesson + registration, cancelled it through the
+real RLS-scoped admin path with `issueCredit` on, and confirmed the
+`group_lesson_credits` row landed with the right shape (topic, source
+lesson, reason) before cleaning everything up. `npx tsc --noEmit -p .`
+and `next build` both clean. No migration — `group_lesson_credits`
+already existed.
+
 ## Renamed the "Finance" nav tab to "Payroll" (2026-09-08)
 
 You caught this live in a screenshot: the sidebar had both "Billing"
