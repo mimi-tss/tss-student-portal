@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { registerStudentInGroupLesson, unregisterStudentFromGroupLesson } from "@/lib/group-lessons";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  notifyCoachOfGroupLessonSignup,
+  registerStudentInGroupLesson,
+  unregisterStudentFromGroupLesson,
+} from "@/lib/group-lessons";
 
 // Admin manually confirms the Stripe payment came through, then
 // registers the student — same posture as purchased-addon session
@@ -65,6 +70,18 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
+  }
+
+  // notification_log has no insert policy for a regular session — only
+  // ever written by the service-role client (see its own migration
+  // comment), so this deliberately uses the admin client, not the
+  // RLS-scoped `supabase` above.
+  const { data: student } = await supabase.from("students").select("name").eq("id", studentId).maybeSingle();
+  if (student) {
+    const admin = createAdminClient();
+    notifyCoachOfGroupLessonSignup(admin, { groupLessonId, studentId, studentName: student.name }).catch((err) =>
+      console.error(`group lesson signup notification failed for lesson ${groupLessonId}`, err),
+    );
   }
 
   return NextResponse.json({ success: true });

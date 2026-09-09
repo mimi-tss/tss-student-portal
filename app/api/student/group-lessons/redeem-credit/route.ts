@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
 
 // Redeems a group_lesson_credit (migration 0086) into a real
 // group_lesson_registrations row — the student's own self-service
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id")
+    .select("id, name")
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!student) return NextResponse.json({ error: "student not found" }, { status: 404 });
@@ -88,6 +89,12 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  notifyCoachOfGroupLessonSignup(admin, {
+    groupLessonId,
+    studentId: student.id,
+    studentName: student.name,
+  }).catch((err) => console.error(`group lesson signup notification failed for lesson ${groupLessonId}`, err));
 
   return NextResponse.json({ success: true });
 }

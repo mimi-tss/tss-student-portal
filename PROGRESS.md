@@ -3,6 +3,66 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach Slack pings on group-lesson signup; students can now self-cancel with a 24h rule (2026-09-08)
+
+Two asks in one message.
+
+**Slack notification on signup**: a coach previously found out someone
+joined their group class only by checking the roster themselves. New
+[notifyCoachOfGroupLessonSignup](lib/group-lessons.ts) (same
+`coach.slack_webhook_url` mechanism the group-lesson-understaffed cron
+already uses) fires from all three places a registration can actually
+happen — admin's single-occurrence
+[register](app/api/admin/group-lessons/register/route.ts) route
+(including the credit-redemption path from earlier today), admin's bulk
+[register-series](app/api/admin/group-lessons/register-series/route.ts)
+route (**one** consolidated ping per bulk action, not one per occurrence
+— a coach getting 4+ identical Slack messages for one "register for
+whole series" click would be noise), and the student's own self-serve
+[redeem-credit](app/api/student/group-lessons/redeem-credit/route.ts).
+
+**Caught a real bug before shipping**: `notification_log` has no INSERT
+policy for a regular session (migration 0083's own comment: "written
+only by the service-role admin client") — my first pass called
+`notifyCoach` with the RLS-scoped session client in the two admin
+routes, which would have silently failed every single time (the error
+gets swallowed inside `claim()`'s own catch, so nothing would ever
+actually reach Slack, with no visible error anywhere). Caught this by
+mirroring the exact insert against production before shipping, not
+just reading the code — switched both call sites to
+`createAdminClient()`. (`redeem-credit` already used the admin client
+for unrelated reasons, so it was fine as originally written.)
+
+**Student self-cancel, 24-hour rule**: didn't exist at all before
+today — [lib/group-lesson-credits.ts](lib/group-lesson-credits.ts)'s
+own comment used to say so explicitly ("no such self-cancel path exists
+for group lessons today — only admin can unregister someone"). New
+[/api/student/group-lessons/cancel](app/api/student/group-lessons/cancel/route.ts):
+≥24 hours' notice deletes the registration and grants a
+`group_lesson_credits` row with **`expires_at: null`** (never
+expires — a deliberate difference from a 1:1 makeup credit's 30-day
+window) and **no interaction with `makeup_credits`/the monthly-yearly
+cap at all** (a completely separate table, never touched); inside 24
+hours it's a plain forfeit — registration deleted, no credit, same
+shape as a late 1:1 session cancellation. New
+[GroupLessonCancelButton](<app/(student)/student/dashboard/group-lesson-cancel-button.tsx>)
+mirrors the existing 1:1 `CancelButton`'s confirm-with-warning UX,
+minus the cap display (there's no cap here). New "Upcoming group
+classes" list on `/student/book` (the only place a student could see
+their own live group-lesson registrations at all before now — the
+dashboard's "Upcoming lessons this cycle" panel is a read-only summary
+wrapped in a page-level `<Link>`, no room for a per-item action).
+
+Verified everything against real production, not just typechecked:
+confirmed the (now-fixed) notification claim/dedup insert succeeds via
+the service-role client and blocks a genuine duplicate; ran both
+self-cancel branches end-to-end against a throwaway student with a real
+auth session (≥24h → registration deleted + credit granted with
+`expires_at: null`; <24h → registration deleted, credit count
+unchanged) before cleaning everything up. `npx tsc --noEmit -p .` and
+`next build` both clean. No migration — every table involved already
+existed.
+
 ## Added monthly/yearly billing choice to the pricing page (2026-09-09)
 
 Follow-up to the same-day metadata-based tier pricing work. While

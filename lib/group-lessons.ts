@@ -1,6 +1,8 @@
 import type { createClient } from "@/lib/supabase/server";
 import { occurrencesFor } from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { notifyCoach } from "@/lib/notifications/create";
+import { formatDateTimeInZone } from "@/lib/timezone";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -219,6 +221,46 @@ export async function registerStudentInGroupLesson(
     stripe_reference: params.stripeReference ?? null,
   });
   if (error) throw new Error(error.message);
+}
+
+// Slack ping to the lesson's coach whenever a student signs up — a
+// registration only ever happens via admin (manual confirm-payment, no
+// live Stripe integration) or a student spending a group-lesson credit,
+// neither of which the coach otherwise hears about until they see the
+// roster themselves. Fire-and-forget from every call site (never awaited
+// synchronously) so a Slack outage can't fail the registration itself.
+// dedupKey is scoped to the exact lesson+student pair — a registration
+// row is unique on that pair anyway, so this can never double-fire for
+// the same real signup.
+export async function notifyCoachOfGroupLessonSignup(
+  supabase: SupabaseClient,
+  params: { groupLessonId: string; studentId: string; studentName: string },
+): Promise<void> {
+  const { data: lesson } = await supabase
+    .from("group_lessons")
+    .select("topic, scheduled_at, coach_id, coaches(name, timezone, slack_webhook_url)")
+    .eq("id", params.groupLessonId)
+    .maybeSingle();
+  if (!lesson) return;
+
+  const coach = unwrapJoin(
+    lesson.coaches as unknown as
+      | { name: string; timezone: string; slack_webhook_url: string | null }
+      | { name: string; timezone: string; slack_webhook_url: string | null }[]
+      | null,
+  );
+  if (!coach) return;
+
+  const topicLabel = lesson.topic?.trim() || "your group class";
+  const time = formatDateTimeInZone(lesson.scheduled_at, coach.timezone);
+
+  await notifyCoach(supabase, {
+    coachId: lesson.coach_id,
+    coachSlackWebhookUrl: coach.slack_webhook_url,
+    kind: "group_lesson_signup",
+    dedupKey: `coach:${lesson.coach_id}:group_lesson_signup:${params.groupLessonId}:${params.studentId}`,
+    text: `${params.studentName} signed up for ${topicLabel} at ${time}`,
+  });
 }
 
 export interface RegisterSeriesResult {
