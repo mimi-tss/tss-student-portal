@@ -3,6 +3,25 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Renamed the "Finance" nav tab to "Payroll" (2026-09-08)
+
+You caught this live in a screenshot: the sidebar had both "Billing"
+and "Finance," confusing since this page is really about
+payroll (rollup, pay rates, attendance check, mark-paid), not billing.
+Renamed the label and the page's own `<h1>` in
+[admin-nav.tsx](<app/(admin)/admin-nav.tsx>) and
+[finance/page.tsx](<app/(admin)/admin/finance/page.tsx>).
+
+Deliberately left the URL (`/admin/finance`), the `admin_finance` role
+name, and the sidebar's "Admin + Finance" role badge alone — you asked
+about the tab specifically, and renaming the role itself would touch
+every RBAC check in the app for no requested benefit.
+
+`npx tsc --noEmit -p .` clean on both files touched (a pre-existing,
+unrelated type error in `app/api/admin/cancel-group-lesson/route.ts` is
+a concurrent session's own in-progress work, confirmed not touched by
+this change). No migration.
+
 ## Admin can now cancel a group lesson and see past/cancelled ones (2026-09-08)
 
 You asked for both. Traced the gap first: [cancel-group-lesson](app/api/admin/cancel-group-lesson/route.ts)

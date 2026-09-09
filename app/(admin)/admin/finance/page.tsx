@@ -12,7 +12,7 @@ export default async function AdminFinancePage() {
 
   return (
     <main className={styles.wrap}>
-      <h1 className={styles.pageTitle}>Finance</h1>
+      <h1 className={styles.pageTitle}>Payroll</h1>
       <FinanceClient coaches={coaches ?? []} />
     </main>
   );
