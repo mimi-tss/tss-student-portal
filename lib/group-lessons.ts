@@ -401,6 +401,14 @@ export interface RecurringGroupLesson {
   maxStudents: number | null;
   startDate: string;
   endDate: string | null;
+  active: boolean;
+  // Only populated for inactive series (see getAllRecurringGroupLessons) —
+  // future, non-cancelled group_lessons rows still pointing at this series
+  // even though "Stop" only ever flips `active` and never touches
+  // already-materialized occurrences. Undefined for active series, where
+  // it isn't relevant (materializeRecurringGroupLessons keeps generating
+  // more anyway).
+  pendingOccurrences?: number;
 }
 
 // Active recurring group lesson series, admin's management view (mirrors
@@ -425,6 +433,59 @@ export async function getActiveRecurringGroupLessons(supabase: SupabaseClient): 
     maxStudents: r.max_students,
     startDate: r.start_date,
     endDate: r.end_date,
+    active: true,
+  }));
+}
+
+// Active series plus stopped ones — a stopped series (`active: false`)
+// otherwise vanishes from admin entirely, even though "Stop" never
+// cancels the future occurrences already materialized for it (by
+// design — see deactivateRecurringGroupLessonSeries). Without this, those
+// leftover occurrences just keep appearing individually under "Upcoming
+// group lessons" with no visible link back to the (now-invisible) series
+// that created them, and no way to tell there even was one. Surfaces a
+// pending-occurrence count for each stopped series so that's no longer a
+// database-only mystery.
+export async function getAllRecurringGroupLessons(supabase: SupabaseClient): Promise<RecurringGroupLesson[]> {
+  const { data } = await supabase
+    .from("recurring_group_lessons")
+    .select(
+      "id, coach_id, topic, day_of_week, start_time, duration_minutes, max_students, start_date, end_date, active, coaches(name)",
+    )
+    .order("active", { ascending: false })
+    .order("day_of_week")
+    .order("start_time");
+
+  const series = data ?? [];
+
+  const pendingCounts = await Promise.all(
+    series.map((r) =>
+      r.active
+        ? Promise.resolve(undefined)
+        : supabase
+            .from("group_lessons")
+            .select("id", { count: "exact", head: true })
+            .eq("recurring_group_lesson_id", r.id)
+            .is("cancelled_at", null)
+            .gte("scheduled_at", new Date().toISOString())
+            .then(({ count }: { count: number | null }) => count ?? 0),
+    ),
+  );
+
+  return series.map((r, i) => ({
+    id: r.id,
+    coachId: r.coach_id,
+    coachName:
+      unwrapJoin(r.coaches as unknown as { name: string } | { name: string }[] | null)?.name ?? "Coach",
+    topic: r.topic,
+    dayOfWeek: r.day_of_week,
+    startTime: r.start_time,
+    durationMinutes: r.duration_minutes,
+    maxStudents: r.max_students,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    active: r.active,
+    pendingOccurrences: pendingCounts[i],
   }));
 }
 

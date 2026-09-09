@@ -3,6 +3,41 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found + surfaced why a stopped recurring series still shows lessons (2026-09-08)
+
+You spotted "Semi-Private Vocal Group Class" appearing weekly under
+"Upcoming group lessons" but nowhere in the "Recurring series" panel
+above it, and asked me to investigate rather than guessing. Checked
+production directly: that series exists in `recurring_group_lessons`
+with `active: false` — someone had clicked "Stop" on it at some point.
+`getActiveRecurringGroupLessons` only ever queried `active = true`, so
+a stopped series disappears from admin entirely.
+
+The real surprise: **"Stop" only flips that one flag**
+(`deactivateRecurringGroupLessonSeries`) — it never touches the
+`group_lessons` occurrences already materialized ahead of time. This
+series had **52 future occurrences** still live, uncancelled, stretching
+out to 2027, each just an ordinary standalone row with no visible link
+back to the series that spawned it (which was itself now invisible).
+Gave you the choice of bulk-cancelling those 52 now vs. just fixing the
+visibility gap — you picked leave-them-alone-for-now, UI fix only.
+
+New [getAllRecurringGroupLessons](lib/group-lessons.ts) (replacing the
+admin route's use of `getActiveRecurringGroupLessons`, which is kept
+for its one other real caller) returns stopped series too, each with a
+`pendingOccurrences` count (future, non-cancelled `group_lessons` still
+pointing at it). New **"Stopped series"** section on the Group Lessons
+page, below the active one — read-only, no Edit/Register/Stop actions
+(it's already stopped), just a plain "N future occurrences still
+scheduled below — stopping the series didn't cancel these" line so this
+never has to be a database-only mystery again.
+
+Verified the exact query against real production as a real admin
+session — confirmed it correctly finds the Semi-Private series and
+returns its live pending count. `npx tsc --noEmit -p .` and `next build`
+both clean. No migration — `active` already existed on
+`recurring_group_lessons`.
+
 ## Group lessons: cancel past ones too, optional credit on cancel (2026-09-08)
 
 Two same-day follow-ups to the group-lesson cancel/history work above,

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createRecurringGroupLessonSeries,
   deactivateRecurringGroupLessonSeries,
-  getActiveRecurringGroupLessons,
+  getAllRecurringGroupLessons,
   updateRecurringGroupLessonSeries,
 } from "@/lib/group-lessons";
 
@@ -13,9 +13,13 @@ import {
 // Authorization is enforced by RLS ("admins can manage recurring group
 // lessons", migration 0053), not re-checked here — same posture as the
 // one-off route.
+//
+// Returns stopped series too (not just active ones) — see
+// getAllRecurringGroupLessons's own comment for why that visibility
+// matters.
 export async function GET() {
   const supabase = await createClient();
-  const series = await getActiveRecurringGroupLessons(supabase);
+  const series = await getAllRecurringGroupLessons(supabase);
   return NextResponse.json({ series });
 }
 
