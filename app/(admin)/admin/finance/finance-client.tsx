@@ -204,6 +204,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [expandedCoach, setExpandedCoach] = useState<string | null>(null);
 
   const [attendance, setAttendance] = useState<CoachUnrecordedAttendance[] | null>(null);
+  const [expandedUnrecordedCoach, setExpandedUnrecordedCoach] = useState<string | null>(null);
   const [notifying, setNotifying] = useState(false);
   const [notifyResult, setNotifyResult] = useState<{ coachCount: number; sessionCount: number } | null>(null);
 
@@ -456,11 +457,25 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
             </p>
             <ul className={styles.list} style={{ margin: "12px 0" }}>
               {attendance.map((c) => (
-                <li key={c.coachId} className={styles.listItem} style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span className={styles.rowName}>{c.coachName}</span>
-                  <span className={styles.mutedText}>
-                    {c.sessions.length} session{c.sessions.length === 1 ? "" : "s"}
-                  </span>
+                <li key={c.coachId} className={styles.listItem}>
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between", cursor: "pointer" }}
+                    onClick={() => setExpandedUnrecordedCoach(expandedUnrecordedCoach === c.coachId ? null : c.coachId)}
+                  >
+                    <span className={styles.rowName}>{c.coachName}</span>
+                    <span className={styles.mutedText}>
+                      {c.sessions.length} session{c.sessions.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {expandedUnrecordedCoach === c.coachId && (
+                    <ul style={{ margin: "8px 0 0", paddingLeft: 16 }}>
+                      {c.sessions.map((sess) => (
+                        <li key={sess.id} className={styles.mutedText} style={{ padding: "2px 0" }}>
+                          <FormattedDateTime value={sess.scheduledAt} /> — {sess.studentName}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

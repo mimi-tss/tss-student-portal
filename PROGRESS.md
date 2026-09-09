@@ -3,6 +3,24 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Finance's "Attendance check" now drills down to the actual sessions (2026-09-08)
+
+You asked to be able to see which attendance isn't marked yet for a
+pay period — turned out this panel already existed
+([finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>),
+backed by
+[findUnrecordedAttendance](lib/payroll/calculate.ts)), and already knew
+exactly which sessions (id/date/student), it just only ever rendered
+a per-coach count ("Nikki Hollins — 3 sessions"), not which ones.
+
+Made each coach row in that list expandable (click to open, same
+pattern the rollup table below it already uses) — shows every
+unrecorded session's date/time and student name underneath. Purely a
+render change; the API/data layer already had everything needed.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested —
+no login here. No migration.
+
 ## Subscription tier now resolves from Stripe Price metadata, not a fixed price-ID list (2026-09-08)
 
 You flagged that students pay different amounts for the same tier
