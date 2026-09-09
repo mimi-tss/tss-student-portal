@@ -22,6 +22,7 @@ import StaffNotesClient from "./staff-notes-client";
 import StudentAttentionItems from "./student-attention-items";
 import AddCreditClient from "../../dashboard/add-credit-client";
 import SessionCreditsList from "./session-credits-list";
+import GroupLessonCreditsList from "./group-lesson-credits-list";
 import styles from "../../../admin.module.css";
 
 const TIER_LABEL: Record<string, string> = { lite: "Lite", suite: "Suite", pro: "Pro", elite: "Elite" };
@@ -92,6 +93,7 @@ export default async function AdminStudentPage({
     { count: yearlyCreditsUsed },
     { data: firstSessionWithCoach },
     { data: cancelRequestRow },
+    { data: groupLessonCredits },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -160,6 +162,17 @@ export default async function AdminStudentPage({
       .order("requested_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Unused group-lesson credits (migration 0086) — a separate table
+    // from makeup_credits above, granted by cancel-group-lesson or the
+    // per-attendee Remove flow. Previously invisible anywhere in admin;
+    // only ever showed up on the student's own booking page.
+    supabase
+      .from("group_lesson_credits")
+      .select("id, topic, expires_at, reason, created_at")
+      .eq("student_id", student.id)
+      .eq("used", false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order("created_at", { ascending: false }),
   ]);
 
   const [exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
@@ -478,6 +491,11 @@ export default async function AdminStudentPage({
           credits={credits ?? []}
           defaultDurationMinutes={student.session_duration_minutes ?? 30}
         />
+      </div>
+
+      <div className={styles.panel}>
+        <h2>Group class credits</h2>
+        <GroupLessonCreditsList credits={groupLessonCredits ?? []} />
       </div>
 
       <div className={styles.panel}>

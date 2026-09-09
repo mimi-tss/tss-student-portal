@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group class credits were completely invisible in admin — added a panel (2026-09-08)
+
+You flagged that Celeste's group class credit "isn't showing" on her
+admin student page — the one issued when you cancelled her Semi-Private
+class earlier with "issue credit" checked. Checked production directly:
+the credit was there the whole time (`group_lesson_credits`, topic
+"Semi-Private Vocal Group Class", reason "not enough students") — it
+just had nowhere to appear. `group_lesson_credits` is a completely
+separate table from `makeup_credits`, and the existing "Session
+Credits" panel ([SessionCreditsList](<app/(admin)/admin/students/[studentId]/session-credits-list.tsx>))
+only ever queried `makeup_credits`. The *only* place a group-lesson
+credit has ever shown up anywhere in this app is the student's own
+booking page ([GroupLessonCreditPanel](components/group-lesson-credit-panel.tsx))
+— admin could grant one (via cancel-group-lesson or the per-attendee
+Remove, both shipped earlier today) but never actually see it.
+
+New **"Group class credits"** panel on the admin student page, right
+below Session credits — new
+[GroupLessonCreditsList](<app/(admin)/admin/students/[studentId]/group-lesson-credits-list.tsx>)
+component, same unused/unexpired scoping as the makeup-credits query.
+No Book/Edit here (there's no admin-side redemption flow for these
+yet, only the student's own self-serve one) — just Delete for a
+mistaken grant, via new
+[delete-group-lesson-credit](app/api/admin/delete-group-lesson-credit/route.ts)
+(mirrors delete-credit's own pattern; no new migration needed since
+0086's "admins can manage group lesson credits" policy already covers
+delete).
+
+Verified the exact query against Celeste's real credit as a real admin
+session before shipping — confirmed it resolves. `npx tsc --noEmit -p .`
+and `next build` both clean. No migration.
+
 ## Trimmed the Semi-Private series to 4 weeks; per-student remove now prompts for credit (2026-09-08)
 
 Two closes on the same thread. You confirmed the SQL I handed you for
