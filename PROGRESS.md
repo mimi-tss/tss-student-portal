@@ -3,6 +3,28 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Decided: keep chat/upload notifications assigned-coach-only (2026-09-08)
+
+Came up investigating Nikki's Slack question about Michelle Robichaud
+(assigned to Celine, also in Nikki's bootcamp) — you asked whether a
+student's chat message or shared-folder upload notifies every coach
+with access, indefinitely. Checked the real code: it doesn't notify
+"both, forever" — the opposite. [notifyChatRecipient](lib/chat/notify.ts)
+only pings the chat thread's single stored `coach_id`, and
+[notify-upload/route.ts](app/api/shared-folder/notify-upload/route.ts)
+only pings `assigned_coach_id`. A group-lesson-only coach like Nikki
+never gets notified at all today, even though she can already read/see
+everything if she checks — a known, already-commented limitation in
+`notify.ts`, not something new found here.
+
+Gave you three options (assigned + currently-active-group-lesson
+coaches / every coach with any access ever / leave as-is) — you chose
+**leave as-is**. No code changed. Recording this so a future session
+doesn't re-litigate it: the underlying access model (My Students,
+chat, shared folder) already correctly gives Nikki read access via the
+group-lesson relationship; she just won't get proactively pinged, by
+deliberate choice, not a bug.
+
 ## Group lessons now materialize a rolling 4-week window, not 52 (2026-09-08)
 
 Direct follow-up to the "Stopped series" panel from earlier today — you
