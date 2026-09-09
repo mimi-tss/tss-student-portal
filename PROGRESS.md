@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now cancel a group lesson and see past/cancelled ones (2026-09-08)
+
+You asked for both. Traced the gap first: [cancel-group-lesson](app/api/admin/cancel-group-lesson/route.ts)
+(soft-cancel, migration 0043/0086) already existed server-side and was
+fully wired to RLS — it just had **no button anywhere** calling it.
+Same story for history: the main `GET /api/admin/group-lessons` only
+ever returns upcoming, not-cancelled lessons (`is("cancelled_at",
+null)`, `gte scheduled_at now`) — cancelled and already-run lessons were
+invisible in admin the moment they stopped being "upcoming."
+
+**Cancel**: each card in "Upcoming group lessons" now has a "Cancel
+lesson" link — opens a required-reason textarea (same required-reason
+pattern as admin's session staff-cancel), confirms, then calls the
+existing route. No credit/refund automation — same as before, that's
+still handled directly with the student outside the app.
+
+**History**: new [/api/admin/group-lessons/history](app/api/admin/group-lessons/history/route.ts)
+route — cancelled lessons (any date) OR already-past ones, with an
+optional date-range filter, same attendee-roster shape as the upcoming
+list plus `cancelledAt`/`cancelReason`. New collapsed-by-default "Show
+previous group lessons" section at the bottom of the page (same
+toggle pattern as the student page's "Show all sessions this billing
+cycle") — read-only, no register/cancel actions, just a look-back.
+
+Verified end-to-end against real production, not just typechecked:
+created a throwaway group lesson via service role, cancelled it through
+the real RLS-scoped admin path (confirmed the update succeeds, the
+lesson disappears from the upcoming query, and shows up correctly in
+the history query with its reason), then deleted it. `npx tsc --noEmit -p .`
+and `next build` both clean. No migration — both `cancelled_at` and
+`cancel_reason` already existed on `group_lessons`.
+
 ## Finance's "Attendance check" now drills down to the actual sessions (2026-09-08)
 
 You asked to be able to see which attendance isn't marked yet for a

@@ -34,6 +34,10 @@ interface GroupLesson {
   coachName: string;
   attendees: Attendee[];
 }
+interface PastGroupLesson extends GroupLesson {
+  cancelledAt: string | null;
+  cancelReason: string | null;
+}
 interface RecurringSeries {
   id: string;
   coachId: string;
@@ -421,9 +425,126 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
         Upcoming group lessons
       </h2>
       {lessons.length === 0 && <p className={styles.emptyState}>None scheduled.</p>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
         {lessons.map((lesson) => (
           <GroupLessonCard key={lesson.id} lesson={lesson} students={students} onRegistered={load} />
+        ))}
+      </div>
+
+      <GroupLessonHistory />
+    </div>
+  );
+}
+
+// Collapsed by default (same "Show all sessions this billing cycle"
+// pattern used on the student page) — cancelled lessons at any date, plus
+// past ones that ran, neither of which the main GET (upcoming-only,
+// not-cancelled) ever returns. No register/cancel actions here — this is
+// a look-back, not a management view.
+function GroupLessonHistory() {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lessons, setLessons] = useState<PastGroupLesson[]>([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams();
+    if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
+    if (to) params.set("to", new Date(`${to}T23:59:59.999`).toISOString());
+
+    fetch(`/api/admin/group-lessons/history?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+          return;
+        }
+        setLessons(data.groupLessons ?? []);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (open) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, from, to]);
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className={styles.linkBtn}>
+        Show previous group lessons
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>Previous group lessons</h2>
+        <button onClick={() => setOpen(false)} className={styles.linkBtnSmall}>
+          Hide
+        </button>
+      </div>
+      <div className={styles.rowForm} style={{ marginBottom: 12 }}>
+        <div className={styles.field}>
+          <label>From</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={styles.input} />
+        </div>
+        <div className={styles.field}>
+          <label>To</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={styles.input} />
+        </div>
+        {(from || to) && (
+          <button
+            onClick={() => {
+              setFrom("");
+              setTo("");
+            }}
+            className={styles.linkBtnSmall}
+          >
+            Clear dates
+          </button>
+        )}
+      </div>
+
+      {error && <p className={styles.errorText}>{error}</p>}
+      {loading && <p className={styles.mutedText}>Loading…</p>}
+      {!loading && lessons.length === 0 && <p className={styles.emptyState}>Nothing found for these filters.</p>}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {lessons.map((lesson) => (
+          <div key={lesson.id} className={styles.panel} style={{ marginBottom: 0 }}>
+            <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
+            <p className={styles.mutedText}>
+              <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach{" "}
+              {lesson.coachName} · {lesson.attendees.length}
+              {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
+            </p>
+            {lesson.cancelledAt ? (
+              <p className={styles.errorText} style={{ marginTop: 4 }}>
+                Cancelled <FormattedDateTime value={lesson.cancelledAt} />
+                {lesson.cancelReason ? ` — ${lesson.cancelReason}` : ""}
+              </p>
+            ) : (
+              <p className={styles.mutedText} style={{ marginTop: 4 }}>Held as scheduled.</p>
+            )}
+            {lesson.attendees.length > 0 && (
+              <ul className={styles.list} style={{ marginTop: 8 }}>
+                {lesson.attendees.map((a) => (
+                  <li key={a.registrationId} className={styles.listItem}>
+                    <Link href={`/admin/students/${a.studentId}`} className={styles.rowName}>
+                      {a.studentName}
+                    </Link>{" "}
+                    <span className={styles.mutedText}>({a.status})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -594,8 +715,33 @@ function GroupLessonCard({
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelMode, setCancelMode] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
+
+  async function handleCancel() {
+    if (!cancelReason.trim()) return;
+    setCancelling(true);
+    setCancelError(null);
+
+    const res = await fetch("/api/admin/cancel-group-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupLessonId: lesson.id, reason: cancelReason.trim() }),
+    });
+    setCancelling(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setCancelError(body.error ?? "Couldn't cancel that lesson.");
+      return;
+    }
+
+    onRegistered();
+  }
 
   async function handleRemove(registrationId: string) {
     setRemovingId(registrationId);
@@ -641,15 +787,57 @@ function GroupLessonCard({
 
   return (
     <div className={styles.panel} style={{ marginBottom: 0 }}>
-      <div style={{ marginBottom: 8 }}>
-        <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
-        <p className={styles.mutedText}>
-          <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach {lesson.coachName}
-          {" · "}
-          {lesson.attendees.length}
-          {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
-        </p>
+      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div>
+          <p className={styles.rowName}>{lesson.topic || "Group Lesson"}</p>
+          <p className={styles.mutedText}>
+            <FormattedDateTime value={lesson.scheduledAt} /> · {lesson.durationMinutes} min · Coach {lesson.coachName}
+            {" · "}
+            {lesson.attendees.length}
+            {lesson.maxStudents ? `/${lesson.maxStudents}` : ""} registered
+          </p>
+        </div>
+        {!cancelMode && (
+          <button onClick={() => setCancelMode(true)} className={styles.dangerLink} style={{ flexShrink: 0 }}>
+            Cancel lesson
+          </button>
+        )}
       </div>
+
+      {cancelMode && (
+        <div className={styles.warnPanel} style={{ marginBottom: 12 }}>
+          <p style={{ marginBottom: 4, fontWeight: 600 }}>Cancel this group lesson — reason required</p>
+          <p className={styles.mutedText} style={{ marginBottom: 8 }}>
+            Notifies nobody automatically and refunds nothing — handle attendee refunds directly, outside the app,
+            same as always for group lessons.
+          </p>
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={2}
+            placeholder="Why is this lesson being cancelled?"
+            className={styles.input}
+            style={{ display: "block", width: "100%", marginBottom: 8 }}
+          />
+          {cancelError && <p className={styles.errorText} style={{ marginBottom: 8 }}>{cancelError}</p>}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={handleCancel} disabled={cancelling || !cancelReason.trim()} className={styles.dangerBtn}>
+              {cancelling ? "Cancelling…" : "Confirm cancel"}
+            </button>
+            <button
+              onClick={() => {
+                setCancelMode(false);
+                setCancelReason("");
+                setCancelError(null);
+              }}
+              disabled={cancelling}
+              className={styles.linkBtnSmall}
+            >
+              Never mind
+            </button>
+          </div>
+        </div>
+      )}
 
       {lesson.attendees.length > 0 && (
         <ul className={styles.list} style={{ marginBottom: 12 }}>
