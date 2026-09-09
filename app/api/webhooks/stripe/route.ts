@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe, stripeOpus } from "@/lib/stripe/client";
-import { TIER_BY_STRIPE_PRICE_ID } from "@/lib/stripe/tiers";
+import { resolveTierFromPrice } from "@/lib/stripe/tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
@@ -250,8 +250,14 @@ function deriveSubscriptionStatus(subscription: Stripe.Subscription): "active" |
 // across "own" and "opus" could resolve to the wrong student.
 async function handleSubscriptionUpdated(admin: AdminClient, subscription: Stripe.Subscription, account: StripeAccount) {
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-  const priceId = subscription.items.data[0]?.price.id;
-  const tier = priceId ? TIER_BY_STRIPE_PRICE_ID[priceId] : undefined;
+  const price = subscription.items.data[0]?.price;
+  // Subscription items always carry the full Price object inline
+  // (unlike top-level relations such as `customer`, which need an
+  // explicit `expand`), so its metadata is available here with no extra
+  // API call. Resolved from metadata, not a fixed price-ID list — see
+  // resolveTierFromPrice's own header comment for why.
+  const tier = resolveTierFromPrice(price) ?? undefined;
+  const priceId = price?.id;
 
   const { data: student } = await admin
     .from("students")
