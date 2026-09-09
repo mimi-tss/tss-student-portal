@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Subscription tier now resolves from Stripe Price metadata, not a fixed price-ID list (2026-09-08)
+
+You flagged that students pay different amounts for the same tier
+depending on when they signed up or what promo they were on — real,
+permanent per-cohort pricing (not a temporary discount), across two
+Stripe accounts. A hardcoded "the Suite price is price_XYZ" map (what
+`TIER_BY_STRIPE_PRICE_ID` was) can't represent that; coupons are the
+wrong tool too (meant to be removable/temporary, not a permanent rate).
+Confirmed with you: resolve tier from Price metadata instead of a
+maintained ID list, since it means onboarding a newly-discovered legacy
+price later is a Stripe Dashboard edit, not a code deploy.
+
+[lib/stripe/tiers.ts](lib/stripe/tiers.ts)'s new `resolveTierFromPrice()`
+reads `price.metadata.tier` live. `STRIPE_PRICE_BY_TIER` (the 4 env-var
+prices) stays — that's still the one canonical price new signups get
+charged (`app/api/billing/checkout`) — but tier *recognition* on an
+existing subscription (`app/api/webhooks/stripe/route.ts`'s
+`handleSubscriptionUpdated`) now reads the subscription item's own Price
+object, which Stripe already includes inline (no extra API call/expand
+needed, unlike `customer`/`default_payment_method`).
+
+**Needs you before this actually works**: every Price that can appear on
+a real subscription — the 4 current ones AND every legacy/grandfathered
+one, in both the current and Opus accounts — needs `tier` (`lite`/
+`suite`/`pro`/`elite`) set in its own Stripe Dashboard metadata. A Price
+without that metadata resolves to `null` and the student's local tier
+mirror is simply left as whatever it already was, rather than guessing
+or wiping it — so nothing breaks silently, but tier also won't get
+*fixed* until the metadata is added. Worth doing before relying on this
+for any Opus customer whose tier isn't already correct in our DB.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Finance rollup now shows each session's status (2026-09-08)
 
 You wanted to see, per line in the payroll rollup, whether a session
