@@ -3,6 +3,30 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Finance rollup now shows each session's status (2026-09-08)
+
+You wanted to see, per line in the payroll rollup, whether a session
+was attended, a late cancel, or a no-show — a coach gets paid for all
+three per this studio's policy (`PAID_STATUSES`,
+[lib/payroll/calculate.ts](lib/payroll/calculate.ts)), so the data was
+already flowing through as `sess.status`, just never rendered.
+
+Added a small badge next to each expanded session row in
+[finance-client.tsx](<app/(admin)/admin/finance/finance-client.tsx>) —
+muted grey for "Attended", coral for the exceptions (No-show,
+Late-forfeit, "Late cancel — no credit"), same phrasing already used
+in session-history-client.tsx for consistency. A group lesson's
+synthetic "occurred" status isn't a real per-student outcome, so those
+rows just show no badge, unchanged.
+
+`npx tsc --noEmit -p .` clean; live-verified the badge colors/contrast
+in the Browser pane via a throwaway static test route (removed after).
+`next build` currently fails, but only on an unrelated file — a
+concurrent session's in-progress Stripe webhook work
+(`app/api/webhooks/stripe/route.ts`, `lib/stripe/tiers.ts`) is
+mid-edit and references a not-yet-defined export; confirmed this
+file's own diff is isolated and untouched by that. No migration.
+
 ## Fixed Unmatch not actually reopening the candidate for Imelda (2026-09-08)
 
 You unmatched Imelda's wrongly-matched recording (shipped a few hours

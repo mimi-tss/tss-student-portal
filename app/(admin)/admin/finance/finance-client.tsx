@@ -63,6 +63,23 @@ interface GenerateResult {
   perCoach: GeneratedRunCoachSummary[];
 }
 
+// A 1:1 session's status is always one of PAID_STATUSES
+// (lib/payroll/calculate.ts) — a coach gets paid for a no-show or late
+// cancel same as an attended lesson, per this studio's policy, so this
+// list existing at all here isn't the surprising part; not being able
+// to tell WHICH of the three it was per row, without opening the
+// student's own session history, was the actual gap. Same phrasing
+// already used in session-history-client.tsx for consistency. A group
+// lesson's synthetic "occurred" status isn't a real attendance outcome
+// (no single student to attend/no-show), so it's deliberately not in
+// this map — that row just shows no badge at all.
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  attended: "Attended",
+  "no-show": "No-show",
+  "late-forfeit": "Late-forfeit",
+  "cancelled-no-notice": "Late cancel — no credit",
+};
+
 function ModalOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <div
@@ -493,6 +510,14 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                       <tr key={sess.id}>
                         <td colSpan={2} className={styles.mutedText} style={{ paddingLeft: 24 }}>
                           <FormattedDateTime value={sess.scheduledAt} /> — {sess.studentName}
+                          {SESSION_STATUS_LABEL[sess.status] && (
+                            <span
+                              className={sess.status === "attended" ? styles.badgeMuted : styles.badgeWarn}
+                              style={{ marginLeft: 8, fontSize: 10 }}
+                            >
+                              {SESSION_STATUS_LABEL[sess.status]}
+                            </span>
+                          )}
                           {sess.isReferralBonus && (
                             <span className={styles.badge} style={{ marginLeft: 8, fontSize: 10 }}>
                               referral +$10/hr
