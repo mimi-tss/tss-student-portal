@@ -3,6 +3,42 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed group-class Join button downloading a .json file on mobile Safari (2026-09-09)
+
+Nikki relayed a report via Slack: two group-class students, plus Nicole
+the day before, were "being asked to download a .json file to get into
+class." Checked Nikki's own `coaches.meet_link` directly in production
+first — clean, valid `meet.google.com/fyj-rnyj-hvq`, not corrupted, so
+this wasn't bad data. Confirmed the report was on real mobile Safari,
+not the Kajabi Branded App's WebView, ruling out the more common
+"Meet inside a WebView serves raw JSON" failure mode.
+
+Root cause: [JoinButton](<app/(student)/student/dashboard/join-button.tsx>)
+was a plain `<a href={meetLink} target="_blank">`. The portal itself is
+iframed inside Kajabi's site (`app.tarasimonstudios.com` inside
+`portal.tarasimonstudios.com` — same embed [login-form.tsx](app/login/login-form.tsx)'s
+Storage Access API fix already deals with). A same-tab `target="_blank"`
+click from inside that iframe asks the browser to spawn a popup — on
+mobile Safari, nested inside someone else's iframe, that doesn't
+reliably open Meet as a clean top-level page. Meet's servers still
+respond, but with nowhere sane to render its app shell the browser is
+left holding Meet's raw JSON response and offers it as a download —
+exactly the symptom reported.
+
+Fix: the click handler now navigates `window.top` straight to the meet
+link instead of relying on a popup — writing a cross-origin
+`window.top.location` is allowed as a user-activation top navigation
+(the same escape hatch framebusting code relies on), so it breaks
+straight out of Kajabi's iframe and Meet loads as a normal, unframed
+page in the real browser. Applies to every coach's meet_link — one
+shared button for both 1:1 sessions and group lessons, not something
+scoped to Nikki alone.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested
+against the real iframe/mobile-Safari combination (no login here) —
+worth confirming with Nikki's students next time this comes up. No
+migration.
+
 ## Fixed exercises still not playing on phone — no Range support (2026-09-09)
 
 Emily Michael reported the same "couldn't load" symptom on her phone
