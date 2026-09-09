@@ -1,8 +1,19 @@
 import type { createClient } from "@/lib/supabase/server";
-import { occurrencesFor, WEEKS_AHEAD } from "@/lib/scheduling/recurring";
+import { occurrencesFor } from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+// Deliberately much shorter than 1:1 sessions' own WEEKS_AHEAD (52) —
+// group lessons materialize a rolling 4-week window instead of the whole
+// year at once, so students don't book a slot a year out and so admin
+// can change a series' schedule/topic/coach without having to also clean
+// up dozens of already-created future occurrences first. The window
+// rolls forward on its own: materializeRecurringGroupLessons always
+// computes from "now," and the daily materialize-recurring cron re-runs
+// it, so as one week passes a new one opens up 4 weeks out — no separate
+// "advance by a week" logic needed beyond that.
+const GROUP_LESSON_WEEKS_AHEAD = 4;
 
 export interface GroupLessonAttendee {
   registrationId: string;
@@ -401,14 +412,6 @@ export interface RecurringGroupLesson {
   maxStudents: number | null;
   startDate: string;
   endDate: string | null;
-  active: boolean;
-  // Only populated for inactive series (see getAllRecurringGroupLessons) —
-  // future, non-cancelled group_lessons rows still pointing at this series
-  // even though "Stop" only ever flips `active` and never touches
-  // already-materialized occurrences. Undefined for active series, where
-  // it isn't relevant (materializeRecurringGroupLessons keeps generating
-  // more anyway).
-  pendingOccurrences?: number;
 }
 
 // Active recurring group lesson series, admin's management view (mirrors
@@ -433,59 +436,6 @@ export async function getActiveRecurringGroupLessons(supabase: SupabaseClient): 
     maxStudents: r.max_students,
     startDate: r.start_date,
     endDate: r.end_date,
-    active: true,
-  }));
-}
-
-// Active series plus stopped ones — a stopped series (`active: false`)
-// otherwise vanishes from admin entirely, even though "Stop" never
-// cancels the future occurrences already materialized for it (by
-// design — see deactivateRecurringGroupLessonSeries). Without this, those
-// leftover occurrences just keep appearing individually under "Upcoming
-// group lessons" with no visible link back to the (now-invisible) series
-// that created them, and no way to tell there even was one. Surfaces a
-// pending-occurrence count for each stopped series so that's no longer a
-// database-only mystery.
-export async function getAllRecurringGroupLessons(supabase: SupabaseClient): Promise<RecurringGroupLesson[]> {
-  const { data } = await supabase
-    .from("recurring_group_lessons")
-    .select(
-      "id, coach_id, topic, day_of_week, start_time, duration_minutes, max_students, start_date, end_date, active, coaches(name)",
-    )
-    .order("active", { ascending: false })
-    .order("day_of_week")
-    .order("start_time");
-
-  const series = data ?? [];
-
-  const pendingCounts = await Promise.all(
-    series.map((r) =>
-      r.active
-        ? Promise.resolve(undefined)
-        : supabase
-            .from("group_lessons")
-            .select("id", { count: "exact", head: true })
-            .eq("recurring_group_lesson_id", r.id)
-            .is("cancelled_at", null)
-            .gte("scheduled_at", new Date().toISOString())
-            .then(({ count }: { count: number | null }) => count ?? 0),
-    ),
-  );
-
-  return series.map((r, i) => ({
-    id: r.id,
-    coachId: r.coach_id,
-    coachName:
-      unwrapJoin(r.coaches as unknown as { name: string } | { name: string }[] | null)?.name ?? "Coach",
-    topic: r.topic,
-    dayOfWeek: r.day_of_week,
-    startTime: r.start_time,
-    durationMinutes: r.duration_minutes,
-    maxStudents: r.max_students,
-    startDate: r.start_date,
-    endDate: r.end_date,
-    active: r.active,
-    pendingOccurrences: pendingCounts[i],
   }));
 }
 
@@ -648,7 +598,15 @@ export async function materializeRecurringGroupLessons(
     const startDate = s.start_date ? new Date(`${s.start_date}T00:00:00Z`) : null;
     const effectiveFrom = startDate && startDate > now ? startDate : now;
 
-    let instants = occurrencesFor(s.day_of_week, s.start_time, timeZone, effectiveFrom, WEEKS_AHEAD, null, holidayDates);
+    let instants = occurrencesFor(
+      s.day_of_week,
+      s.start_time,
+      timeZone,
+      effectiveFrom,
+      GROUP_LESSON_WEEKS_AHEAD,
+      null,
+      holidayDates,
+    );
 
     if (s.end_date) {
       const cutoff = new Date(`${s.end_date}T23:59:59.999Z`);

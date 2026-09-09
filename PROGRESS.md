@@ -3,6 +3,46 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Group lessons now materialize a rolling 4-week window, not 52 (2026-09-08)
+
+Direct follow-up to the "Stopped series" panel from earlier today — you
+said to remove it and just fix the actual root cause instead: **reverted
+that whole visibility feature** (`getAllRecurringGroupLessons`, the
+"Stopped series" section, the `active`/`pendingOccurrences` fields —
+back to `getActiveRecurringGroupLessons` and the plain series list, no
+functional change from before that feature existed).
+
+The real fix: [materializeRecurringGroupLessons](lib/group-lessons.ts)
+was using the same `WEEKS_AHEAD` constant (52) that 1:1 recurring
+sessions use, which is why a brand-new series jumps straight to a
+year of already-created occurrences. New `GROUP_LESSON_WEEKS_AHEAD =
+4`, group-lesson-specific — a rolling window, not a fixed one: since
+this function always computes from "now" and the daily
+materialize-recurring cron re-runs it, one more week opens up on its
+own as each week passes, no separate advance-the-window logic needed.
+Students can't book a year out anymore, and a stop date set later stays
+meaningful (nothing far-future to worry about).
+
+Reactivated the **Semi-Private Vocal Group Class** series itself
+(`active: true`, cleared its stale `end_date: 2026-09-10` back to
+open-ended) so it shows under "Recurring series" again, as asked.
+**Did not touch any of its 52 already-materialized future
+occurrences** — checked first, and unlike the assumption "don't delete
+the next 4 weeks, we already have students in it," it turned out
+*every one* of the 52 (out to 2027-09-01) already has 2 real students
+registered via "Register for whole series," not just the near-term
+ones. Nothing was safe to prune without unregistering real students
+from real future classes, so nothing was touched — the 4-week window
+only governs new generation from here forward; it doesn't retroactively
+undo an already-registered series. Flagging this since it means Semi-
+Private itself won't visibly shrink to 4 weeks until those far-future
+dates simply pass — if you want those far-out registrations reviewed or
+trimmed, that's a separate, deliberate call only you should make.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration —
+`active`/`end_date` already existed; this was a data correction via a
+real authenticated admin session, not a schema change.
+
 ## Two real bugs found from your own cancel testing: payroll, and a missed credit prompt (2026-09-08)
 
 You cancelled a real "BOOTCAMP N1" as "nikki no show" (6/6 registered,

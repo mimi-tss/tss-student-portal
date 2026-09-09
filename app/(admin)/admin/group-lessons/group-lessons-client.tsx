@@ -49,8 +49,6 @@ interface RecurringSeries {
   maxStudents: number | null;
   startDate: string;
   endDate: string | null;
-  active: boolean;
-  pendingOccurrences?: number;
 }
 
 // "Today" as a plain YYYY-MM-DD in a given zone — matters right at a
@@ -80,8 +78,6 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
 
   const selectedCoachZone = coaches.find((c) => c.id === coachId)?.timezone ?? DEFAULT_TIMEZONE;
-  const activeSeries = series.filter((s) => s.active);
-  const stoppedSeries = series.filter((s) => !s.active);
 
   useEffect(() => {
     setStartDate((d) => d || todayInZone(selectedCoachZone));
@@ -351,7 +347,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
         </div>
       </div>
 
-      {activeSeries.length > 0 && (
+      {series.length > 0 && (
         <>
           <h2
             style={{
@@ -366,7 +362,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
             Recurring series
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {activeSeries.map((s) => {
+            {series.map((s) => {
               // startTime is wall-clock in the COACH's own zone — resolve
               // to a real instant off that, then reformat (weekday
               // included, since crossing into the viewer's zone can shift
@@ -412,41 +408,6 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
               </div>
               );
             })}
-          </div>
-        </>
-      )}
-
-      {stoppedSeries.length > 0 && (
-        <>
-          <h2
-            style={{
-              margin: "0 0 12px",
-              fontSize: 15,
-              fontWeight: 600,
-              color: "var(--text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}
-          >
-            Stopped series
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {stoppedSeries.map((s) => (
-              <div key={s.id} className={styles.panel} style={{ marginBottom: 0 }}>
-                <p className={styles.rowName}>{s.topic || "Group Lesson"}</p>
-                <p className={styles.mutedText}>
-                  Was every {DAY_NAMES[s.dayOfWeek]} at {s.startTime} (Coach&apos;s zone) · {s.durationMinutes} min ·
-                  Coach {s.coachName}
-                  {s.maxStudents ? ` · cap ${s.maxStudents}` : ""}
-                  {" · stopped, no longer generating new lessons"}
-                </p>
-                <p className={styles.errorText} style={{ marginTop: 4 }}>
-                  {s.pendingOccurrences && s.pendingOccurrences > 0
-                    ? `${s.pendingOccurrences} future occurrence${s.pendingOccurrences === 1 ? "" : "s"} still scheduled below under "Upcoming group lessons" — stopping the series didn't cancel these.`
-                    : "No future occurrences left."}
-                </p>
-              </div>
-            ))}
           </div>
         </>
       )}
