@@ -570,7 +570,7 @@ function GroupLessonHistory() {
                 <CancelGroupLessonButton
                   groupLessonId={lesson.id}
                   hasTopic={!!lesson.topic?.trim()}
-                  registeredCount={lesson.attendees.filter((a) => a.status === "registered").length}
+                  registeredCount={lesson.attendees.length}
                   onCancelled={load}
                 />
               )}
@@ -826,7 +826,7 @@ function GroupLessonCard({
         <CancelGroupLessonButton
           groupLessonId={lesson.id}
           hasTopic={!!lesson.topic?.trim()}
-          registeredCount={lesson.attendees.filter((a) => a.status === "registered").length}
+          registeredCount={lesson.attendees.length}
           onCancelled={onRegistered}
         />
       </div>
@@ -909,11 +909,15 @@ function CancelGroupLessonButton({
   const [cancelling, setCancelling] = useState(false);
   const [cancelMode, setCancelMode] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  // Whether the studio owes registered students a makeup is genuinely
-  // case-by-case (a duplicate/mistaken lesson vs. one where students
-  // already got what they paid for some other way) — defaults off so a
-  // routine mistake-cleanup doesn't silently hand out credits nobody
-  // asked for.
+  // Whether the studio owes the roster a makeup is genuinely case-by-case
+  // (a duplicate/mistaken lesson with nobody real on it vs. a coach
+  // no-show where everyone's owed one) — defaults off so a routine
+  // mistake-cleanup doesn't silently hand out credits nobody asked for.
+  // registeredCount counts every attendee regardless of status
+  // (attended/no-show included, not just literally 'registered') — a
+  // lesson cancelled after the fact already has real attendance marks on
+  // it, and the credit question here is about the whole roster, not
+  // whatever got marked before the cancellation was discovered.
   const [issueCredit, setIssueCredit] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
@@ -969,7 +973,7 @@ function CancelGroupLessonButton({
             disabled={!hasTopic}
             onChange={(e) => setIssueCredit(e.target.checked)}
           />
-          Issue a makeup credit to all {registeredCount} registered student{registeredCount === 1 ? "" : "s"}
+          Issue a makeup credit to all {registeredCount} student{registeredCount === 1 ? "" : "s"} on the roster
           {!hasTopic && " (needs a topic set on this lesson first)"}
         </label>
       )}

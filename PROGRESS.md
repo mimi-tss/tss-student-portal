@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Two real bugs found from your own cancel testing: payroll, and a missed credit prompt (2026-09-08)
+
+You cancelled a real "BOOTCAMP N1" as "nikki no show" (6/6 registered,
+attendance already marked attended/no-show per student) and the credit
+checkbox never showed up. Asked separately whether a cancelled lesson
+gets pulled from coach payroll and what happens on their calendar.
+Investigated both against real code and real production data rather
+than assuming.
+
+**Payroll — real bug, now fixed.** [fetchPayableGroupLessons](lib/payroll/calculate.ts)
+has never once checked `cancelled_at` — it only asks "has this lesson's
+time already passed," so a coach would get paid for a group lesson
+even after admin cancels it for something like a no-show. This
+predates today's cancel-past-lessons feature (a lesson auto-cancelled
+~24h ahead by the understaffed cron, then paid once its date rolled
+past, would've hit the same bug) — my earlier work just made it easy to
+trigger on purpose. Checked production directly: no `payroll_entries`
+row existed yet for any of the 4 already-cancelled lessons, so nothing
+stale needed cleaning up, just the query fix (`.is("cancelled_at",
+null)`, same exclusion logic `PAID_STATUSES` already applies to 1:1
+sessions).
+
+**Coach's calendar — already correct, no bug.** `getCoachGroupLessons`
+(backs the coach dashboard's "today" list) already filters
+`cancelled_at`, so a cancelled lesson disappears from the coach's own
+view immediately. Nothing to fix there.
+
+**The missing credit prompt — a bug in today's own work.** The
+checkbox's `registeredCount` filtered attendees to
+`status === "registered"` — fine for cancelling a *future* lesson (no
+attendance marked yet, everyone's still "registered"), but this lesson
+had already happened: its registrations were already marked
+attended/no-show by the coach, so the filter found zero eligible
+students even with a full 6/6 roster. Fixed both sides (the
+`cancel-group-lesson` route's actual credit-issuing list, and the
+client's checkbox-visibility count) to count every attendee on the
+roster regardless of status — the credit question here is "does the
+studio owe this whole class a makeup," not "who's still literally
+marked as merely-registered." Verified directly against this real
+lesson: eligible count is now 6, matching its full roster.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration.
+
 ## Found + surfaced why a stopped recurring series still shows lessons (2026-09-08)
 
 You spotted "Semi-Private Vocal Group Class" appearing weekly under

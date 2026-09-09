@@ -36,11 +36,18 @@ export async function POST(req: NextRequest) {
   if (!lesson) return NextResponse.json({ error: "group lesson not found" }, { status: 404 });
   if (lesson.cancelled_at) return NextResponse.json({ error: "already cancelled" }, { status: 409 });
 
+  // Every remaining attendee, regardless of status — not just
+  // status === 'registered'. Cancelling a lesson that already happened
+  // (e.g. the coach themselves no-showed, discovered after the fact) means
+  // its registrations already carry real attendance marks
+  // ('attended'/'no-show'), so filtering to 'registered' only would find
+  // nobody eligible even when every single attendee is owed a makeup. A
+  // registration only ever leaves this list by being deleted outright
+  // (the "Remove" action), never by a status change — so nothing here was
+  // already unregistered.
   const registeredStudentIds = (
     (lesson.group_lesson_registrations as unknown as { student_id: string; status: string }[] | null) ?? []
-  )
-    .filter((r) => r.status === "registered")
-    .map((r) => r.student_id);
+  ).map((r) => r.student_id);
 
   // A credit is redeemed by matching topic (getRedeemableGroupLessons) and
   // the column itself is not-null — an untitled lesson has nothing for a

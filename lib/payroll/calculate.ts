@@ -66,7 +66,11 @@ async function fetchPayableSessions(
 // regardless of how many students attended — gated on the lesson
 // actually having happened, not on any per-attendee marking, since
 // attendance here tracks individual students, not whether the coach
-// taught the class.
+// taught the class. Excludes cancelled lessons outright: a cancellation
+// after the fact (e.g. the coach themselves no-showed) means the class
+// never actually happened, same reasoning as a session's own
+// cancelled-with-notice status being excluded from PAID_STATUSES above —
+// group_lessons just tracks it as cancelled_at instead of a status enum.
 async function fetchPayableGroupLessons(
   supabase: SupabaseClient,
   coachId: string,
@@ -77,6 +81,7 @@ async function fetchPayableGroupLessons(
     .from("group_lessons")
     .select("id, topic, scheduled_at, duration_minutes, group_lesson_registrations(id)")
     .eq("coach_id", coachId)
+    .is("cancelled_at", null)
     .gte("scheduled_at", periodStart)
     .lt("scheduled_at", periodEnd)
     .order("scheduled_at");
