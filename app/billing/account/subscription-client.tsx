@@ -135,9 +135,20 @@ export default function SubscriptionClient() {
   if (!detail?.linked) {
     return (
       <div className={styles.card} style={{ maxWidth: 480, margin: "0 0 24px", textAlign: "left" }}>
-        <p className={styles.helpText} style={{ margin: 0 }}>
-          We couldn&apos;t find a billing account for you yet — contact the studio.
-        </p>
+        {error ? (
+          // A real server error (e.g. a Stripe API failure) looked
+          // IDENTICAL to a genuine "not linked" response here before this
+          // fix — both left `detail` null, and this branch only ever
+          // showed the generic "couldn't find" copy regardless of which
+          // one actually happened, masking real failures during setup.
+          <p className={styles.errorText} style={{ margin: 0 }}>
+            {error}
+          </p>
+        ) : (
+          <p className={styles.helpText} style={{ margin: 0 }}>
+            We couldn&apos;t find a billing account for you yet — contact the studio.
+          </p>
+        )}
       </div>
     );
   }
