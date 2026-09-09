@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Added monthly/yearly billing choice to the pricing page (2026-09-09)
+
+Follow-up to the same-day metadata-based tier pricing work. While
+setting up real Stripe Products you added a monthly AND yearly Price to
+Suite ($29.99/mo vs $299.99/yr) as real future options (not
+grandfathered legacy pricing — separately confirmed those don't show on
+the public checkout page regardless, since checkout only ever pulls
+from `STRIPE_PRICE_BY_TIER`, never a client-supplied price ID). You
+asked for new signups to actually get to choose the interval.
+
+[lib/stripe/tiers.ts](lib/stripe/tiers.ts)'s `STRIPE_PRICE_BY_TIER` is
+now `Record<Tier, {monthly, yearly}>` — env vars renamed
+`STRIPE_PRICE_<TIER>_MONTHLY`/`_YEARLY` (yearly optional per tier; a
+free Lite tier just leaves it unset). `app/api/billing/checkout/route.ts`
+now takes an `interval` param (defaults `"monthly"`), 400s cleanly if
+that tier has no price configured for the requested interval.
+
+New [app/api/billing/pricing/route.ts](app/api/billing/pricing/route.ts)
+fetches live amounts from Stripe for the pricing page to display —
+deliberately not hardcoded copy, so a Dashboard price change shows up
+here with no code edit. [pricing-client.tsx](app/billing/pricing-client.tsx)
+gives each tier card its own Monthly/Yearly toggle (not one global
+switch) since availability differs per tier — a tier with no yearly
+price just never shows a toggle.
+
+`npx tsc --noEmit -p .` and `next build` both clean — confirmed the new
+pricing route builds/serves fine even with all price env vars unset
+(returns nulls, doesn't crash, same lazy-Stripe-client discipline as
+the rest of this build). No real Stripe prices configured yet in this
+environment to verify real amounts display correctly — worth a look
+once `STRIPE_PRICE_*_MONTHLY/_YEARLY` are set in Vercel.
+
 ## Admin can now spend a student's group-lesson credit when registering them (2026-09-08)
 
 Direct follow-up to making group-lesson credits visible at all (just

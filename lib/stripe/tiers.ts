@@ -1,15 +1,22 @@
 import type Stripe from "stripe";
 import type { Tier } from "@/types/database";
 
-// The ONE canonical, current price per tier — used only to pick what a
-// brand-new signup gets charged (app/api/billing/checkout). Price IDs
-// come from Stripe Dashboard → Product catalog (test and live mode each
-// have their own) — set per environment in Vercel, not hardcoded here.
-export const STRIPE_PRICE_BY_TIER: Record<Tier, string> = {
-  lite: process.env.STRIPE_PRICE_LITE!,
-  suite: process.env.STRIPE_PRICE_SUITE!,
-  pro: process.env.STRIPE_PRICE_PRO!,
-  elite: process.env.STRIPE_PRICE_ELITE!,
+export type BillingInterval = "monthly" | "yearly";
+
+// The canonical, CURRENT prices per tier — used only to pick what a
+// brand-new signup gets charged (app/api/billing/checkout). Every other
+// price that exists in Stripe (grandfathered/legacy rates) is
+// deliberately never referenced here — that's what keeps it invisible to
+// new signups, see app/api/billing/checkout/route.ts's own comment.
+// `yearly` is optional per tier (e.g. a free Lite tier has no reason to
+// offer a yearly option) — env var simply left unset. Price IDs come
+// from Stripe Dashboard → Product catalog (test and live mode each have
+// their own), set per environment in Vercel, not hardcoded here.
+export const STRIPE_PRICE_BY_TIER: Record<Tier, Record<BillingInterval, string | null>> = {
+  lite: { monthly: process.env.STRIPE_PRICE_LITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_LITE_YEARLY ?? null },
+  suite: { monthly: process.env.STRIPE_PRICE_SUITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_SUITE_YEARLY ?? null },
+  pro: { monthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_PRO_YEARLY ?? null },
+  elite: { monthly: process.env.STRIPE_PRICE_ELITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_ELITE_YEARLY ?? null },
 };
 
 export const TIER_LABEL: Record<Tier, string> = {
