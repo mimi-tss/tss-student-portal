@@ -3,6 +3,42 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed exercises still not playing on phone — no Range support (2026-09-09)
+
+Emily Michael reported the same "couldn't load" symptom on her phone
+that the video/mp4→audio/mp4 Content-Type fix (2026-09-08) was meant to
+resolve — that fix was real and necessary, but not sufficient on its
+own. This route
+([app/api/exercises/[id]/audio/route.ts](<app/api/exercises/[id]/audio/route.ts>))
+had **zero HTTP Range support**: every request got the full file back
+with a plain `200`, regardless of any `Range` header the browser sent.
+A mobile browser's `<audio>`/`<video>` element commonly probes with a
+Range request before it'll agree to play anything at all, and refuses
+outright if the server never answers with a real `206 Partial Content`
+— exactly the "can't be loaded" a phone would show, distinct from (and
+in addition to) the Content-Type issue.
+
+[getDriveFileStream](lib/google/drive.ts) now takes an optional `range`
+and relays it straight to Drive's own media endpoint — Drive honors
+Range natively, no extra logic needed on our end beyond passing it
+through and relaying back whatever status/`Content-Range`/
+`Content-Length` Drive returns. The route now reads the incoming
+`Range` header, forwards it, and always advertises `Accept-Ranges:
+bytes` (even on a plain request) so a mobile player knows it's safe to
+use ranges at all against this URL.
+
+Verified this actually works, not just plausible — hit Google's real
+API directly with one of Emily's own assigned exercise files
+(`Yaaaa.mp4`, coach Drive) and a `Range: bytes=0-1023` header: got back
+`status 206`, `content-range: bytes 0-1023/2359708`,
+`content-length: 1024`, and streamed exactly 1024 bytes. Confirmed
+Drive's behavior end-to-end before trusting the code change.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-tested in
+an actual phone browser — no login here — but the underlying Drive
+behavior this depends on is now directly confirmed, not assumed.
+No migration.
+
 ## Fixed coach-calendar week view: off-boundary rows + missing names (2026-09-09)
 
 You reported Tara's week view showing rows at :11/:41 instead of :00/:30,

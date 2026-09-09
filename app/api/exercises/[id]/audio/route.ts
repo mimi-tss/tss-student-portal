@@ -43,15 +43,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!exercise) return new Response("not found", { status: 404 });
 
   try {
-    const { stream, mimeType } = await getDriveFileStream(exercise.mp3_url);
+    const range = req.headers.get("range");
+    const { stream, mimeType, status, contentRange, contentLength } = await getDriveFileStream(
+      exercise.mp3_url,
+      range,
+    );
     const webStream = Readable.toWeb(stream as Readable) as unknown as ReadableStream;
-    return new Response(webStream, {
-      headers: {
-        "Content-Type": mimeType,
-        "Content-Disposition": "inline",
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Content-Disposition": "inline",
+      "Cache-Control": "private, max-age=3600",
+      // Advertised even on a plain (non-ranged) response — this is what
+      // tells a mobile browser's media element it's safe to issue Range
+      // requests for this URL at all, rather than assuming it can't.
+      "Accept-Ranges": "bytes",
+    };
+    if (contentRange) headers["Content-Range"] = contentRange;
+    if (contentLength) headers["Content-Length"] = contentLength;
+
+    return new Response(webStream, { status: range && contentRange ? 206 : 200, headers });
   } catch (err) {
     return new Response(err instanceof Error ? err.message : "playback failed", { status: 500 });
   }

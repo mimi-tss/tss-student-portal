@@ -60,11 +60,25 @@ export async function listAudioFilesInFolder(folderId: string): Promise<DriveAud
 // (which would expose Google's own download/view UI). Caller is
 // responsible for verifying the requester is actually allowed to hear
 // this file before calling.
-export async function getDriveFileStream(fileId: string) {
+//
+// `range` (a raw incoming Range header, e.g. "bytes=0-1023") is relayed
+// straight through to Drive's own media endpoint, which honors it
+// natively — confirmed live this was the real remaining reason exercise
+// playback still failed on a phone even after the Content-Type fix
+// below: the audio-only mimeType wasn't the only problem, this route
+// also never supported Range requests at all, and a mobile browser's
+// <audio>/<video> element commonly refuses to play anything at all
+// unless the server answers its Range probe with a real 206 Partial
+// Content — a full, un-ranged 200 (this route's old, only behavior) is
+// exactly the case iOS Safari treats as "can't be loaded."
+export async function getDriveFileStream(fileId: string, range?: string | null) {
   const drive = getDriveClient();
   const [meta, media] = await Promise.all([
     drive.files.get({ fileId, fields: "mimeType, name", supportsAllDrives: true }),
-    drive.files.get({ fileId, alt: "media", supportsAllDrives: true }, { responseType: "stream" }),
+    drive.files.get(
+      { fileId, alt: "media", supportsAllDrives: true },
+      { responseType: "stream", headers: range ? { Range: range } : undefined },
+    ),
   ]);
 
   // Drive reports every audio-only recording saved in an mp4 container as
@@ -80,10 +94,22 @@ export async function getDriveFileStream(fileId: string) {
   const rawMimeType = meta.data.mimeType ?? "audio/mpeg";
   const mimeType = rawMimeType === "video/mp4" ? "audio/mp4" : rawMimeType;
 
+  // gaxios types its response headers as an opaque, unindexable object
+  // (no index signature) even though it's a plain header map at
+  // runtime — same escape-hatch cast this codebase already uses
+  // elsewhere for a library's loosely-typed response shape.
+  const mediaHeaders = media.headers as unknown as Record<string, string>;
+
   return {
     stream: media.data as unknown as NodeJS.ReadableStream,
     mimeType,
     name: meta.data.name ?? "exercise",
+    // Only meaningful when a Range was actually requested — Drive
+    // answers with 206 + these two headers in that case, and a plain
+    // 200 with neither otherwise.
+    status: media.status,
+    contentRange: mediaHeaders["content-range"],
+    contentLength: mediaHeaders["content-length"],
   };
 }
 
