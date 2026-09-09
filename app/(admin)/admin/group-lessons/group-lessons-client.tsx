@@ -726,29 +726,8 @@ function GroupLessonCard({
   const [stripeReference, setStripeReference] = useState("");
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
-
-  async function handleRemove(registrationId: string) {
-    setRemovingId(registrationId);
-    setError(null);
-
-    const res = await fetch("/api/admin/group-lessons/register", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registrationId }),
-    });
-    setRemovingId(null);
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Couldn't remove that registration.");
-      return;
-    }
-
-    onRegistered();
-  }
 
   async function handleRegister() {
     if (!studentId) return;
@@ -806,13 +785,11 @@ function GroupLessonCard({
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={styles.mutedText}>{a.status}</span>
                 {a.status === "registered" && (
-                  <button
-                    onClick={() => handleRemove(a.registrationId)}
-                    disabled={removingId === a.registrationId}
-                    className={styles.linkBtnSmall}
-                  >
-                    {removingId === a.registrationId ? "Removing…" : "Remove"}
-                  </button>
+                  <RemoveAttendeeControl
+                    registrationId={a.registrationId}
+                    hasTopic={!!lesson.topic?.trim()}
+                    onRemoved={onRegistered}
+                  />
                 )}
               </span>
             </li>
@@ -848,6 +825,87 @@ function GroupLessonCard({
       )}
       {error && <p className={styles.errorText} style={{ marginTop: 4 }}>{error}</p>}
     </div>
+  );
+}
+
+// Removing one student from one occurrence — the same "does the studio
+// owe a makeup" judgment call as CancelGroupLessonButton, just scoped to
+// one attendee instead of the whole roster (e.g. a student was
+// bulk-registered into a series too far ahead by mistake and admin is
+// pulling them back out of the far-future ones, not because the lesson
+// itself is being cancelled).
+function RemoveAttendeeControl({
+  registrationId,
+  hasTopic,
+  onRemoved,
+}: {
+  registrationId: string;
+  hasTopic: boolean;
+  onRemoved: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [issueCredit, setIssueCredit] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRemove() {
+    setRemoving(true);
+    setError(null);
+
+    const res = await fetch("/api/admin/group-lessons/register", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationId, issueCredit }),
+    });
+    setRemoving(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Couldn't remove that registration.");
+      return;
+    }
+
+    onRemoved();
+  }
+
+  if (!confirming) {
+    return (
+      <button onClick={() => setConfirming(true)} className={styles.linkBtnSmall}>
+        Remove
+      </button>
+    );
+  }
+
+  return (
+    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+      <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <input
+          type="checkbox"
+          checked={issueCredit}
+          disabled={!hasTopic}
+          onChange={(e) => setIssueCredit(e.target.checked)}
+        />
+        Issue a makeup credit
+        {!hasTopic && " (needs a topic first)"}
+      </label>
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={handleRemove} disabled={removing} className={styles.dangerLink}>
+          {removing ? "Removing…" : "Confirm remove"}
+        </button>
+        <button
+          onClick={() => {
+            setConfirming(false);
+            setIssueCredit(false);
+            setError(null);
+          }}
+          disabled={removing}
+          className={styles.linkBtnSmall}
+        >
+          Never mind
+        </button>
+      </span>
+      {error && <span className={styles.errorText}>{error}</span>}
+    </span>
   );
 }
 

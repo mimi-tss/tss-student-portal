@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Trimmed the Semi-Private series to 4 weeks; per-student remove now prompts for credit (2026-09-08)
+
+Two closes on the same thread. You confirmed the SQL I handed you for
+trimming Semi-Private Vocal Group Class's 48 far-future (10/7/2026
+through 9/1/2027) occurrences ran successfully — Celeste and Jessica A
+Kluth stay registered in the 4 kept weeks (9/9 through 9/30), unregistered
+from the 48 that were beyond that. Confirmed via your screenshot: 9/9
+still shows 2/6 registered with both names intact.
+
+Then: same credit question I'd already added to whole-lesson cancel,
+but for removing **one student** from **one occurrence** — the
+`SeriesRegisterControl`/`GroupLessonCard` roster's plain "Remove" link
+had no such option, and it's the same "does the studio owe a makeup"
+judgment call, just scoped to one attendee (e.g. pulling a student back
+out of a lesson they were mistakenly bulk-registered into too far
+ahead, same shape as what just happened here). Clicking "Remove" on
+someone in a lesson's roster now expands into a confirm panel with an
+"Issue a makeup credit" checkbox (disabled with a hint if the lesson
+has no topic — same not-null-topic constraint as the lesson-level
+credit) before actually removing them.
+[/api/admin/group-lessons/register](app/api/admin/group-lessons/register/route.ts)'s
+DELETE now takes an `issueCredit` flag, fetches the registration's
+student + lesson topic first, inserts the same `group_lesson_credits`
+row `cancel-group-lesson` does, then removes the registration.
+Scoped to `GroupLessonCard`'s single-occurrence Remove only — didn't
+touch `SeriesRegisterControl`'s separate bulk "Remove from series"
+action, which wasn't part of what came up here.
+
+Verified the fetch-then-delete-then-credit sequence against real
+production with a throwaway registration before shipping. `npx tsc
+--noEmit -p .` and `next build` both clean. No migration.
+
 ## Decided: keep chat/upload notifications assigned-coach-only (2026-09-08)
 
 Came up investigating Nikki's Slack question about Michelle Robichaud
