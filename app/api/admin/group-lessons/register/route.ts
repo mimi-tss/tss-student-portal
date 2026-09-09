@@ -5,8 +5,14 @@ import { registerStudentInGroupLesson, unregisterStudentFromGroupLesson } from "
 // Admin manually confirms the Stripe payment came through, then
 // registers the student — same posture as purchased-addon session
 // credits (migration 0014): no live Stripe integration, no webhook.
+//
+// `creditId` is the admin-side counterpart to the student's own
+// self-serve redeem-credit route: spends an existing unused
+// group_lesson_credit instead of a new payment. Same validation (belongs
+// to this student, unused, unexpired, topic matches this lesson) as that
+// route, just triggered by admin instead of the student.
 export async function POST(req: NextRequest) {
-  const { groupLessonId, studentId, stripeReference } = await req.json();
+  const { groupLessonId, studentId, stripeReference, creditId } = await req.json();
 
   if (!groupLessonId || !studentId) {
     return NextResponse.json({ error: "groupLessonId and studentId required" }, { status: 400 });
@@ -14,15 +20,54 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
+  if (creditId) {
+    const [{ data: lesson }, { data: credit }] = await Promise.all([
+      supabase.from("group_lessons").select("topic").eq("id", groupLessonId).maybeSingle(),
+      supabase
+        .from("group_lesson_credits")
+        .select("id, student_id, topic, used, expires_at")
+        .eq("id", creditId)
+        .maybeSingle(),
+    ]);
+
+    if (!credit || credit.student_id !== studentId) {
+      return NextResponse.json({ error: "credit not found" }, { status: 404 });
+    }
+    if (credit.used) {
+      return NextResponse.json({ error: "this credit has already been used" }, { status: 409 });
+    }
+    if (credit.expires_at && new Date(credit.expires_at) < new Date()) {
+      return NextResponse.json({ error: "this credit has expired" }, { status: 409 });
+    }
+    if (!lesson || lesson.topic !== credit.topic) {
+      return NextResponse.json({ error: "this credit can only be used for a matching group class" }, { status: 409 });
+    }
+  }
+
   try {
     await registerStudentInGroupLesson(supabase, { groupLessonId, studentId, stripeReference });
-    return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "couldn't register student" },
       { status: 500 },
     );
   }
+
+  if (creditId) {
+    const { error: creditError } = await supabase
+      .from("group_lesson_credits")
+      .update({ used: true, used_group_lesson_id: groupLessonId })
+      .eq("id", creditId);
+
+    if (creditError) {
+      return NextResponse.json(
+        { error: `registered but marking the credit used failed: ${creditError.message}` },
+        { status: 500 },
+      );
+    }
+  }
+
+  return NextResponse.json({ success: true });
 }
 
 // Removes one occurrence's registration — the per-class counterpart to

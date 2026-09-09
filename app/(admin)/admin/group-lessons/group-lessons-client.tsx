@@ -18,6 +18,11 @@ interface Student {
   id: string;
   name: string;
 }
+interface StudentCredit {
+  id: string;
+  studentId: string;
+  topic: string;
+}
 interface Attendee {
   registrationId: string;
   studentId: string;
@@ -59,7 +64,15 @@ function todayInZone(timeZone: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
 }
 
-export default function GroupLessonsClient({ coaches, students }: { coaches: Coach[]; students: Student[] }) {
+export default function GroupLessonsClient({
+  coaches,
+  students,
+  credits,
+}: {
+  coaches: Coach[];
+  students: Student[];
+  credits: StudentCredit[];
+}) {
   const { timeZone: displayTimeZone } = useTimeZone();
   const [lessons, setLessons] = useState<GroupLesson[]>([]);
   const [series, setSeries] = useState<RecurringSeries[]>([]);
@@ -427,7 +440,7 @@ export default function GroupLessonsClient({ coaches, students }: { coaches: Coa
       {lessons.length === 0 && <p className={styles.emptyState}>None scheduled.</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
         {lessons.map((lesson) => (
-          <GroupLessonCard key={lesson.id} lesson={lesson} students={students} onRegistered={load} />
+          <GroupLessonCard key={lesson.id} lesson={lesson} students={students} credits={credits} onRegistered={load} />
         ))}
       </div>
 
@@ -716,28 +729,48 @@ function SeriesRegisterControl({
 function GroupLessonCard({
   lesson,
   students,
+  credits,
   onRegistered,
 }: {
   lesson: GroupLesson;
   students: Student[];
+  credits: StudentCredit[];
   onRegistered: () => void;
 }) {
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const [stripeReference, setStripeReference] = useState("");
+  const [useCredit, setUseCredit] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
+
+  // The selected student's unused credit for THIS lesson's topic, if any
+  // — the admin-side counterpart to the student's own self-serve
+  // redeem-credit flow. Only ever one per topic per student in practice
+  // (a student wouldn't be holding two credits for the same class), so
+  // the first match is enough.
+  const matchingCredit =
+    lesson.topic && lesson.topic.trim()
+      ? credits.find((c) => c.studentId === studentId && c.topic === lesson.topic)
+      : undefined;
 
   async function handleRegister() {
     if (!studentId) return;
     setRegistering(true);
     setError(null);
 
+    const creditId = matchingCredit && useCredit ? matchingCredit.id : null;
+
     const res = await fetch("/api/admin/group-lessons/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ groupLessonId: lesson.id, studentId, stripeReference: stripeReference.trim() || null }),
+      body: JSON.stringify({
+        groupLessonId: lesson.id,
+        studentId,
+        stripeReference: creditId ? null : stripeReference.trim() || null,
+        creditId,
+      }),
     });
     setRegistering(false);
 
@@ -801,19 +834,34 @@ function GroupLessonCard({
         <p className={styles.mutedText}>This lesson is full.</p>
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-          <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className={styles.selectSmall}>
+          <select
+            value={studentId}
+            onChange={(e) => {
+              setStudentId(e.target.value);
+              setUseCredit(true);
+            }}
+            className={styles.selectSmall}
+          >
             {students.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
           </select>
-          <input
-            value={stripeReference}
-            onChange={(e) => setStripeReference(e.target.value)}
-            placeholder="Stripe payment reference (optional)"
-            className={styles.inputSmall}
-          />
+          {matchingCredit && (
+            <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} />
+              Use their credit for this class
+            </label>
+          )}
+          {!(matchingCredit && useCredit) && (
+            <input
+              value={stripeReference}
+              onChange={(e) => setStripeReference(e.target.value)}
+              placeholder="Stripe payment reference (optional)"
+              className={styles.inputSmall}
+            />
+          )}
           <button
             onClick={handleRegister}
             disabled={registering}

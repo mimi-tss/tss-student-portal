@@ -3,6 +3,40 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin can now spend a student's group-lesson credit when registering them (2026-09-08)
+
+Direct follow-up to making group-lesson credits visible at all (just
+above): once you could actually see Celeste's credit, the natural next
+ask — when admin registers a student for a group lesson, offer to spend
+an existing matching credit instead of a new payment. This already
+existed for the student's own self-serve flow
+([redeem-credit](app/api/student/group-lessons/redeem-credit/route.ts))
+but admin's own register control
+([GroupLessonCard](<app/(admin)/admin/group-lessons/group-lessons-client.tsx>))
+had no equivalent — every admin registration always assumed a fresh
+Stripe reference, credit or not.
+
+The page now loads every student's unused, unexpired group-lesson
+credits alongside the coach/student lists. Each lesson's Register
+control checks whether the *currently selected* student holds a credit
+matching *that lesson's topic* — when one exists, a "Use their credit
+for this class" checkbox appears (checked by default) and the Stripe
+reference field hides itself, since a credit-covered registration needs
+no new payment reference. `/api/admin/group-lessons/register`'s POST
+now takes `creditId` and runs the exact same validation the student's
+own redeem-credit route does (belongs to this student, unused,
+unexpired, topic matches) before registering, then marks the credit
+used with `used_group_lesson_id` set — same two-write sequence as
+every other credit-consuming path in this app.
+
+Verified against Celeste's actual real credit in production: created a
+throwaway lesson with the identical topic (so her real 9/9 registration
+was never touched), ran the full register-then-mark-used sequence
+against her real credit row, confirmed it landed correctly, then rolled
+every bit of it back — credit and registration both restored to exactly
+where they started. `npx tsc --noEmit -p .` and `next build` both
+clean. No migration.
+
 ## Group class credits were completely invisible in admin — added a panel (2026-09-08)
 
 You flagged that Celeste's group class credit "isn't showing" on her
