@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     type: "magiclink",
     email: student.email,
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_BILLING_URL}/auth/callback?redirect_to=/billing/account&error_redirect=/billing/login`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?redirect_to=/billing/account&error_redirect=/billing/login`,
     },
   });
 

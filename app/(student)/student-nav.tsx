@@ -6,7 +6,6 @@ import TimeZoneNavControl from "@/components/timezone-nav-control";
 import styles from "./student.module.css";
 
 const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
-const BILLING_URL = process.env.NEXT_PUBLIC_BILLING_URL ?? "";
 
 // target="_self" (not _blank) so these navigate the current tab/iframe in
 // place rather than popping a new tab — when embedded in Kajabi's Library
@@ -44,17 +43,17 @@ export default function StudentNav() {
           Scheduler
         </Link>
         {/* Deliberately target="_blank" (unlike the Kajabi links above,
-            which stay in-frame) — billing is its own standalone site,
-            opens in a new tab. Already-authenticated here means
-            already-authenticated there too (shared session cookie
-            across *.tarasimonstudios.com, see lib/supabase/server.ts),
-            so this lands straight on the account page, no separate
-            login — the "like Spotify" behavior the user asked for. */}
-        {BILLING_URL && (
-          <a href={`${BILLING_URL}/billing/account`} target="_blank" rel="noopener noreferrer" className={styles.navLink}>
-            Billing
-          </a>
-        )}
+            which stay in-frame) — a new top-level tab, same-origin (just
+            /billing, no separate subdomain), so the existing session
+            already covers it with no extra login. target="_blank" is
+            also the one signal we can give toward opening in a real
+            browser rather than staying inside a native app's embedded
+            webview, if this is ever viewed from one (e.g. a future
+            Kajabi Branded App) — whether that's honored depends on how
+            that shell is configured, outside what web code controls. */}
+        <a href="/billing/account" target="_blank" rel="noopener noreferrer" className={styles.navLink}>
+          Billing
+        </a>
         <TimeZoneNavControl />
       </div>
 
@@ -91,17 +90,15 @@ export default function StudentNav() {
           <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
             Scheduler
           </Link>
-          {BILLING_URL && (
-            <a
-              href={`${BILLING_URL}/billing/account`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.navDropdownLink}
-              onClick={() => setOpen(false)}
-            >
-              Billing
-            </a>
-          )}
+          <a
+            href="/billing/account"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.navDropdownLink}
+            onClick={() => setOpen(false)}
+          >
+            Billing
+          </a>
           <div className={styles.navDropdownTz}>
             <TimeZoneNavControl />
           </div>

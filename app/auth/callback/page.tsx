@@ -22,10 +22,7 @@ function CallbackHandler() {
 
   useEffect(() => {
     const redirectTo = searchParams.get("redirect_to") ?? "/student/dashboard";
-    // Shared across hosts (portal.* and billing.*, same deployment — see
-    // middleware.ts, which deliberately excludes this path from its
-    // hostname rewrite so it's reachable identically on both) — the
-    // billing site's own login lives at /billing/login, not /login, so a
+    // Billing's own login lives at /billing/login, not /login, so a
     // failure there needs to bounce back to the right place.
     const errorRedirect = searchParams.get("error_redirect") ?? "/login";
     const hashParams = new URLSearchParams(window.location.hash.slice(1));

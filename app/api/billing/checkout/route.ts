@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price, quantity: 1 }],
-    success_url: `${process.env.NEXT_PUBLIC_BILLING_URL}/billing/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_BILLING_URL}/billing`,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
     metadata: { tier },
     subscription_data: { metadata: { tier } },
     // Card + Link only — both work in any currency/country, which

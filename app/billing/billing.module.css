@@ -1,8 +1,10 @@
-/* Standalone site — billing.tarasimonstudios.com, served from this same
-   deployment via middleware.ts's hostname rewrite. Not nested under
-   student/coach/admin (no shared session with them, own login) but
-   composes the same shared tokens every route group's own module does,
-   so it still looks like part of the same product. */
+/* Billing — a normal path in this same app (/billing/...), not a
+   separate subdomain (tried, dropped — same-origin already shares the
+   student's session with none of the extra domain/cookie overhead).
+   Not nested under student/coach/admin's own root (own login page for
+   anyone landing here cold) but composes the same shared tokens every
+   route group's own module does, so it still looks like part of the
+   same product. */
 .root {
   composes: tokens from "../theme-tokens.module.css";
 
@@ -98,7 +100,31 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.featureList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   flex: 1;
+}
+
+.featureItem {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.featureCheck {
+  color: var(--gold);
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .errorText {
