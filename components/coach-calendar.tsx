@@ -631,7 +631,7 @@ export default function CoachCalendar({
     }
   }
 
-  async function handleMarkGroupAttendee(registrationId: string, status: "attended" | "no-show") {
+  async function handleMarkGroupAttendee(registrationId: string, status: "registered" | "attended" | "no-show") {
     setMarking(true);
 
     const res = await fetch("/api/coach/mark-group-attendance", {
@@ -824,6 +824,16 @@ export default function CoachCalendar({
                 >
                   No-show
                 </button>
+                {a.status !== "registered" && (
+                  <button
+                    onClick={() => handleMarkGroupAttendee(a.registrationId, "registered")}
+                    disabled={marking}
+                    className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] disabled:opacity-50"
+                    title="Clear attendance — resets back to registered"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             ))}
             {selectedGroupLesson.attendees.length === 0 && (

@@ -213,6 +213,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null);
   const [marking, setMarking] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [unmarking, setUnmarking] = useState<string | null>(null);
 
   const [adjCoachId, setAdjCoachId] = useState("");
   const [adjKind, setAdjKind] = useState<"bonus" | "deduction">("bonus");
@@ -346,6 +347,34 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
     setRemoving(null);
     if (res.ok) {
       setHistory((prev) => (prev ? prev.filter((e) => e.id !== entryId) : prev));
+    }
+  }
+
+  // Clears a mismarked 1:1 session's attendance back to "scheduled" —
+  // same "admins can update all sessions" RLS (0017) edit-session
+  // already relies on, just pre-filled with the row's own current
+  // values so an admin doesn't have to open the student's full session
+  // history and retype scheduledAt/durationMinutes/coachId just to
+  // undo one wrong click. Only sessions get this — a group lesson's
+  // row here is the lesson itself (payroll pays the coach once per
+  // lesson, not per attendee), so there's no single status to clear.
+  async function handleUnmarkAttendance(sess: PayableSession, coachIdForSession: string) {
+    setUnmarking(sess.id);
+    const res = await fetch("/api/admin/edit-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: sess.id,
+        scheduledAt: sess.scheduledAt,
+        durationMinutes: sess.durationMinutes,
+        coachId: coachIdForSession,
+        status: "scheduled",
+      }),
+    });
+    setUnmarking(null);
+    if (res.ok) {
+      loadRollup();
+      loadAttendance();
     }
   }
 
@@ -537,6 +566,18 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                             <span className={styles.badge} style={{ marginLeft: 8, fontSize: 10 }}>
                               referral +$10/hr
                             </span>
+                          )}
+                          {sess.type === "session" && (
+                            <button
+                              type="button"
+                              onClick={() => handleUnmarkAttendance(sess, s.coachId)}
+                              disabled={unmarking === sess.id}
+                              title="Clear attendance — resets this session back to scheduled"
+                              className={styles.btnGhost}
+                              style={{ marginLeft: 8, padding: "0 6px", fontSize: 10, lineHeight: "16px" }}
+                            >
+                              {unmarking === sess.id ? "…" : "✕ unmark"}
+                            </button>
                           )}
                         </td>
                         <td className={styles.mutedText}>{sess.durationMinutes} min</td>

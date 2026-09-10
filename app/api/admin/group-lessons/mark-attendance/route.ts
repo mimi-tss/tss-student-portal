@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Per-attendee attendance marking for a group lesson — same posture as
-// app/api/coach/mark-attendance: RLS ("coaches can mark attendance on
-// their own group lesson registrations", migration 0031) scopes this to
-// the coach's own group lessons, not re-checked here. "registered" lets
-// a coach clear their own mismark (e.g. marked someone present by
-// mistake) without needing admin to do it for them.
+// Admin counterpart to app/api/coach/mark-group-attendance — that route's
+// RLS ("coaches can mark attendance on their own group lesson
+// registrations", migration 0031) scopes a coach to their own lessons,
+// so it can't fix another coach's mismark, and it doesn't allow
+// "registered" at all (no self-service undo there). Admin relies on the
+// separate "admins can manage group lesson registrations" policy
+// (also 0031), which already covers every status including reverting
+// a wrong mark back to registered.
 const ALLOWED_STATUSES = ["registered", "attended", "no-show"] as const;
 
 export async function POST(req: NextRequest) {

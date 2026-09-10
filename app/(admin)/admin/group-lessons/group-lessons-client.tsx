@@ -817,6 +817,9 @@ function GroupLessonCard({
               </Link>
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={styles.mutedText}>{a.status}</span>
+                {(a.status === "attended" || a.status === "no-show") && (
+                  <UnmarkAttendeeControl registrationId={a.registrationId} onUnmarked={onRegistered} />
+                )}
                 {a.status === "registered" && (
                   <RemoveAttendeeControl
                     registrationId={a.registrationId}
@@ -882,6 +885,34 @@ function GroupLessonCard({
 // bulk-registered into a series too far ahead by mistake and admin is
 // pulling them back out of the far-future ones, not because the lesson
 // itself is being cancelled).
+// A coach's own mark-attendance route only lets them mark their own
+// lessons' attendees, and doesn't offer "registered" as a target status
+// at all — no self-service undo there. This is the admin-only fallback
+// for a mismark like "accidentally marked so-and-so present": clears
+// the attendee straight back to registered via
+// /api/admin/group-lessons/mark-attendance, which relies on the
+// "admins can manage group lesson registrations" RLS policy (0031).
+function UnmarkAttendeeControl({ registrationId, onUnmarked }: { registrationId: string; onUnmarked: () => void }) {
+  const [unmarking, setUnmarking] = useState(false);
+
+  async function handleUnmark() {
+    setUnmarking(true);
+    const res = await fetch("/api/admin/group-lessons/mark-attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationId, status: "registered" }),
+    });
+    setUnmarking(false);
+    if (res.ok) onUnmarked();
+  }
+
+  return (
+    <button onClick={handleUnmark} disabled={unmarking} className={styles.linkBtnSmall} title="Clear attendance back to registered">
+      {unmarking ? "…" : "Unmark"}
+    </button>
+  );
+}
+
 function RemoveAttendeeControl({
   registrationId,
   hasTopic,
