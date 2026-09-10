@@ -1,8 +1,23 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { getStripeClient } from "@/lib/stripe/client";
 import { deriveDisplayStatus } from "@/lib/stripe/status";
 import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+
+interface CardInfo {
+  brand: string;
+  last4: string;
+}
+
+// A payment method might not be a card at all (Link, since checkout/
+// update-card both allow it now) — brand/last4 genuinely don't exist on
+// those, so this returns null rather than a broken/empty card. `pm` is
+// only ever a string here if the field it came from wasn't expanded.
+function extractCard(pm: Stripe.PaymentMethod | string | null | undefined): CardInfo | null {
+  if (!pm || typeof pm === "string" || !pm.card) return null;
+  return { brand: pm.card.brand, last4: pm.card.last4 };
+}
 
 // Live subscription detail for the account page — amount, next charge
 // date, payment method, status. Deliberately not read from our local
@@ -28,7 +43,16 @@ export async function GET() {
 
     const client = getStripeClient(billingStudent.stripeAccount);
     const subscription = await client.subscriptions.retrieve(billingStudent.stripeSubscriptionId, {
-      expand: ["default_payment_method", "items.data.price.product", "customer"],
+      // Expanding "customer" alone only gets the customer OBJECT — its
+      // own default_payment_method field stays an un-expanded string ID
+      // unless separately listed here too (confirmed: this was the real
+      // bug behind the fallback path silently never finding a card).
+      expand: [
+        "default_payment_method",
+        "items.data.price.product",
+        "customer",
+        "customer.invoice_settings.default_payment_method",
+      ],
     });
 
     const item = subscription.items.data[0];
@@ -39,18 +63,22 @@ export async function GET() {
     const product = price?.product;
     const planName = product && typeof product !== "string" && !product.deleted ? product.name : null;
 
-    let card: { brand: string; last4: string } | null = null;
-    const pm = subscription.default_payment_method;
-    if (pm && typeof pm !== "string" && pm.card) {
-      card = { brand: pm.card.brand, last4: pm.card.last4 };
-    } else {
-      // No subscription-level default — fall back to the customer's own
-      // default payment method.
+    let card = extractCard(subscription.default_payment_method);
+    let paymentMethodType: string | null = card
+      ? "card"
+      : typeof subscription.default_payment_method !== "string" && subscription.default_payment_method
+        ? subscription.default_payment_method.type
+        : null;
+
+    if (!card) {
+      // No subscription-level default (or it's non-card, e.g. Link) —
+      // fall back to the customer's own default payment method.
       const customer = subscription.customer;
       if (customer && typeof customer !== "string" && !customer.deleted) {
         const customerPm = customer.invoice_settings?.default_payment_method;
-        if (customerPm && typeof customerPm !== "string" && customerPm.card) {
-          card = { brand: customerPm.card.brand, last4: customerPm.card.last4 };
+        card = extractCard(customerPm);
+        if (!paymentMethodType && customerPm && typeof customerPm !== "string") {
+          paymentMethodType = customerPm.type;
         }
       }
     }
@@ -70,6 +98,10 @@ export async function GET() {
         : null,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       card,
+      // Lets the UI show "Link" (or whatever else) instead of a blank
+      // dash when there's a real saved payment method that just isn't a
+      // card — rather than looking like nothing is on file at all.
+      paymentMethodType,
     });
   } catch (err) {
     console.error("GET /api/billing/subscription failed", err);

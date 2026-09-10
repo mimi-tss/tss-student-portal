@@ -20,6 +20,7 @@ interface SubscriptionDetail {
   pauseResumesAt?: string | null;
   cancelAtPeriodEnd?: boolean;
   card?: { brand: string; last4: string } | null;
+  paymentMethodType?: string | null;
 }
 
 const ALL_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
@@ -215,7 +216,13 @@ export default function SubscriptionClient() {
         </div>
         <div className={styles.statRow}>
           <span className={styles.statLabel}>Payment method</span>
-          <span>{detail.card ? `${detail.card.brand.toUpperCase()} •••• ${detail.card.last4}` : "—"}</span>
+          <span>
+            {detail.card
+              ? `${detail.card.brand.toUpperCase()} •••• ${detail.card.last4}`
+              : detail.paymentMethodType === "link"
+                ? "Link"
+                : "—"}
+          </span>
         </div>
         {detail.cancelAtPeriodEnd && detail.status !== "canceled" && (
           <p className={styles.errorText} style={{ marginTop: 12 }}>
