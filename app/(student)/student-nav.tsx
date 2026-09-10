@@ -6,6 +6,7 @@ import TimeZoneNavControl from "@/components/timezone-nav-control";
 import styles from "./student.module.css";
 
 const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
+const BILLING_URL = process.env.NEXT_PUBLIC_BILLING_URL ?? "";
 
 // target="_self" (not _blank) so these navigate the current tab/iframe in
 // place rather than popping a new tab — when embedded in Kajabi's Library
@@ -42,6 +43,18 @@ export default function StudentNav() {
         <Link href="/student/book" className={styles.navLink}>
           Scheduler
         </Link>
+        {/* Deliberately target="_blank" (unlike the Kajabi links above,
+            which stay in-frame) — billing is its own standalone site,
+            opens in a new tab. Already-authenticated here means
+            already-authenticated there too (shared session cookie
+            across *.tarasimonstudios.com, see lib/supabase/server.ts),
+            so this lands straight on the account page, no separate
+            login — the "like Spotify" behavior the user asked for. */}
+        {BILLING_URL && (
+          <a href={`${BILLING_URL}/billing/account`} target="_blank" rel="noopener noreferrer" className={styles.navLink}>
+            Billing
+          </a>
+        )}
         <TimeZoneNavControl />
       </div>
 
@@ -78,6 +91,17 @@ export default function StudentNav() {
           <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
             Scheduler
           </Link>
+          {BILLING_URL && (
+            <a
+              href={`${BILLING_URL}/billing/account`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.navDropdownLink}
+              onClick={() => setOpen(false)}
+            >
+              Billing
+            </a>
+          )}
           <div className={styles.navDropdownTz}>
             <TimeZoneNavControl />
           </div>
