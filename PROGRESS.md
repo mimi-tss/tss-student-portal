@@ -3,6 +3,91 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Billing: pause/cancel/change-plan all became request-gated, with a real salvage flow for cancellations (2026-09-09)
+
+Follow-up to getting the Opus account working live this session (Mimi's
+real subscription confirmed pulling through end to end). Based on
+watching the actual account page: wanted the student's name + real plan
+name shown, the Stripe Portal link and self-serve Pause removed, and —
+the substantial part — pause/cancel/change-plan to all become "submit a
+reason, admin decides" instead of anything self-service touching Stripe
+directly. Confirmed the specific cancel workflow directly: click Cancel
+touches nothing in Stripe; admin can pause the subscription as a holding
+pattern while attempting to salvage the student, then either resume it
+(retained) or actually schedule the cancellation (lost) — not a plain
+approve/deny.
+
+**Reused, not reinvented.** This is exactly the shape the old
+self-service cancel flow already had (`student_requests` + Needs
+Review) — widened `student_requests.type` to add `pause_subscription`/
+`change_plan` (plus `requested_tier`/`requested_interval` columns), and
+added two new `AttentionKind`s (`pause_request`/`change_plan_request`),
+same drop/recreate pattern used throughout this session
+([0103_billing_request_types.sql](supabase/migrations/0103_billing_request_types.sql)).
+Three new student-facing routes
+([request-pause](app/api/billing/request-pause/route.ts),
+[request-cancel](app/api/billing/request-cancel/route.ts),
+[request-change-plan](app/api/billing/request-change-plan/route.ts))
+just create the request + `notifyStaff` — none of them call Stripe.
+Deleted the now-superseded direct-Stripe `app/api/billing/pause` and
+`app/api/billing/cancel`, and the now-unused `app/api/billing/portal`
+(its only caller, the "Manage in Stripe's Billing Portal" link, is
+removed from the student page).
+
+**The real work moved into `resolveAttentionItem`** ([lib/admin/attention-items.ts](lib/admin/attention-items.ts)) —
+approving/denying a billing request now actually calls Stripe (for any
+Stripe-linked student; a no-op for anyone else, same as before this
+existed):
+- Cancel approved → schedules `cancel_at_period_end`. Denied ("Mark
+  retained") → clears any active pause, so a salvaged subscription
+  actually keeps running.
+- Pause request approved → pauses with the student's own requested
+  resume date (Stripe auto-resumes there, no follow-up needed). Denied
+  → no-op.
+- Change-plan approved → swaps the subscription's price to the
+  requested tier/interval's current Stripe price. Denied → no-op.
+- **The Stripe call happens before anything is marked resolved, and a
+  failure aborts the whole resolve** — surfaced as a real error back
+  through `/api/admin/attention-items/resolve` (now wrapped in
+  try/catch), same "don't let a failure look like success" fix applied
+  to the subscription-detail route earlier this session.
+
+**New admin action**: "Pause (salvage attempt)"
+([app/api/admin/salvage-pause-subscription](app/api/admin/salvage-pause-subscription/route.ts))
+on the Stop panel, next to the existing Mark retained/Mark cancelled
+buttons — pauses billing (60-day safety-net resume date, in case admin
+forgets to follow up) WITHOUT resolving the item, so admin has room to
+work a salvage attempt before deciding the final outcome. Explicit
+admin-role check (not just RLS) since this calls Stripe directly with
+no DB write for RLS to gate on.
+
+**Also**: account page now shows the student's own name and the real
+Stripe Product name (e.g. "Sing Smarter Pro," via `price.product`
+expand) instead of just our internal tier label; billing site gets the
+app's existing `<ThemeToggle />` in its header, which it never had
+(confirmed it was the one page in the app with no way to switch themes
+— its localStorage is origin-scoped, separate from portal.*'s).
+
+`npx tsc --noEmit -p .` and `next build` both clean (had to clear a
+stale `.next/types` cache after deleting the old pause/cancel/portal
+routes — otherwise `tsc` flagged phantom "module not found" errors
+against files that no longer exist). Confirmed via curl that the
+billing site still serves correctly post-refactor.
+
+**Not yet done / needs you:**
+- Migration 0103 **not yet confirmed applied** — see Action needed below.
+- No Stripe test-mode keys exist in this environment for either
+  account, so the new Stripe-execution branches (the actual pause/
+  cancel/change-plan calls) are compile-verified and logically sound
+  but not exercised against a real subscription from here. Given Opus
+  is already live and working (Mimi's account), worth a real
+  click-through once you're ready: submit a real pause/cancel/
+  change-plan request as a test student, then approve it from the admin
+  Stop panel and confirm the Stripe side actually changed.
+- The salvage-pause "60 days" default is a guess at a sane safety net —
+  adjust `SALVAGE_PAUSE_DAYS` in that route if you want a different
+  window.
+
 ## Fixed group-class Join button downloading a .json file on mobile Safari (2026-09-09)
 
 Nikki relayed a report via Slack: two group-class students, plus Nicole
@@ -7009,6 +7094,15 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0103 — NOT yet confirmed applied** (2026-09-09) —
+[0103_billing_request_types.sql](supabase/migrations/0103_billing_request_types.sql).
+Widens `student_requests.type` to accept `pause_subscription`/
+`change_plan` (plus new `requested_tier`/`requested_interval` columns),
+and extends `attention_items`'s kind check with `pause_request`/
+`change_plan_request`. The new Request-to-Pause/Cancel/Change-Plan
+buttons on the billing account page will fail until this is applied —
+please confirm once applied.
 
 **Migrations 0096–0102 confirmed applied** (2026-09-08) — user replied
 "successful"; verified directly against the real Supabase project rather
