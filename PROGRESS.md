@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Billing shares the main app's session — no separate login when already signed in (2026-09-10)
+
+Billing's own separate login (built earlier this session) turned out to
+be real friction: "like Spotify — if I'm logged in on web, opening
+billing just opens a new tab," no re-login. Considered moving billing
+into the main app entirely, but the actual ask was narrower — keep
+billing.tarasimonstudios.com as its own standalone site (still opens in
+a new tab), just make it recognize a session that's already active on
+portal.tarasimonstudios.com.
+
+[lib/supabase/server.ts](lib/supabase/server.ts) now domain-scopes the
+Supabase session cookie to `.tarasimonstudios.com` (was host-only)
+whenever actually served from that real domain — a leading-dot Domain
+attribute is visible to every subdomain. Guarded on the request's own
+`host` header, not `NODE_ENV`: a browser silently refuses to set a
+cookie whose Domain doesn't match the current host (or a parent of it),
+so applying this unconditionally would have broken auth outright on
+localhost and Vercel preview URLs, not just skipped the sharing.
+
+billing.tarasimonstudios.com's own login-code flow is untouched — still
+there for anyone who lands there without an existing portal.* session
+(a legacy Opus customer who's never opened the main app, a different
+device/browser). This only changes whether an *already-authenticated*
+visit needs to go through it again.
+
+Also added a **"Billing" link to the student nav**
+([student-nav.tsx](<app/(student)/student-nav.tsx>)) — there was
+genuinely no way to reach billing from inside the app before this,
+confirmed while investigating the friction complaint. Deliberately
+`target="_blank"` (new tab), unlike the existing Kajabi content links
+which stay in-frame on purpose.
+
+"Edit account" (also requested, for the billing page) is explicitly
+deferred — pinned for later, not built this pass.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified locally
+that the domain-scoping guard correctly stays off on localhost (auth
+still works there) — the actual cross-subdomain sharing can only be
+verified once `billing.tarasimonstudios.com` is attached as a real
+domain in Vercel (still pending, see earlier entries) and tested live:
+log into the main app, click the new Billing link, confirm it lands
+straight on `/billing/account` with no login prompt.
+
 ## Fixed coach-calendar: overnight sessions invisible when viewed in a coach's own (non-US) timezone (2026-09-10)
 
 You reported Nikki's week view (viewed in Thailand time, her own zone)
