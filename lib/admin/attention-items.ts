@@ -2,6 +2,9 @@ import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { fifthWeekOccurrence } from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { getStripeClient } from "@/lib/stripe/client";
+import { STRIPE_PRICE_BY_TIER, type BillingInterval } from "@/lib/stripe/tiers";
+import type { StripeAccount, Tier } from "@/types/database";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -24,7 +27,9 @@ export type AttentionKind =
   | "recording_missing"
   | "fifth_week_available"
   | "group_lesson_understaffed"
-  | "kajabi_grant_failed";
+  | "kajabi_grant_failed"
+  | "pause_request"
+  | "change_plan_request";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
@@ -662,6 +667,8 @@ export async function getAttentionItems(
   }));
 }
 
+const BILLING_REQUEST_KINDS: AttentionKind[] = ["cancel_request", "pause_request", "change_plan_request"];
+
 export async function resolveAttentionItem(
   supabase: SupabaseClient,
   id: string,
@@ -674,9 +681,24 @@ export async function resolveAttentionItem(
 ) {
   const { data: item } = await supabase
     .from("attention_items")
-    .select("kind, request_id")
+    .select("kind, request_id, student_id")
     .eq("id", id)
     .maybeSingle();
+
+  // Billing-related kinds get a real Stripe action executed BEFORE
+  // anything here is marked resolved — deliberately ordered first so a
+  // Stripe failure throws and aborts the whole resolve, rather than the
+  // DB saying "resolved" while nothing actually happened in Stripe. Kinds
+  // without a billing request (everything else this function has always
+  // handled) skip this entirely, unchanged from before.
+  if (item && BILLING_REQUEST_KINDS.includes(item.kind) && item.request_id && status === "resolved") {
+    await applyBillingRequestOutcome(supabase, {
+      kind: item.kind,
+      studentId: item.student_id,
+      requestId: item.request_id,
+      outcome: requestOutcome,
+    });
+  }
 
   await supabase
     .from("attention_items")
@@ -689,12 +711,13 @@ export async function resolveAttentionItem(
     })
     .eq("id", id);
 
-  // A cancel_request item's underlying student_requests row needs its own
-  // resolution too. Resolving normally means "admin has gone and
-  // cancelled it in Kajabi" (approved); `requestOutcome: "denied"` is the
-  // retention path — admin talked the student into staying, so the
-  // request is denied instead and materializeRecurringSessions won't
-  // stop generating future sessions for them.
+  // A billing-request item's underlying student_requests row needs its
+  // own resolution too. For cancel_request specifically: resolving
+  // normally means "admin has gone and cancelled it" (approved);
+  // `requestOutcome: "denied"` is the retention path — admin talked the
+  // student into staying, so the request is denied instead and
+  // materializeRecurringSessions won't stop generating future sessions
+  // for them.
   //
   // Deliberately NOT scoped to `.eq("status", "pending")` — this also
   // needs to work as a correction after the request is already
@@ -705,11 +728,98 @@ export async function resolveAttentionItem(
   // second click here is a deliberate re-decision, not a stale replay —
   // scoping to "pending" would have silently no-op'd the exact
   // correction this exists to allow.
-  if (item?.kind === "cancel_request" && item.request_id && status === "resolved") {
+  if (item && BILLING_REQUEST_KINDS.includes(item.kind) && item.request_id && status === "resolved") {
     await supabase
       .from("student_requests")
       .update({ status: requestOutcome, resolved_at: new Date().toISOString(), resolved_by: resolvedBy })
       .eq("id", item.request_id);
+  }
+}
+
+// The actual Stripe side effect for each billing-request kind, keyed on
+// admin's approve/deny decision. A student with no Stripe presence
+// (stripe_customer_id/stripe_subscription_id/stripe_account unset) is a
+// no-op here — exactly the plain DB-only resolve this function always
+// did before Stripe billing existed.
+async function applyBillingRequestOutcome(
+  supabase: SupabaseClient,
+  {
+    kind,
+    studentId,
+    requestId,
+    outcome,
+  }: { kind: AttentionKind; studentId: string | null; requestId: string; outcome: "approved" | "denied" },
+) {
+  if (!studentId) return;
+
+  const { data: student } = await supabase
+    .from("students")
+    .select("stripe_customer_id, stripe_subscription_id, stripe_account")
+    .eq("id", studentId)
+    .maybeSingle();
+
+  if (!student?.stripe_customer_id || !student.stripe_subscription_id || !student.stripe_account) return;
+
+  const client = getStripeClient(student.stripe_account as StripeAccount);
+  const subscriptionId = student.stripe_subscription_id;
+
+  if (kind === "cancel_request") {
+    if (outcome === "approved") {
+      // "Mark cancelled" — schedules the real cancellation. This alone
+      // also clears any pause_collection a salvage attempt had set (a
+      // real cancellation supersedes a hold).
+      await client.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+    } else {
+      // "Mark retained" — resumes billing if a salvage-attempt pause
+      // (see app/api/admin/salvage-pause-subscription) had been set on
+      // this subscription. An empty string clears pause_collection
+      // (Emptyable<PauseCollection> per the Stripe SDK's own types) — a
+      // no-op if it was never paused in the first place.
+      await client.subscriptions.update(subscriptionId, { pause_collection: "" });
+    }
+    return;
+  }
+
+  if (kind === "pause_request") {
+    if (outcome !== "approved") return;
+    // effective_date doubles as "the requested resume date" for this
+    // request type — same column cancel_subscription uses for "end of
+    // cycle," just a different meaning per type (see 0103's own comment).
+    const { data: request } = await supabase
+      .from("student_requests")
+      .select("effective_date")
+      .eq("id", requestId)
+      .maybeSingle();
+    const resumesAt = request?.effective_date
+      ? Math.floor(new Date(`${request.effective_date}T00:00:00Z`).getTime() / 1000)
+      : undefined;
+    await client.subscriptions.update(subscriptionId, {
+      pause_collection: { behavior: "void", ...(resumesAt ? { resumes_at: resumesAt } : {}) },
+    });
+    return;
+  }
+
+  if (kind === "change_plan_request") {
+    if (outcome !== "approved") return;
+    const { data: request } = await supabase
+      .from("student_requests")
+      .select("requested_tier, requested_interval")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (!request?.requested_tier) return;
+
+    const interval = (request.requested_interval as BillingInterval) ?? "monthly";
+    const newPriceId = STRIPE_PRICE_BY_TIER[request.requested_tier as Tier][interval];
+    if (!newPriceId) {
+      throw new Error(`No ${interval} price configured for ${request.requested_tier} — set STRIPE_PRICE_${request.requested_tier.toUpperCase()}_${interval.toUpperCase()}.`);
+    }
+
+    const subscription = await client.subscriptions.retrieve(subscriptionId);
+    const currentItemId = subscription.items.data[0]?.id;
+    if (!currentItemId) throw new Error("Subscription has no items to update");
+
+    await client.subscriptions.update(subscriptionId, { items: [{ id: currentItemId, price: newPriceId }] });
+    return;
   }
 }
 

@@ -23,7 +23,16 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  await resolveAttentionItem(supabase, itemId, { status, note, resolvedBy: user.id, requestOutcome });
+  // Billing-request kinds (cancel/pause/change-plan) can now throw here
+  // — a real Stripe call that failed — and that must surface as a real
+  // error, not a silent "success" the admin UI would otherwise show.
+  try {
+    await resolveAttentionItem(supabase, itemId, { status, note, resolvedBy: user.id, requestOutcome });
+  } catch (err) {
+    console.error("resolveAttentionItem failed", err);
+    const message = err instanceof Error ? err.message : "Something went wrong applying that action in Stripe.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }

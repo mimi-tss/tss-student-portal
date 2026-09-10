@@ -28,6 +28,8 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   fifth_week_available: "5th Week",
   group_lesson_understaffed: "Group Class Cancelled",
   kajabi_grant_failed: "Kajabi Sync Failed",
+  pause_request: "Pause Req",
+  change_plan_request: "Change Plan Req",
 };
 
 export const KIND_CLASS: Record<AttentionKind, string> = {
@@ -50,6 +52,8 @@ export const KIND_CLASS: Record<AttentionKind, string> = {
   fifth_week_available: styles.naKindTrial,
   group_lesson_understaffed: styles.naKindCancel,
   kajabi_grant_failed: styles.naKindDnc,
+  pause_request: styles.naKindPause,
+  change_plan_request: styles.naKindTrial,
 };
 
 export const STATUS_TABS: { status: AttentionStatus; label: string }[] = [

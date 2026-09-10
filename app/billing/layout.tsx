@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Anton, Inter } from "next/font/google";
+import ThemeToggle from "@/components/theme-toggle";
 import styles from "./billing.module.css";
 
 const anton = Anton({ weight: "400", subsets: ["latin"], variable: "--font-anton" });
@@ -14,11 +15,12 @@ const inter = Inter({ weight: ["400", "500", "600", "700"], subsets: ["latin"], 
 export default function BillingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className={`${anton.variable} ${inter.variable} ${styles.root}`}>
-      <header className={styles.header}>
+      <header className={styles.header} style={{ justifyContent: "space-between" }}>
         <Link href="/billing" style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
           <img src="/logo.png" alt="Tara Simon Studios" className={styles.logo} />
           <span className={styles.brand}>Tara Simon Studios</span>
         </Link>
+        <ThemeToggle />
       </header>
       {children}
     </div>

@@ -206,6 +206,29 @@ export default function SubscriptionLifecycleClient({
     router.refresh();
   }
 
+  // ---- Salvage pause (Stripe-billed students only — a no-op-with-a-
+  // clear-error for anyone else, the route itself checks) ----
+  const [salvaging, setSalvaging] = useState(false);
+  const [salvageNote, setSalvageNote] = useState<string | null>(null);
+
+  async function handleSalvagePause() {
+    setSalvaging(true);
+    setError(null);
+    setSalvageNote(null);
+    const res = await fetch("/api/admin/salvage-pause-subscription", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId }),
+    });
+    setSalvaging(false);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(body.error ?? "Could not pause this subscription in Stripe.");
+      return;
+    }
+    setSalvageNote("Paused in Stripe — resume it with Mark retained once you've reached the student, or Mark cancelled if not.");
+  }
+
   async function handleRetain() {
     if (!cancelRequest?.attentionItemId) return;
     setSaving(true);
@@ -497,7 +520,11 @@ export default function SubscriptionLifecycleClient({
               <span style={{ fontSize: 11 }}>no session found before cycle end — set manually</span>
             )}
           </label>
+          {salvageNote && <p style={{ color: "var(--gold)", fontSize: 12, marginBottom: 8 }}>{salvageNote}</p>}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button onClick={handleSalvagePause} disabled={salvaging} className={styles.linkBtnSmall}>
+              {salvaging ? "Pausing…" : "Pause (salvage attempt)"}
+            </button>
             <button onClick={handleRetain} disabled={saving || !cancelRequest.attentionItemId} className={styles.ctaSmall}>
               Mark retained (student is staying)
             </button>

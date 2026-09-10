@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { getStripeClient } from "@/lib/stripe/client";
 import { deriveDisplayStatus } from "@/lib/stripe/status";
+import { resolveTierFromPrice } from "@/lib/stripe/tiers";
 
 // Live subscription detail for the account page — amount, next charge
 // date, payment method, status. Deliberately not read from our local
@@ -27,11 +28,16 @@ export async function GET() {
 
     const client = getStripeClient(billingStudent.stripeAccount);
     const subscription = await client.subscriptions.retrieve(billingStudent.stripeSubscriptionId, {
-      expand: ["default_payment_method", "items.data.price", "customer"],
+      expand: ["default_payment_method", "items.data.price.product", "customer"],
     });
 
     const item = subscription.items.data[0];
     const price = item?.price;
+    // The real Stripe Product name ("Sing Smarter Pro") — deliberately
+    // not our internal Tier label ("Pro"), since the student should see
+    // the same name the studio uses everywhere else.
+    const product = price?.product;
+    const planName = product && typeof product !== "string" && !product.deleted ? product.name : null;
 
     let card: { brand: string; last4: string } | null = null;
     const pm = subscription.default_payment_method;
@@ -51,6 +57,9 @@ export async function GET() {
 
     return NextResponse.json({
       linked: true,
+      studentName: billingStudent.name,
+      planName,
+      tier: resolveTierFromPrice(price),
       status: deriveDisplayStatus(subscription),
       amount: price?.unit_amount ?? null,
       currency: price?.currency ?? null,
