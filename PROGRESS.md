@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach/admin can now clear a wrong attendance mark (2026-09-09)
+
+Nikki: "I accidentally marked khani present, please amend." Checked
+production directly rather than guessing which record — Khani has no
+group-lesson registrations at all, so this was a 1:1 session, not a
+group class. Found it: her session tonight with Nikki (2026-09-09,
+9:30pm ET) already marked `attended` hours before it happens. Reverted
+it to `scheduled` directly in production.
+
+Then the actual gap: neither coach nor admin had ANY way to undo an
+attendance click, anywhere in the app — every marking route only ever
+accepted forward statuses (attended/no-show/late-forfeit), never
+"back to unmarked." You asked for both coach and admin to get an
+X/unmark, and specifically for it to be reachable from the admin
+Payroll page too.
+
+- [mark-group-attendance](app/api/coach/mark-group-attendance/route.ts)
+  now accepts `"registered"` as a target status — a coach can clear
+  their own mismark directly, no admin needed. New "Clear" button next
+  to Attended/No-show in [coach-calendar.tsx](components/coach-calendar.tsx)'s
+  roster panel.
+- New admin-only [mark-attendance](app/api/admin/group-lessons/mark-attendance/route.ts)
+  route — the coach one is RLS-scoped to that coach's own lessons
+  (migration 0031), so admin needed a separate route to fix *any*
+  coach's mismark; relies on the existing "admins can manage group
+  lesson registrations" policy, same migration. Wired in as an
+  "Unmark" link on the admin Group Lessons page's attendee rows.
+- Admin's [Finance/Payroll page](<app/(admin)/admin/finance/finance-client.tsx>)
+  Live Rollup table — where a wrongly-marked 1:1 session actually
+  shows up as a payable line — now has a "✕ unmark" button per session
+  row, resetting it to `scheduled` via the existing `edit-session`
+  route (already admin-authorized; just wasn't exposed as a one-click
+  action there before). Group-lesson rows in that same table don't get
+  this — payroll pays a coach once per lesson taught, not per
+  attendee, so there's no single status on that row to clear.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-clicked
+in the actual admin/coach UI — no login here. No migration; both new
+RLS-covered paths (0031's "admins can manage group lesson
+registrations" and 0017's "admins can update all sessions") already
+existed.
+
 ## Billing: pause/cancel/change-plan all became request-gated, with a real salvage flow for cancellations (2026-09-09)
 
 Follow-up to getting the Opus account working live this session (Mimi's
