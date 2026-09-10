@@ -35,6 +35,28 @@ export async function POST(req: NextRequest) {
     cancel_url: `${process.env.NEXT_PUBLIC_BILLING_URL}/billing`,
     metadata: { tier },
     subscription_data: { metadata: { tier } },
+    // Card + Link only — both work in any currency/country, which
+    // matters since prices are USD (confirmed against the real Stripe
+    // catalog) and SEPA/most other alternative methods either require a
+    // matching local currency or don't support recurring billing at
+    // all. Checked against the studio's actual international student
+    // list: overwhelmingly US, with only 2 in the Eurozone — not enough
+    // to justify SEPA's added complexity even if pricing were EUR.
+    payment_method_types: ["card", "link"],
+    // Single mandatory checkbox, no opt-out — deliberately not Spotify's
+    // separate marketing/data-sharing checkboxes (we don't do third-party
+    // data sharing, and the publicity release isn't optional). Stripe
+    // renders this against the Terms of Service URL configured in the
+    // Dashboard (Settings → Business → Public details), not a per-session
+    // URL — that URL must point at a doc covering both the Terms and the
+    // Publicity Release once one exists; until then this checkbox has
+    // nowhere real to link and shouldn't be treated as fully wired up.
+    consent_collection: { terms_of_service: "required" },
+    custom_text: {
+      terms_of_service_acceptance: {
+        message: "I agree to the Terms of Service, including the Publicity Release.",
+      },
+    },
   });
 
   if (!session.url) {

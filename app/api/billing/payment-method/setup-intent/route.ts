@@ -19,15 +19,18 @@ export async function POST() {
   }
 
   const client = getStripeClient(billingStudent.stripeAccount);
-  // Restricted to card — without this, Payment Element shows every
-  // payment method enabled on the Stripe account's own Settings page
-  // (confirmed live: Amazon Pay, Bancontact — a Belgium-only method —
-  // and Cash App Pay all showed up unprompted). This flow is
-  // specifically "update your saved card," not a general payment
-  // method picker.
+  // Card + Link only — without an explicit list, Payment Element shows
+  // every payment method enabled on the Stripe account's own Settings
+  // page (confirmed live: Amazon Pay, Bancontact — a Belgium-only
+  // method — and Cash App Pay all showed up unprompted). Link is
+  // included alongside card since both work in any currency/country
+  // (relevant given this studio's real international student spread —
+  // mostly US with a handful scattered globally, not concentrated
+  // enough in the Eurozone to justify SEPA, which also wouldn't work
+  // anyway against USD-priced subscriptions).
   const setupIntent = await client.setupIntents.create({
     customer: billingStudent.stripeCustomerId,
-    payment_method_types: ["card"],
+    payment_method_types: ["card", "link"],
   });
 
   return NextResponse.json({
