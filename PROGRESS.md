@@ -3,6 +3,67 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed coach-calendar: overnight sessions invisible when viewed in a coach's own (non-US) timezone (2026-09-10)
+
+You reported Nikki's week view (viewed in Thailand time, her own zone)
+showing no rows at all for 12:00-12:30 AM — not blank cells, no row for
+that time existed on the grid. Checked production directly: a real
+scheduled session (`928f5501`, Bangkok Mon 9/16 12:00-1:00 AM) exists,
+inside Nikki's own Tuesday `07:00-14:00` ET working-hours window (her
+`coaches.timezone` is `America/New_York`; ET→Bangkok is +11h, so that
+window runs 6:00 PM Tue-1:00 AM Wed in Bangkok — it crosses midnight
+once shifted into her own display zone even though it's a normal
+same-day window in the zone it's actually configured in).
+
+Root cause in [coach-calendar.tsx](components/coach-calendar.tsx)'s row-
+range computation (the same `rowStartMinutes`/`rowEndMinutes` logic
+touched yesterday for the off-boundary-row bug — a different bug in the
+same function): converting a working-hours window's end instant into
+the *display* timezone read only its raw hour:minute
+(`zonedHourMinute`), which drops which calendar day it lands on. A
+window that's same-day in the coach's own zone but crosses midnight
+once shifted into a very different display zone (Thailand is 11-13h
+off every US zone) produced an end value *smaller* than the start
+(1:00 AM read as "60 minutes," less than the 18:00 start's "1080") —
+collapsing the range instead of extending it, so the whole post-
+midnight portion (and the real session inside it) had no row to render
+on at all. Only the exact-midnight-end special case (`"23:30"-"00:00"`
+style windows) was ever handled; a window ending at any other early-
+morning time in the display zone wasn't.
+
+Fixed by deriving the end minute from the real elapsed duration
+(`endInstant - startInstant`) instead of re-reading the end instant's
+own wall-clock hour:minute — immune to which calendar day the end
+lands on, so it naturally subsumes the old midnight-exact special case
+too. Applied to both the working-hours-window loop and the group-lesson
+loop (which had the identical bug, just not yet hit by real data).
+Also fixed [formatTimeLabel](components/coach-calendar.tsx) to wrap its
+hour mod 24 for display — rows can now legitimately run past 24:00
+(e.g. "25:00") when a window crosses midnight in the display zone, and
+the label needs to read as "1:00 AM," not the un-wrapped math's "1:00
+PM."
+
+Deliberately did **not** also widen the row range directly from
+`data.sessions` the way group lessons already are — tried it, then
+reverted: a session's own instant naturally anchors to whichever
+calendar day it falls on in the *display* zone, while the (now-fixed)
+working-hours window anchors to the day it *starts* in the coach's own
+zone. For an overnight window those are two different columns, so
+widening from both sources would render the identical real session
+twice (once as the starting day's overnight extension, once as the
+next day's own opening row). The window-loop fix alone already covers
+every real 1:1 session, since booking already enforces
+`slotFitsWorkingHours`.
+
+Verified the fix against Nikki's actual production data (working hours,
+the real `928f5501` session, the real Semi-Private group lesson) —
+simulated both the old and new range math directly: old code produced
+`gEnd: 60` (less than `gStart: 1080`, collapsing the range); new code
+produces `gEnd: 1500`, correctly covering the session. `npx tsc
+--noEmit -p .` and `next build` both clean. Not live-clicked in the
+browser — no login here — but the underlying date math is directly
+verified against real data, not just plausible. No migration.
+
 ## Coach/admin can now clear a wrong attendance mark (2026-09-09)
 
 Nikki: "I accidentally marked khani present, please amend." Checked

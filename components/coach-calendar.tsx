@@ -190,7 +190,13 @@ function formatRangeLabel(view: "day" | "week" | "month", rangeStartKey: string,
 }
 
 function formatTimeLabel(minutesFromMidnight: number) {
-  const hour = Math.floor(minutesFromMidnight / 60);
+  // rowEndMinutes can run past 1440 — a window/session that crosses
+  // midnight in the display zone extends the axis past 24:00 rather
+  // than wrapping onto a new day-column (see rowStartMinutes/
+  // rowEndMinutes above). Wrap the hour back into 0-23 for display only;
+  // the un-wrapped `minutesFromMidnight` is still what positions the row
+  // and feeds cellState's own instant math.
+  const hour = Math.floor(minutesFromMidnight / 60) % 24;
   const minute = minutesFromMidnight % 60;
   const period = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
@@ -354,12 +360,18 @@ export default function CoachCalendar({
         const startInstant = zonedTimeToUtc(year, month, day, sh, sm, coachTimeZone);
         const endInstant = zonedTimeToUtc(year, month, endParts.day, endParts.hour, endParts.minute, coachTimeZone);
         const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
-        const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
         const gStart = gsh * 60 + gsm;
-        // An end exactly on midnight in the grid zone (e.g. a window
-        // that runs into the next calendar day once shifted) reads as
-        // 0 — treat it as end-of-day rather than collapsing the range.
-        const gEnd = geh === 0 && gem === 0 ? 24 * 60 : geh * 60 + gem;
+        // Derived from the real elapsed duration, not by re-reading the
+        // end instant's own hour:minute in gridTimeZone — a window whose
+        // COACH-zone same-day span crosses midnight once shifted into a
+        // very different gridTimeZone (e.g. a Tuesday 7am-2pm ET window
+        // is 6pm Tue-1am Wed in Bangkok) would otherwise read its end as
+        // an early-morning hour *smaller* than gStart, collapsing the
+        // range instead of extending it — silently dropping the
+        // post-midnight portion (and any real session inside it) off the
+        // grid entirely. Elapsed-minutes math is immune to which
+        // calendar day the end happens to land on.
+        const gEnd = gStart + (endInstant.getTime() - startInstant.getTime()) / 60_000;
 
         if (!found) {
           min = gStart;
@@ -384,9 +396,8 @@ export default function CoachCalendar({
       const startInstant = new Date(lesson.scheduledAt);
       const endInstant = new Date(startInstant.getTime() + lesson.durationMinutes * 60_000);
       const [gsh, gsm] = zonedHourMinute(startInstant, gridTimeZone);
-      const [geh, gem] = zonedHourMinute(endInstant, gridTimeZone);
       const gStart = gsh * 60 + gsm;
-      const gEnd = geh === 0 && gem === 0 ? 24 * 60 : geh * 60 + gem;
+      const gEnd = gStart + (endInstant.getTime() - startInstant.getTime()) / 60_000;
 
       if (!found) {
         min = gStart;
@@ -397,6 +408,19 @@ export default function CoachCalendar({
         max = Math.max(max, gEnd);
       }
     }
+
+    // Deliberately NOT also widened directly from data.sessions the way
+    // group lessons are above: a 1:1 session is always confined to the
+    // coach's configured working-hours windows (slotFitsWorkingHours
+    // enforces this at booking time), so the window loop above already
+    // covers it once its own midnight-crossing math is correct. Widening
+    // from the session's own instant *too* would re-anchor the same
+    // real overnight minutes under next calendar day's column as well —
+    // e.g. a session at Bangkok Wed 12:00mid-1:00am from a Tue-anchored
+    // ET window would then also pull the axis down to cover Wed's own
+    // midnight, rendering that identical session a second time (once as
+    // Tuesday's overnight extension, once as Wednesday's own opening
+    // row) rather than once.
 
     // Rounded out to a clean SLOT_MINUTES boundary — a group lesson (see
     // above) can start at any real-world minute, not just :00/:30, and
