@@ -3,6 +3,49 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Dropped the billing subdomain — it's just /billing now (2026-09-10)
+
+Immediate follow-up to the shared-session-cookie fix logged above: once
+that made billing.tarasimonstudios.com session-aware without a separate
+login, the subdomain's only remaining reason to exist ("opens in a new
+tab, feels standalone") stopped requiring a *different domain* at all —
+a same-origin path does that identically, and comes for free with
+automatic same-origin cookie sharing instead of the deliberate
+domain-widening trick I'd just built.
+
+Confirmed with you directly: use `portal.tarasimonstudios.com/billing`
+instead. Reverted the now-unnecessary infrastructure — deleted
+`middleware.ts` (the hostname rewrite existed only for the subdomain),
+reverted `lib/supabase/server.ts`'s cookie domain-scoping back to plain
+host-only (same-origin doesn't need it), and consolidated
+`NEXT_PUBLIC_BILLING_URL` into `NEXT_PUBLIC_APP_URL` everywhere (they
+were always going to be the same value now) — checkout success/cancel
+URLs, the billing welcome-link email, the admin-triggered portal-link
+action, `.env.example`.
+
+Net effect versus the subdomain plan: no DNS/Vercel domain attachment
+ever needed for this, one Payment method domain to register for Apple
+Pay instead of two, one less moving part (`middleware.ts`) that could
+misroute something later. The student nav's "Billing" link
+(`target="_blank"`) now just points at the relative path `/billing/account`.
+
+Also discussed, not acted on: whether a link should force-open in a
+real browser rather than an embedded native-app webview (relevant if
+this is ever viewed inside a future Kajabi Branded App, given the
+existing decision on file — see memory `project_kajabi_branded_app_no_iap`
+— that purchases stay web/Stripe-only, never wired into a Branded App
+screen). `target="_blank"` is the correct web-side signal to request a
+new top-level context, and it's already in place; whether that actually
+opens the system browser versus another in-app webview tab depends on
+how that native shell is configured, which isn't something controllable
+from this codebase. Worth revisiting for real once a Branded App is
+actually live and testable.
+
+`npx tsc --noEmit -p .` and `next build` both clean — confirmed no
+`ƒ Middleware` line in the build output (middleware genuinely gone) and
+`/billing`/`/billing/account` both serve correctly as plain paths via a
+local `next start` smoke test.
+
 ## Fixed Remove-recurring-schedule FK error; Cancelling pill never showed confirmed (2026-09-10)
 
 You couldn't remove Grace's recurring weekly slot even though she's
