@@ -26,6 +26,15 @@ export const TIER_LABEL: Record<Tier, string> = {
   elite: "Elite",
 };
 
+// Shared by every billing UI that shows a price (pricing page, change-plan
+// picker, the account page's own amount row) — was drifting into 2-3
+// near-identical local copies before this.
+export function formatPrice(amount: number | null | undefined, currency: string | null | undefined): string | null {
+  if (amount == null || !currency) return null;
+  if (amount === 0) return "Free";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+}
+
 const VALID_TIERS: readonly Tier[] = ["lite", "suite", "pro", "elite"];
 
 // Resolves a tier from a Stripe Price's own metadata (`tier: "suite"`,

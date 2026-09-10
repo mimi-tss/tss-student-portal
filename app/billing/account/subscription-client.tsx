@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { STATUS_LABEL, type BillingDisplayStatus } from "@/lib/stripe/status";
-import { TIER_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
+import { TIER_LABEL, formatPrice } from "@/lib/stripe/tiers";
 import type { Tier } from "@/types/database";
 import PaymentMethodClient from "./payment-method-client";
+import ChangePlanClient from "./change-plan-client";
 import styles from "../billing.module.css";
 
 interface SubscriptionDetail {
@@ -21,13 +22,6 @@ interface SubscriptionDetail {
   cancelAtPeriodEnd?: boolean;
   card?: { brand: string; last4: string } | null;
   paymentMethodType?: string | null;
-}
-
-const ALL_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
-
-function formatAmount(amount: number | null | undefined, currency: string | null | undefined) {
-  if (amount == null || !currency) return null;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
 }
 
 function formatDate(iso: string | null | undefined) {
@@ -58,10 +52,6 @@ export default function SubscriptionClient() {
   const [cancelReason, setCancelReason] = useState("");
   const [showCancelForm, setShowCancelForm] = useState(false);
 
-  const [submittingChangePlan, setSubmittingChangePlan] = useState(false);
-  const [targetTier, setTargetTier] = useState<Tier>("suite");
-  const [targetInterval, setTargetInterval] = useState<BillingInterval>("monthly");
-  const [changePlanReason, setChangePlanReason] = useState("");
   const [showChangePlanForm, setShowChangePlanForm] = useState(false);
 
   const [showCardForm, setShowCardForm] = useState(false);
@@ -131,27 +121,6 @@ export default function SubscriptionClient() {
     setConfirmation("Cancellation request sent — the studio will reach out before it's final.");
   }
 
-  async function submitChangePlan(e: React.FormEvent) {
-    e.preventDefault();
-    if (!changePlanReason.trim()) return;
-    setSubmittingChangePlan(true);
-    setError(null);
-    const res = await fetch("/api/billing/request-change-plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: targetTier, interval: targetInterval, reason: changePlanReason }),
-    });
-    const data = await res.json().catch(() => null);
-    setSubmittingChangePlan(false);
-    if (!res.ok) {
-      setError(data?.error ?? "Couldn't submit your plan change request.");
-      return;
-    }
-    setShowChangePlanForm(false);
-    setChangePlanReason("");
-    setConfirmation("Plan change request sent — the studio will follow up shortly.");
-  }
-
   if (loading) {
     return (
       <div className={styles.card} style={{ maxWidth: 480, margin: "0 0 24px", textAlign: "left" }}>
@@ -184,7 +153,6 @@ export default function SubscriptionClient() {
   }
 
   const isActionable = detail.status !== "canceled";
-  const otherTiers = ALL_TIERS.filter((t) => t !== detail.tier);
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -206,7 +174,7 @@ export default function SubscriptionClient() {
         <div className={styles.statRow}>
           <span className={styles.statLabel}>Amount</span>
           <span>
-            {formatAmount(detail.amount, detail.currency) ?? "—"}
+            {formatPrice(detail.amount, detail.currency) ?? "—"}
             {detail.interval ? ` / ${detail.interval}` : ""}
           </span>
         </div>
@@ -309,49 +277,15 @@ export default function SubscriptionClient() {
       )}
 
       {showChangePlanForm && (
-        <form onSubmit={submitChangePlan} className={`${styles.card} ${styles.form}`} style={{ maxWidth: 480, marginBottom: 16 }}>
-          <label className={styles.statLabel} htmlFor="targetTier">
-            Switch to
-          </label>
-          <select
-            id="targetTier"
-            value={targetTier}
-            onChange={(e) => setTargetTier(e.target.value as Tier)}
-            className={styles.input}
-          >
-            {otherTiers.map((t) => (
-              <option key={t} value={t}>
-                {TIER_LABEL[t]}
-              </option>
-            ))}
-          </select>
-          <label className={styles.statLabel} htmlFor="targetInterval">
-            Billing
-          </label>
-          <select
-            id="targetInterval"
-            value={targetInterval}
-            onChange={(e) => setTargetInterval(e.target.value as BillingInterval)}
-            className={styles.input}
-          >
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
-          <label className={styles.statLabel} htmlFor="changePlanReason">
-            Reason
-          </label>
-          <textarea
-            id="changePlanReason"
-            required
-            rows={3}
-            value={changePlanReason}
-            onChange={(e) => setChangePlanReason(e.target.value)}
-            className={styles.input}
+        <div style={{ marginBottom: 16 }}>
+          <ChangePlanClient
+            currentTier={detail.tier}
+            onDone={() => {
+              setShowChangePlanForm(false);
+              setConfirmation("Plan change request sent — the studio will follow up shortly.");
+            }}
           />
-          <button type="submit" className={styles.cta} disabled={submittingChangePlan}>
-            {submittingChangePlan ? "Sending…" : "Send plan change request"}
-          </button>
-        </form>
+        </div>
       )}
 
       {showCardForm && (

@@ -3,28 +3,14 @@
 import { useEffect, useState } from "react";
 import styles from "./billing.module.css";
 import type { Tier } from "@/types/database";
-import type { BillingInterval } from "@/lib/stripe/tiers";
-
-const TIERS: { tier: Tier; name: string; desc: string }[] = [
-  { tier: "lite", name: "Lite", desc: "Course access and community — no 1:1 coaching portal." },
-  { tier: "suite", name: "Suite", desc: "Weekly 1:1 lessons plus everything in Lite." },
-  { tier: "pro", name: "Pro", desc: "More frequent coaching and priority scheduling." },
-  { tier: "elite", name: "Elite", desc: "Our most comprehensive coaching plan." },
-];
+import { formatPrice, type BillingInterval } from "@/lib/stripe/tiers";
+import { TIER_COPY } from "@/lib/billing/tier-copy";
 
 interface PriceInfo {
   amount: number | null;
   currency: string | null;
 }
 type PricingData = Record<Tier, { monthly: PriceInfo | null; yearly: PriceInfo | null }>;
-
-function formatAmount(price: PriceInfo | null) {
-  if (price == null || price.amount == null || price.currency == null) return null;
-  if (price.amount === 0) return "Free";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: price.currency.toUpperCase() }).format(
-    price.amount / 100,
-  );
-}
 
 // Each tier gets its own monthly/yearly toggle (not one global switch) —
 // a tier without a yearly price configured (e.g. a free Lite tier) just
@@ -74,7 +60,7 @@ export default function PricingClient() {
     <div>
       {error && <p className={styles.errorText}>{error}</p>}
       <div className={styles.tierGrid}>
-        {TIERS.map((t) => {
+        {TIER_COPY.map((t) => {
           const prices = pricing?.[t.tier];
           const hasYearly = !!prices?.yearly;
           const selected = interval[t.tier];
@@ -84,6 +70,14 @@ export default function PricingClient() {
             <div key={t.tier} className={styles.tierCard}>
               <div className={styles.tierName}>{t.name}</div>
               <p className={styles.tierDesc}>{t.desc}</p>
+
+              <ul className={styles.featureList}>
+                {t.features.map((f) => (
+                  <li key={f} className={styles.featureItem}>
+                    <span className={styles.featureCheck}>✓</span> {f}
+                  </li>
+                ))}
+              </ul>
 
               {hasYearly && (
                 <div style={{ display: "flex", gap: 6 }}>
@@ -105,7 +99,7 @@ export default function PricingClient() {
               )}
 
               <div className={styles.tierName} style={{ fontSize: 22 }}>
-                {formatAmount(price) ?? "—"}
+                {formatPrice(price?.amount, price?.currency) ?? "—"}
                 {price && price.amount !== 0 && (
                   <span className={styles.statLabel} style={{ fontSize: 13 }}>
                     {" "}
