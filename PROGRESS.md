@@ -7198,14 +7198,16 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0103 — NOT yet confirmed applied** (2026-09-09) —
-[0103_billing_request_types.sql](supabase/migrations/0103_billing_request_types.sql).
-Widens `student_requests.type` to accept `pause_subscription`/
-`change_plan` (plus new `requested_tier`/`requested_interval` columns),
-and extends `attention_items`'s kind check with `pause_request`/
-`change_plan_request`. The new Request-to-Pause/Cancel/Change-Plan
-buttons on the billing account page will fail until this is applied —
-please confirm once applied.
+**Migration 0103 confirmed applied** (2026-09-10) — user replied
+"successful migration"; verified directly against the real Supabase
+project rather than assumed. `student_requests.requested_tier`/
+`requested_interval` columns present, and `attention_items`'s kind
+check accepts both `pause_request` and `change_plan_request`. The
+Request-to-Pause/Cancel/Change-Plan buttons on the billing account page
+should now work — still worth a real click-through (submit a request as
+a test student, approve it from the admin Stop panel, confirm it
+actually changed in Opus) since no Stripe test-mode keys exist in this
+environment to verify that end from here.
 
 **Migrations 0096–0102 confirmed applied** (2026-09-08) — user replied
 "successful"; verified directly against the real Supabase project rather
