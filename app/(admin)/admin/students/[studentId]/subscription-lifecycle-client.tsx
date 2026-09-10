@@ -307,7 +307,7 @@ export default function SubscriptionLifecycleClient({
             panel === "stop" || cancelRequest ? styles.lifecycleBtnActive : ""
           }`}
         >
-          {cancelRequest ? "Cancelling" : "Stop"}
+          {cancelRequest ? (cancelRequest.status === "approved" ? "Cancelled — confirmed" : "Cancelling") : "Stop"}
         </button>
       </div>
 

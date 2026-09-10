@@ -325,9 +325,20 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: deleteSessionsError.message }, { status: 500 });
   }
 
+  // Not a real delete: any student who's had this schedule longer than a
+  // few days has real past sessions (attended, no-show, a prior cancel)
+  // still pointing at it via sessions.recurring_schedule_id, and that FK
+  // has no ON DELETE clause — an actual DELETE here always 23503s once
+  // real history exists, which is every established student, not an edge
+  // case. `active = false` is the same off-switch
+  // materializeRecurringSessions and getHeldRecurringSlots already treat
+  // as "this schedule doesn't generate/hold anything anymore" (both
+  // query `.eq("active", true)`) — flipping it here stops future
+  // occurrences the same way a real delete would, without touching the
+  // history rows the FK is protecting.
   const { error } = await supabase
     .from("recurring_schedules")
-    .delete()
+    .update({ active: false })
     .eq("id", schedule.id);
 
   if (error) {

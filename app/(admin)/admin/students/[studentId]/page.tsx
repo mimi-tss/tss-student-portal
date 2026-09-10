@@ -118,10 +118,15 @@ export default async function AdminStudentPage({
       .eq("used", false)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order("expires_at", { ascending: true, nullsFirst: false }),
+    // active-only — a removed slot (recurring-schedule DELETE flips
+    // active to false rather than actually deleting the row, since real
+    // session history almost always still references it) shouldn't
+    // linger here looking live.
     supabase
       .from("recurring_schedules")
       .select("id, day_of_week, start_time, duration_minutes, start_date, coach_id, cadence")
       .eq("student_id", student.id)
+      .eq("active", true)
       .order("day_of_week"),
     supabase.from("coaches").select("id, name, timezone").eq("active", true).order("name"),
     supabase
