@@ -509,13 +509,25 @@ async function syncRecordingAttentionItems(supabase: SupabaseClient) {
   // that coach/date — a session that just ended is too soon to expect a
   // recording yet, same cutoff as before, just filtered up front instead
   // of skipped one at a time in the loop below.
+  //
+  // Either way, the session's own end time must actually be in the past
+  // first — the unmatched-recording bypass only keys on (coach, date),
+  // not which specific session that recording belongs to, so without
+  // this it could fire for a LATER session that coach has the same day
+  // that hasn't even started yet, just because an earlier one of theirs
+  // already has a recording sitting unmatched (confirmed live: flagged
+  // "no recording yet" for Ayla's 5:30pm session while it was still in
+  // progress, off Celine's own earlier lesson that day already syncing).
+  const now = Date.now();
   const dueSessions = (candidateSessions ?? [])
     .map((s) => {
       const timezone = (s.coaches as unknown as { timezone: string } | null)?.timezone ?? "America/New_York";
       const [y, m, d] = zonedYearMonthDay(new Date(s.scheduled_at), timezone);
       const sessionDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const endTime = new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000;
-      const isDue = endTime <= graceCutoff.getTime() || unmatchedRecordingKeys.has(`${s.actual_coach_id}|${sessionDate}`);
+      const isDue =
+        endTime <= now &&
+        (endTime <= graceCutoff.getTime() || unmatchedRecordingKeys.has(`${s.actual_coach_id}|${sessionDate}`));
       return {
         id: s.id,
         studentId: s.student_id,

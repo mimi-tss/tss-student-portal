@@ -3,6 +3,99 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Four real bugs from today's live reports: stale cross-domain cookie, Join button navigation, dashboard hiding an in-progress session, premature "missing recording" flag (2026-09-10)
+
+Four separate live reports came in back to back today, each traced to a
+real, distinct bug (not the same root cause, despite surface similarity).
+
+**1. Celine stuck in a login loop; fixed by incognito.** Confirmed via
+`activity_events`: 7 successful `login_code` logins in ~100 minutes,
+same account, real session each time — so the code/auth flow itself
+was fine, something was dropping the session right after. Incognito
+working (which is normally *more* aggressive about blocking third-party
+cookies, not less) ruled out the Kajabi-iframe/Storage-Access-API angle
+I chased first, and pointed at her own regular browser profile instead.
+Checked recent history: commit `3229ba3` (billing session-sharing)
+briefly set this app's Supabase auth cookie with
+`Domain=.tarasimonstudios.com` for ~4 hours today, reverted by commit
+`49819e9` (dropped the billing subdomain) back to host-only. Anyone who logged in (or had a silent token refresh)
+during that window still has the old domain-scoped cookie sitting in
+their browser today, alongside the new host-only one — a browser sends
+BOTH same-named cookies on every request from then on, and which one a
+server-side parser resolves to is effectively unpredictable (RFC 6265's
+sort order, inconsistently implemented), which is exactly an
+intermittent "logged in, immediately bounced back" symptom for
+returning visitors specifically. [lib/supabase/server.ts](lib/supabase/server.ts)
+now actively expires any `sb-*-auth-token` cookie under the old
+`.tarasimonstudios.com` domain on every request served from the real
+domain — a genuine Set-Cookie aimed at that exact domain, since a plain
+host-only Set-Cookie can't delete a Domain-scoped cookie of the same
+name. A total no-op for anyone who was never affected.
+
+**2. Charity's red error was very likely a symptom of #1** — the only
+red-styled text in this app is [login/page.tsx](app/login/page.tsx)'s
+`not_logged_in` banner ("Please log in from your portal link to
+continue"), meaning her session had already dropped by the time she
+tried to join. Same class of bug, likely fixed by the same change —
+worth a follow-up check with her once confirmed.
+
+**3. Ayla's Join button "did nothing," but the same meet link pasted
+into chat worked instantly.** That rules out the link/session itself —
+it's specifically the button's OWN navigation mechanism.
+[join-button.tsx](<app/(student)/student/dashboard/join-button.tsx>)
+had already been through one fix this week (`window.top.location.href`,
+2026-09-09, for a different real client — mobile Safari's popup
+mishandling), but that scripted top-frame write isn't universal either:
+some real client (unconfirmed which — a stricter WebView is the leading
+guess) silently blocks a SCRIPTED top-navigation from inside a nested
+iframe while still allowing a genuinely user-clicked link through —
+exactly what chat's own plain `<a target="_blank">` demonstrated live.
+Rebuilt the button as a real `<a href={meetLink} target="_top">` —
+native, browser-handled link click (not a script write, unlike the
+09-09 fix) that navigates the EXISTING top frame in place (not a popup,
+unlike chat's own `_blank`, which is what broke Safari originally). Best
+of both fixes, subject to neither's own failure mode. sendBeacon logging
+moved to a plain `onClick` that doesn't block the native navigation.
+
+**4. Ayla's dashboard showed her 9/17 session, not the one she was
+mid-session on right now.** Real, separate bug in
+[student/dashboard/page.tsx](<app/(student)/student/dashboard/page.tsx>):
+the `nextSession` query floored on `scheduled_at >= now` — the session's
+own START time — so the INSTANT a session actually starts, that same
+instant is now in the past, and the query silently drops it and jumps
+straight to whatever's next. A student's dashboard showed no Join
+button at all for the entire duration of a lesson they were actively
+in. Now floors 3 hours into the past instead (generous cover for any
+realistic session length) and picks the first candidate in JS whose end
+time — not start time — is still ahead of now, same reasoning
+join-button.tsx's own `joinable` check already uses. (The sibling
+"Upcoming lessons this cycle" list has the identical `scheduled_at >=
+now` pattern and likely the same gap — not touched this pass, flagging
+for a follow-up.)
+
+**Bonus, caught investigating #4's Needs Review board:** a
+"[Student]'s session on [today] has no recording yet" item appeared for
+a lesson that HADN'T ENDED — confirmed by you directly. Root cause in
+[syncRecordingAttentionItems](lib/admin/attention-items.ts): the
+"skip the grace period, a recording already showed up for this
+coach/date" shortcut (added for a real, different fix earlier) keys
+only on (coach, date) — not which specific session that recording
+belongs to — so it could fire for a LATER same-day session that hadn't
+even started yet, just because an EARLIER one that same coach/day
+already had a recording sitting unmatched. Now requires the session's
+own end time to actually be in the past before either due-condition can
+fire. The one bad item already in the queue isn't retroactively
+corrected by this (it'll self-resolve once Ayla's real recording syncs
+and matches, or can be manually marked resolved now) — the fix only
+stops new ones like it.
+
+`npx tsc --noEmit -p .` and `next build` both clean for all four. None
+live-clicked in a real browser against the real domain (the cookie fix
+in particular can only truly be proven on `*.tarasimonstudios.com` —
+localhost never sets the Domain attribute at all) — worth confirming
+with Celine, Charity, and Ayla once deployed. No migration for any of
+the four.
+
 ## Dropped the billing subdomain — it's just /billing now (2026-09-10)
 
 Immediate follow-up to the shared-session-cookie fix logged above: once

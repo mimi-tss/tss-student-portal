@@ -64,9 +64,21 @@ export default async function StudentDashboardPage() {
     student.billing_anniversary_date,
   );
 
+  // A session already in progress must still count as "next" — the query
+  // below floors on scheduled_at (session START), which the moment a
+  // session actually starts is already in the past, so a plain `.gte(now)`
+  // would drop it entirely mid-lesson and jump straight to whatever's
+  // after it (confirmed live: Ayla's dashboard showed her 9/17 session
+  // instead of the one she was trying to join that was still ongoing).
+  // Floors generously into the past instead (covers any realistic
+  // session length) and picks the first candidate that hasn't actually
+  // ENDED yet, in JS, same end-time reasoning join-button.tsx's own
+  // `joinable` check already uses.
+  const sessionLookbackFloor = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
   const [
     { data: coach },
-    { data: nextSession },
+    { data: nextSessionCandidates },
     { data: availableCredits },
     { count: sessionsThisCycle },
     { data: spotlightNotes },
@@ -91,10 +103,9 @@ export default async function StudentDashboardPage() {
       .select("id, scheduled_at, duration_minutes, coaches(name, meet_link)")
       .eq("student_id", student.id)
       .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString())
+      .gte("scheduled_at", sessionLookbackFloor.toISOString())
       .order("scheduled_at")
-      .limit(1)
-      .maybeSingle(),
+      .limit(5),
     // Unused, unexpired credits of any type — what's actually spendable
     // right now (see "See remaining session credits" in spec section 8).
     supabase
@@ -140,6 +151,11 @@ export default async function StudentDashboardPage() {
       .eq("student_id", student.id)
       .eq("active", true),
   ]);
+
+  const nextSession =
+    (nextSessionCandidates ?? []).find(
+      (s) => new Date(s.scheduled_at).getTime() + s.duration_minutes * 60 * 1000 > now.getTime(),
+    ) ?? null;
 
   const sessionCycleCap = effectiveSessionCycleCap(student.tier, (recurringSchedules ?? []).map((s) => s.cadence));
 

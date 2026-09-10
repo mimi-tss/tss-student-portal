@@ -49,39 +49,37 @@ export default function JoinButton({
   if (joinable === null) return null;
 
   // The portal itself is framed inside Kajabi's site (see login-form.tsx's
-  // own ensureStorageAccess comment). A same-tab `<a target="_blank">`
-  // click inside that iframe asks the BROWSER to spawn a popup — on
-  // mobile Safari that's exactly the kind of window.open Safari's popup
-  // blocker treats as untrusted once it's nested inside someone else's
-  // iframe, and when it doesn't cleanly open a real new tab, Meet's own
-  // app shell never loads into a proper top-level page — the request
-  // still round-trips Meet's servers, but what comes back is Meet's raw
-  // API payload, which a browser with nowhere sane to render it just
-  // offers as a "download this file" prompt. Group-class students on
-  // real mobile Safari hit exactly this.
-  //
-  // Fix: don't ask for a popup at all — navigate the TOP-LEVEL window
-  // straight to the Meet link, breaking out of Kajabi's iframe entirely.
-  // Writing a cross-origin window.top.location is allowed as a
-  // user-activation top navigation (this click is exactly that); it's
-  // the same escape hatch framebusting code relies on. Meet then loads
-  // as a normal, unframed page in the real browser — which is all it
-  // ever needed.
-  function handleClick() {
+  // own ensureStorageAccess comment). Two approaches were already tried
+  // and each failed in a DIFFERENT real client, so this is now a genuine
+  // `<a>` rather than either:
+  //   - `<a target="_blank">` (the original implementation): asks the
+  //     browser for a popup. On mobile Safari nested in this iframe, that
+  //     popup doesn't reliably open as a clean top-level page — Meet's
+  //     servers still respond, but with nowhere sane to render it the
+  //     browser offers Meet's raw JSON as a "download this file" prompt.
+  //     Confirmed live on real mobile Safari group-class students.
+  //   - a scripted `window.top.location.href` write (2026-09-09 fix):
+  //     solved the Safari case, but confirmed NOT reliable everywhere —
+  //     Ayla's Join button did nothing at all, while pasting the same
+  //     literal meet link into chat (a real clicked `<a target="_blank">`
+  //     there) let her straight into the same lesson. Some real client
+  //     silently blocks a SCRIPTED top-frame navigation from inside a
+  //     nested iframe (a common anti-clickjacking restriction) while
+  //     still allowing a genuinely user-clicked link through.
+  // `target="_top"` on a real anchor gets the best of both: like `_blank`
+  // it's a native, browser-handled link click (not a script write), but
+  // like the window.top fix it navigates the EXISTING top-level frame in
+  // place rather than requesting a new popup — no popup-blocker heuristics
+  // to trip, no scripted top-nav for a stricter client to silently refuse.
+  function handleBeacon() {
     // Best-effort dispute evidence ("did they actually click Join") —
-    // sendBeacon fires without waiting for a response, so it can't
-    // delay the navigation below it.
+    // sendBeacon fires without waiting for a response, so it can't delay
+    // the click's own native navigation.
     try {
       const payload = new Blob([JSON.stringify({ sessionId, kind })], { type: "application/json" });
       navigator.sendBeacon("/api/student/join-click", payload);
     } catch {
       // never block the actual join action over a logging failure
-    }
-
-    try {
-      (window.top ?? window).location.href = meetLink;
-    } catch {
-      window.location.href = meetLink;
     }
   }
 
@@ -94,8 +92,8 @@ export default function JoinButton({
   }
 
   return (
-    <button type="button" onClick={handleClick} className={styles.joinBtn}>
+    <a href={meetLink} target="_top" rel="noopener" onClick={handleBeacon} className={styles.joinBtn}>
       Join session
-    </button>
+    </a>
   );
 }
