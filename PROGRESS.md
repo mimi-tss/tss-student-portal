@@ -3,6 +3,50 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Fixed Remove-recurring-schedule FK error; Cancelling pill never showed confirmed (2026-09-10)
+
+You couldn't remove Grace's recurring weekly slot even though she's
+cancelled — the admin student page threw `update or delete on table
+"recurring_schedules" violates foreign key constraint
+"sessions_recurring_schedule_id_fkey" on table "sessions"` right in
+the UI. Root cause: [recurring-schedule](app/api/admin/recurring-schedule/route.ts)'s
+DELETE only ever cleared *future, still-'scheduled'* sessions before
+trying to hard-delete the `recurring_schedules` row itself — any
+student who's had the slot longer than a few days already has real
+history (attended/no-show/an earlier cancel) still pointing at it via
+`sessions.recurring_schedule_id`, and that FK has no `ON DELETE`
+clause. So Remove was broken for basically every established student,
+not a Grace-specific edge case.
+
+Fixed by not actually deleting the row — flips `active = false`
+instead, the same off-switch `materializeRecurringSessions` and
+`getHeldRecurringSlots` (lib/scheduling/recurring.ts) already treat as
+"stop generating/holding here," both already query `.eq("active",
+true)`. Admin's [student page](<app/(admin)/admin/students/[studentId]/page.tsx>)'s
+own weekly-schedule query didn't filter on `active` at all, so a
+removed slot would've kept showing as if still live — added that
+filter too. Applied the identical fix directly to Grace's real row in
+production (deactivated it; she had zero future 'scheduled' sessions
+left to clear) so she doesn't need you to click Remove again.
+
+Second, related ask: clicking "Mark cancelled (confirmed)" correctly
+resolves the cancel request (the panel underneath already said
+"Cancellation confirmed" — that part always worked), but the lifecycle
+bar's own pill just checked *whether a cancel request exists at all*
+and always printed "Cancelling," pending or already confirmed, so
+confirming looked like it did nothing. [subscription-lifecycle-client.tsx](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>)
+now shows "Cancelled — confirmed" once the request's own status is
+"approved." Genuinely still not the same as Stripe's subscription
+actually ending — that's real `cancel_at_period_end`, so the student
+stays billed/active through their current cycle by design (Grace's
+reads Oct 1, 2026) — this only fixes the pill lying about whether the
+confirm click registered.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-clicked
+in the real admin UI — no login here. No migration; `active` already
+existed and was already load-bearing everywhere except this one
+display query and the DELETE handler.
+
 ## Billing shares the main app's session — no separate login when already signed in (2026-09-10)
 
 Billing's own separate login (built earlier this session) turned out to
