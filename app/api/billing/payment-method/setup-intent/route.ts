@@ -19,7 +19,16 @@ export async function POST() {
   }
 
   const client = getStripeClient(billingStudent.stripeAccount);
-  const setupIntent = await client.setupIntents.create({ customer: billingStudent.stripeCustomerId });
+  // Restricted to card — without this, Payment Element shows every
+  // payment method enabled on the Stripe account's own Settings page
+  // (confirmed live: Amazon Pay, Bancontact — a Belgium-only method —
+  // and Cash App Pay all showed up unprompted). This flow is
+  // specifically "update your saved card," not a general payment
+  // method picker.
+  const setupIntent = await client.setupIntents.create({
+    customer: billingStudent.stripeCustomerId,
+    payment_method_types: ["card"],
+  });
 
   return NextResponse.json({
     clientSecret: setupIntent.client_secret,
