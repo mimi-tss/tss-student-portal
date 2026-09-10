@@ -3,6 +3,51 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## ⚠️ Caused, then reverted, a total auth outage — the stale-cookie "fix" below broke everyone (2026-09-10)
+
+The cookie-cleanup entry right below this one shipped, and within
+minutes broke login/every authenticated request for EVERY user —
+Tera, Ayla's exercise-recording playback, and your own admin account
+all started 401ing on ordinary actions (assign exercise, send a
+message). Caught fast because it was reported live, but this was a
+real production outage I caused, not a pre-existing bug — recording it
+plainly rather than folding it quietly into the entry above.
+
+Root cause: [lib/supabase/server.ts](lib/supabase/server.ts)'s cleanup
+called `cookieStore.set()` on the SAME cookie name Supabase's own
+client was about to read, to expire a leftover `Domain=.tarasimonstudios.com`
+copy. Next's cookie store (`@edge-runtime/cookies`, confirmed by reading
+its actual source) keys its internal Map by **name only** — it has no
+concept of Domain/Path as part of a cookie's identity the way a real
+browser jar does. So that "expire the stale copy" call silently
+clobbered the CURRENT, valid, host-only cookie's value to `""` for the
+rest of the request, before Supabase ever got to read it. Broke
+literally everyone, including a brand-new incognito login with no
+stale cookie at all — which is exactly the signal that (correctly)
+made you push back rather than accept "try incognito" as the answer.
+
+First fix attempt (moving the cleanup into `setAll`, appending an
+extra Set-Cookie for the stale domain right after writing the real
+one) has the IDENTICAL bug, just shifted from the read side to the
+write side — two `.set()` calls for the same name in one response
+still collapse to one Map entry, so the real cookie still never
+actually gets sent. Confirmed this in the store's source before
+shipping a second broken attempt.
+
+**Reverted lib/supabase/server.ts all the way back to its pre-incident
+state** (commit `1d824b0`, matching `f2aa514` exactly) — no cleanup
+logic at all. The stale-domain-cookie problem from earlier today
+(commit `3229ba3`, reverted by `49819e9`) is real but narrow (only
+returning visitors who used the app during that ~4h window), and
+leaving it unfixed for now is far better than another attempt breaking
+everyone again. A correct fix needs something with real control over
+raw response headers (middleware.ts, or building the `NextResponse`
+directly and calling `.headers.append("Set-Cookie", ...)` rather than
+going through Next's higher-level `cookies()` API) — not attempted this
+session. `npx tsc --noEmit -p .` and `next build` both clean on the
+revert. Pushed immediately as a hotfix; confirm with Tera/Ayla/your own
+account once this deploy is live.
+
 ## Four real bugs from today's live reports: stale cross-domain cookie, Join button navigation, dashboard hiding an in-progress session, premature "missing recording" flag (2026-09-10)
 
 Four separate live reports came in back to back today, each traced to a
