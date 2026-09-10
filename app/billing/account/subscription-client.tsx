@@ -249,8 +249,8 @@ export default function SubscriptionClient() {
           </button>
         )}
         {isActionable && (
-          <button className={styles.linkBtn} onClick={() => setShowCancelForm((v) => !v)}>
-            {showCancelForm ? "Never mind" : "Cancel subscription"}
+          <button className={styles.cta} onClick={() => setShowCancelForm((v) => !v)}>
+            {showCancelForm ? "Never mind" : "Cancel"}
           </button>
         )}
       </div>
