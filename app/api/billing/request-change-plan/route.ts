@@ -4,11 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { createAttentionItem } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
-import { TIER_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
+import { TIER_LABEL, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
 import type { Tier } from "@/types/database";
 
 const VALID_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
-const VALID_INTERVALS: BillingInterval[] = ["monthly", "yearly"];
 
 // Same request-gated shape as pause/cancel — replaces sending students
 // to Stripe's hosted Billing Portal for a plan switch. Admin approving
@@ -20,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (typeof tier !== "string" || !VALID_TIERS.includes(tier as Tier)) {
     return NextResponse.json({ error: "A valid tier is required" }, { status: 400 });
   }
-  if (!VALID_INTERVALS.includes(interval)) {
+  if (!BILLING_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "A valid interval is required" }, { status: 400 });
   }
   if (typeof reason !== "string" || !reason.trim()) {
@@ -64,12 +63,12 @@ export async function POST(req: NextRequest) {
     kind: "change_plan_request",
     studentId: billingStudent.studentId,
     requestId: inserted.id,
-    summary: `${billingStudent.name} requested to switch to ${TIER_LABEL[tier as Tier]} (${interval}) · reason: ${reason.trim()}`,
+    summary: `${billingStudent.name} requested to switch to ${TIER_LABEL[tier as Tier]} (${INTERVAL_LABEL[interval as BillingInterval]}) · reason: ${reason.trim()}`,
   });
   await notifyStaff(admin, {
     kind: "change_plan_request",
     dedupKey: inserted.id,
-    text: `${billingStudent.name} requested to switch to ${TIER_LABEL[tier as Tier]} (${interval}). See Needs Review.`,
+    text: `${billingStudent.name} requested to switch to ${TIER_LABEL[tier as Tier]} (${INTERVAL_LABEL[interval as BillingInterval]}). See Needs Review.`,
   });
 
   return NextResponse.json({ success: true });

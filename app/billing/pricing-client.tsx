@@ -3,19 +3,19 @@
 import { useEffect, useState } from "react";
 import styles from "./billing.module.css";
 import type { Tier } from "@/types/database";
-import { formatPrice, type BillingInterval } from "@/lib/stripe/tiers";
+import { formatPrice, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
 import { TIER_COPY } from "@/lib/billing/tier-copy";
 
 interface PriceInfo {
   amount: number | null;
   currency: string | null;
 }
-type PricingData = Record<Tier, { monthly: PriceInfo | null; yearly: PriceInfo | null }>;
+type PricingData = Record<Tier, Record<BillingInterval, PriceInfo | null>>;
 
-// Each tier gets its own monthly/yearly toggle (not one global switch) —
-// a tier without a yearly price configured (e.g. a free Lite tier) just
-// never shows a toggle at all, rather than a global switch needing to
-// special-case it.
+// Each tier's interval toggle only ever shows the intervals that
+// actually have a price configured for it (BILLING_INTERVALS.filter
+// below) — a tier with just monthly, or a limited-time 3/6-month promo
+// on top of monthly/yearly, both render correctly with no special-casing.
 export default function PricingClient() {
   const [pricing, setPricing] = useState<PricingData | null>(null);
   const [interval, setInterval] = useState<Record<Tier, BillingInterval>>({
@@ -62,7 +62,7 @@ export default function PricingClient() {
       <div className={styles.tierGrid}>
         {TIER_COPY.map((t) => {
           const prices = pricing?.[t.tier];
-          const hasYearly = !!prices?.yearly;
+          const availableIntervals = BILLING_INTERVALS.filter((i) => prices?.[i]);
           const selected = interval[t.tier];
           const price = prices?.[selected] ?? null;
 
@@ -79,22 +79,18 @@ export default function PricingClient() {
                 ))}
               </ul>
 
-              {hasYearly && (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    className={selected === "monthly" ? styles.badge : styles.linkBtn}
-                    onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: "monthly" }))}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    className={selected === "yearly" ? styles.badge : styles.linkBtn}
-                    onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: "yearly" }))}
-                  >
-                    Yearly
-                  </button>
+              {availableIntervals.length > 1 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {availableIntervals.map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={selected === i ? styles.badge : styles.linkBtn}
+                      onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: i }))}
+                    >
+                      {INTERVAL_LABEL[i]}
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -103,7 +99,7 @@ export default function PricingClient() {
                 {price && price.amount !== 0 && (
                   <span className={styles.statLabel} style={{ fontSize: 13 }}>
                     {" "}
-                    / {selected === "monthly" ? "mo" : "yr"}
+                    / {INTERVAL_LABEL[selected]}
                   </span>
                 )}
               </div>

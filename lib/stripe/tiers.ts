@@ -1,22 +1,54 @@
 import type Stripe from "stripe";
 import type { Tier } from "@/types/database";
 
-export type BillingInterval = "monthly" | "yearly";
+// "3month"/"6month" exist for time-limited promo pricing (e.g. a 3- or
+// 6-month prepaid term offered for a limited window) — no expiry date
+// logic in code for that by design (confirmed with the user): the
+// option is simply offered for as long as its env var is set, and
+// removing the var (then redeploying) is how a promo actually ends.
+export type BillingInterval = "monthly" | "3month" | "6month" | "yearly";
+
+// Display + iteration order everywhere this list is shown.
+export const BILLING_INTERVALS: BillingInterval[] = ["monthly", "3month", "6month", "yearly"];
+
+export const INTERVAL_LABEL: Record<BillingInterval, string> = {
+  monthly: "Monthly",
+  "3month": "3 Months",
+  "6month": "6 Months",
+  yearly: "Yearly",
+};
+
+const ENV_SUFFIX: Record<BillingInterval, string> = {
+  monthly: "MONTHLY",
+  "3month": "3MONTH",
+  "6month": "6MONTH",
+  yearly: "YEARLY",
+};
+
+function buildTierPrices(envPrefix: string): Record<BillingInterval, string | null> {
+  const entries = BILLING_INTERVALS.map((interval) => [
+    interval,
+    process.env[`STRIPE_PRICE_${envPrefix}_${ENV_SUFFIX[interval]}`] ?? null,
+  ]);
+  return Object.fromEntries(entries) as Record<BillingInterval, string | null>;
+}
 
 // The canonical, CURRENT prices per tier — used only to pick what a
 // brand-new signup gets charged (app/api/billing/checkout). Every other
 // price that exists in Stripe (grandfathered/legacy rates) is
 // deliberately never referenced here — that's what keeps it invisible to
-// new signups, see app/api/billing/checkout/route.ts's own comment.
-// `yearly` is optional per tier (e.g. a free Lite tier has no reason to
-// offer a yearly option) — env var simply left unset. Price IDs come
-// from Stripe Dashboard → Product catalog (test and live mode each have
-// their own), set per environment in Vercel, not hardcoded here.
+// new signups, see app/api/billing/checkout/route.ts's own comment. Every
+// interval is optional per tier (e.g. a free Lite tier has no reason to
+// offer a yearly option) — env var simply left unset, and the UI only
+// ever shows a toggle for intervals that actually have a price. Price
+// IDs come from Stripe Dashboard → Product catalog (test and live mode
+// each have their own), set per environment in Vercel, not hardcoded
+// here.
 export const STRIPE_PRICE_BY_TIER: Record<Tier, Record<BillingInterval, string | null>> = {
-  lite: { monthly: process.env.STRIPE_PRICE_LITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_LITE_YEARLY ?? null },
-  suite: { monthly: process.env.STRIPE_PRICE_SUITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_SUITE_YEARLY ?? null },
-  pro: { monthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_PRO_YEARLY ?? null },
-  elite: { monthly: process.env.STRIPE_PRICE_ELITE_MONTHLY ?? null, yearly: process.env.STRIPE_PRICE_ELITE_YEARLY ?? null },
+  lite: buildTierPrices("LITE"),
+  suite: buildTierPrices("SUITE"),
+  pro: buildTierPrices("PRO"),
+  elite: buildTierPrices("ELITE"),
 };
 
 export const TIER_LABEL: Record<Tier, string> = {

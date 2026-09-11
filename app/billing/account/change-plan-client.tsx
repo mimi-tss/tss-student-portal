@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Tier } from "@/types/database";
-import { formatPrice, type BillingInterval } from "@/lib/stripe/tiers";
+import { formatPrice, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
 import { TIER_COPY } from "@/lib/billing/tier-copy";
 import styles from "../billing.module.css";
 
@@ -10,7 +10,7 @@ interface PriceInfo {
   amount: number | null;
   currency: string | null;
 }
-type PricingData = Record<Tier, { monthly: PriceInfo | null; yearly: PriceInfo | null }>;
+type PricingData = Record<Tier, Record<BillingInterval, PriceInfo | null>>;
 
 // Same visual tier-card grid as the public pricing page (app/billing/
 // pricing-client.tsx) — the student asked to see and compare plans the
@@ -70,7 +70,7 @@ export default function ChangePlanClient({
       <div className={styles.tierGrid}>
         {TIER_COPY.map((t) => {
           const prices = pricing?.[t.tier];
-          const hasYearly = !!prices?.yearly;
+          const availableIntervals = BILLING_INTERVALS.filter((i) => prices?.[i]);
           const selectedInterval = interval[t.tier];
           const price = prices?.[selectedInterval] ?? null;
           const isCurrent = t.tier === currentTier;
@@ -95,22 +95,18 @@ export default function ChangePlanClient({
                 ))}
               </ul>
 
-              {hasYearly && (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    className={selectedInterval === "monthly" ? styles.badge : styles.linkBtn}
-                    onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: "monthly" }))}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    className={selectedInterval === "yearly" ? styles.badge : styles.linkBtn}
-                    onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: "yearly" }))}
-                  >
-                    Yearly
-                  </button>
+              {availableIntervals.length > 1 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {availableIntervals.map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className={selectedInterval === i ? styles.badge : styles.linkBtn}
+                      onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: i }))}
+                    >
+                      {INTERVAL_LABEL[i]}
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -119,7 +115,7 @@ export default function ChangePlanClient({
                 {price && price.amount !== 0 && (
                   <span className={styles.statLabel} style={{ fontSize: 13 }}>
                     {" "}
-                    / {selectedInterval === "monthly" ? "mo" : "yr"}
+                    / {INTERVAL_LABEL[selectedInterval]}
                   </span>
                 )}
               </div>

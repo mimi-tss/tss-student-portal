@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
-import { STRIPE_PRICE_BY_TIER, type BillingInterval } from "@/lib/stripe/tiers";
+import { STRIPE_PRICE_BY_TIER, BILLING_INTERVALS, type BillingInterval } from "@/lib/stripe/tiers";
 import type { Tier } from "@/types/database";
 
 const VALID_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
-const VALID_INTERVALS: BillingInterval[] = ["monthly", "yearly"];
 
 // Unauthenticated by design — this is the public signup path (new
 // student, no account yet). Stripe Checkout is fully hosted: no card
@@ -19,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (typeof tier !== "string" || !VALID_TIERS.includes(tier as Tier)) {
     return NextResponse.json({ error: "A valid tier is required" }, { status: 400 });
   }
-  if (!VALID_INTERVALS.includes(interval)) {
+  if (!BILLING_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "A valid interval is required" }, { status: 400 });
   }
 
