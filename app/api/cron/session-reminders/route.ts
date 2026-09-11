@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
+import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -16,6 +17,15 @@ const STARTING_SOON_MIN_MINUTES = 15;
 const STARTING_SOON_MAX_MINUTES = 25;
 const REMINDER_24H_MIN_HOURS = 23.5;
 const REMINDER_24H_MAX_HOURS = 24.5;
+
+// Matches join-button.tsx's own EARLY_JOIN_MINUTES=10 — the meet-link
+// chat message lands the same moment the Join button itself becomes
+// clickable, same 10-minute-wide-window-matches-cron-cadence reasoning
+// as the two windows above (see sendMeetLinkChatReminders for its own
+// dedup, which doesn't use notification_log since this is a real chat
+// message, not a notifications-table row).
+const MEET_LINK_MIN_MINUTES = 5;
+const MEET_LINK_MAX_MINUTES = 15;
 
 interface SessionRow {
   id: string;
@@ -91,5 +101,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ startingSoon: startingSoon.length, reminder24h: reminder24h.length, notified });
+  const meetLinksSent = await sendMeetLinkChatReminders(
+    admin,
+    new Date(now + MEET_LINK_MIN_MINUTES * 60_000),
+    new Date(now + MEET_LINK_MAX_MINUTES * 60_000),
+  );
+
+  return NextResponse.json({
+    startingSoon: startingSoon.length,
+    reminder24h: reminder24h.length,
+    notified,
+    meetLinksSent,
+  });
 }

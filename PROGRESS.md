@@ -3,6 +3,47 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Meet link now auto-sent to chat as a Join-button safety net (2026-09-10)
+
+Direct follow-up to today's Join-button bugs (Charity, Ayla) — you asked
+for an automated fallback rather than relying on a coach remembering to
+paste the link manually after the fact. New
+[sendMeetLinkChatReminders](lib/notifications/meet-link-chat.ts), called
+from the existing [session-reminders](app/api/cron/session-reminders/route.ts)
+cron (already running every 10 minutes — no new cron/workflow needed).
+New window (5-15 min before start, same cadence-matches-width reasoning
+the other two windows there already use) lines up with join-button.tsx's
+own `EARLY_JOIN_MINUTES=10` — the chat message lands at the same moment
+the Join button itself turns clickable, for every 1:1 session AND every
+group lesson's registered attendees, not just the group-lesson case the
+bug was originally found in.
+
+Sent as a real `chat_messages` row (not just an email/SMS notification)
+from the session's own actual coach into the student's existing 1:1
+thread — `getOrCreateThreadId` starts one if a pure group-lesson-only
+student never had the assigned-coach trigger fire for them. Reuses
+`notifyChatRecipient` afterward so the student gets the same "new
+message" email ping any real chat message would trigger.
+
+Dedup deliberately isn't the `notification_log` table the other two
+reminder kinds use (this isn't a `notifications` row, it's a real chat
+message) — checks for that exact message body already in the thread
+within the last 2 hours instead. The body is fully deterministic per
+coach (same meet_link every time), so an identical recent message IS
+the same reminder repeating, not a coincidence; a slightly-misaligned
+cron run still can't double-send.
+
+Verified the actual query shapes (the `coaches:actual_coach_id(...)`
+session join and the `group_lesson_registrations` group-lesson join)
+against real production data before trusting them — both returned
+exactly the expected shape. Did not run the real send function against
+production (would have messaged real students/coaches) — `npx tsc
+--noEmit -p .` and `next build` both clean. Not yet observed firing for
+real (needs the next 10-minute cron tick to land on a real session in
+the window) — worth checking `meetLinksSent` in the cron's own response
+next time it runs near a real upcoming session. No migration — every
+table involved already existed.
+
 ## ⚠️ Caused, then reverted, a total auth outage — the stale-cookie "fix" below broke everyone (2026-09-10)
 
 The cookie-cleanup entry right below this one shipped, and within
