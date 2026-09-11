@@ -77,6 +77,36 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Change Plan: current tier stays selectable (legacy → current pricing); "current plan" ribbon root cause found (2026-09-11)
+
+Two things from live testing on Mimi's own (Opus) account:
+
+1. **The "Current plan" ribbon wasn't showing at all**, on any card — root
+   cause isn't a code bug: `detail.tier` (passed as `currentTier`) comes
+   from `resolveTierFromPrice(price)`
+   ([app/api/billing/subscription/route.ts](app/api/billing/subscription/route.ts)),
+   which reads the live Stripe Price's own `tier` metadata key
+   ([lib/stripe/tiers.ts](lib/stripe/tiers.ts)'s own header comment on
+   that function) — it resolves to `null` for any Price missing that
+   metadata, and Mimi's specific $0 Opus test price never had it set.
+   No code fix needed; told the user to add `tier: pro` metadata to
+   that Price in the Stripe Dashboard (Opus account) directly.
+2. **Selecting the student's current tier was previously disabled** —
+   made sense for the "own"-account-only original design, but doesn't
+   for an Opus-linked (legacy-priced) student: they're technically
+   already "on Pro," but at whatever grandfathered/test price Opus gave
+   them, not the current standard one. [change-plan-client.tsx](app/billing/account/change-plan-client.tsx)'s
+   Select button for the current tier is no longer disabled — clicking
+   it now reads "Update {tier} pricing" instead of "Select {tier}" and
+   moves them onto the CURRENT standard price for that tier/interval
+   (same `/api/billing/request-change-plan` flow, no backend change
+   needed — it already swaps to `STRIPE_PRICE_BY_TIER[tier][interval]`
+   regardless of what price they started on). The ribbon alone now
+   marks "this is your tier"; the button no longer implies "so there's
+   nothing to do here."
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Whole-dollar prices drop the trailing ".00" (2026-09-11)
 
 User repriced everything in Stripe off .99 endings onto clean whole

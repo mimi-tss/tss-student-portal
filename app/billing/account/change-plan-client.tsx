@@ -97,13 +97,18 @@ export default function ChangePlanClient({
                     </a>
                   )
                 ) : (
+                  // Still clickable even when this is the student's current
+                  // tier — a legacy/Opus-priced student staying on the same
+                  // tier can use this to move onto the current standard
+                  // price instead of doing nothing (the ribbon alone marks
+                  // "current", it doesn't lock the button).
                   <button
                     type="button"
                     className={styles.cta}
-                    disabled={isCurrent || !price}
+                    disabled={!price}
                     onClick={() => setSelectedTier(t.tier)}
                   >
-                    {isCurrent ? "Current plan" : isChosen ? "Selected" : `Select ${t.name}`}
+                    {isChosen ? "Selected" : isCurrent ? `Update ${t.name} pricing` : `Select ${t.name}`}
                   </button>
                 )
               }
@@ -115,8 +120,17 @@ export default function ChangePlanClient({
       {selectedTier && (
         <form onSubmit={submit} className={`${styles.card} ${styles.form}`} style={{ maxWidth: 480, marginTop: 16 }}>
           <p className={styles.helpText} style={{ margin: 0 }}>
-            Switching to <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong> — takes effect
-            right away.
+            {selectedTier === currentTier ? (
+              <>
+                Moving to the current <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong>{" "}
+                pricing — takes effect right away.
+              </>
+            ) : (
+              <>
+                Switching to <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong> — takes effect
+                right away.
+              </>
+            )}
           </p>
           <label className={styles.statLabel} htmlFor="changePlanReason">
             Note (optional)
