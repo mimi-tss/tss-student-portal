@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Tier } from "@/types/database";
-import type { BillingInterval } from "@/lib/stripe/tiers";
 import { TIER_COPY, ELITE_APPLICATION_EMAIL } from "@/lib/billing/tier-copy";
-import { TierCard, type TierPricing } from "../tier-card";
+import { TierCard, IntervalToggle, type TierPricing } from "../tier-card";
 import styles from "../billing.module.css";
 
 type PricingData = Record<Tier, TierPricing>;
@@ -15,6 +14,11 @@ type PricingData = Record<Tier, TierPricing>;
 // self-serve and instant: selecting a tier and confirming swaps the
 // Stripe subscription's price right away (see the API route) — staff
 // just get a Slack heads-up, no approval step.
+//
+// Interval is Monthly/Yearly only, via one shared toggle above the grid
+// — unlike the public pricing page's per-card picker, an existing
+// student changing plans never sees the 3-month/6-month promotional
+// intervals (those stay checkout-only, for new signups).
 export default function ChangePlanClient({
   currentTier,
   onDone,
@@ -23,12 +27,7 @@ export default function ChangePlanClient({
   onDone: () => void;
 }) {
   const [pricing, setPricing] = useState<PricingData | null>(null);
-  const [interval, setInterval] = useState<Record<Tier, BillingInterval>>({
-    lite: "monthly",
-    suite: "monthly",
-    pro: "monthly",
-    elite: "monthly",
-  });
+  const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +48,7 @@ export default function ChangePlanClient({
     const res = await fetch("/api/billing/request-change-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: selectedTier, interval: interval[selectedTier], reason }),
+      body: JSON.stringify({ tier: selectedTier, interval, reason }),
     });
     const data = await res.json().catch(() => null);
     setSubmitting(false);
@@ -63,19 +62,23 @@ export default function ChangePlanClient({
   return (
     <div>
       {error && <p className={styles.errorText}>{error}</p>}
+      <div style={{ textAlign: "center" }}>
+        <IntervalToggle value={interval} onChange={setInterval} />
+      </div>
       <div className={styles.tierGrid}>
         {TIER_COPY.map((t) => {
           const isCurrent = t.tier === currentTier;
           const isChosen = t.tier === selectedTier;
-          const price = pricing?.[t.tier]?.[interval[t.tier]] ?? null;
+          const price = pricing?.[t.tier]?.[interval] ?? pricing?.[t.tier]?.monthly ?? null;
 
           return (
             <TierCard
               key={t.tier}
               tier={t}
               prices={pricing?.[t.tier]}
-              selectedInterval={interval[t.tier]}
-              onSelectInterval={(i) => setInterval((prev) => ({ ...prev, [t.tier]: i }))}
+              selectedInterval={interval}
+              onSelectInterval={() => {}}
+              showIntervalPicker={false}
               isCurrent={isCurrent}
               highlighted={isChosen}
               action={

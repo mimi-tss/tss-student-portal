@@ -4,12 +4,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
 import { getStripeClient } from "@/lib/stripe/client";
-import { STRIPE_PRICE_BY_TIER, TIER_LABEL, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
+import { STRIPE_PRICE_BY_TIER, TIER_LABEL, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
 import type { Tier } from "@/types/database";
 
 // Elite is application-only (see lib/billing/tier-copy.ts) — no self-serve
 // switch, the UI never offers it here, and this rejects a direct POST too.
 const VALID_TIERS: Tier[] = ["lite", "suite", "pro"];
+
+// Existing students changing plans only ever choose Monthly or Yearly —
+// the 3-month/6-month intervals stay promotional-checkout-only (new
+// signups, app/api/billing/checkout). The UI never sends anything else;
+// this rejects a direct POST too.
+const VALID_INTERVALS: BillingInterval[] = ["monthly", "yearly"];
 
 // Self-serve, instant: student picks a tier and it swaps right away —
 // no admin approval gate (unlike pause/cancel, which stay request-gated
@@ -22,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (typeof tier !== "string" || !VALID_TIERS.includes(tier as Tier)) {
     return NextResponse.json({ error: "A valid tier is required" }, { status: 400 });
   }
-  if (!BILLING_INTERVALS.includes(interval)) {
+  if (!VALID_INTERVALS.includes(interval)) {
     return NextResponse.json({ error: "A valid interval is required" }, { status: 400 });
   }
 
@@ -32,9 +38,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No billing account linked." }, { status: 400 });
   }
 
-  const newPriceId = STRIPE_PRICE_BY_TIER[tier as Tier][interval as BillingInterval];
+  // Falls back to monthly when this tier has no yearly price configured
+  // — mirrors the picker's own fallback (app/billing/tier-card.tsx) so a
+  // tier without a yearly option is never a hard error here.
+  const effectiveInterval: BillingInterval = STRIPE_PRICE_BY_TIER[tier as Tier][interval as BillingInterval]
+    ? (interval as BillingInterval)
+    : "monthly";
+  const newPriceId = STRIPE_PRICE_BY_TIER[tier as Tier][effectiveInterval];
   if (!newPriceId) {
-    return NextResponse.json({ error: `${TIER_LABEL[tier as Tier]} isn't available on that billing interval.` }, { status: 400 });
+    return NextResponse.json({ error: `${TIER_LABEL[tier as Tier]} isn't available right now.` }, { status: 400 });
   }
 
   const client = getStripeClient(billingStudent.stripeAccount);
@@ -57,7 +69,7 @@ export async function POST(req: NextRequest) {
       status: "approved",
       reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
       requested_tier: tier,
-      requested_interval: interval,
+      requested_interval: effectiveInterval,
       resolved_at: new Date().toISOString(),
     })
     .select("id")
@@ -67,7 +79,7 @@ export async function POST(req: NextRequest) {
   await notifyStaff(admin, {
     kind: "change_plan_request",
     dedupKey: inserted?.id ?? `${billingStudent.studentId}-${Date.now()}`,
-    text: `${billingStudent.name} switched to ${TIER_LABEL[tier as Tier]} (${INTERVAL_LABEL[interval as BillingInterval]}).`,
+    text: `${billingStudent.name} switched to ${TIER_LABEL[tier as Tier]} (${INTERVAL_LABEL[effectiveInterval]}).`,
   });
 
   return NextResponse.json({ success: true });

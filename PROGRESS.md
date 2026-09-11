@@ -45,6 +45,63 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Change Plan restructured: price-up-top layout, shared Monthly/Yearly toggle, no duplicate features (2026-09-11)
+
+Third round of live feedback on the tier cards, this time pointed at
+Shopify's and Slack's pricing pages as reference layouts:
+
+- **Card order flipped.** Price and the CTA button now sit right under
+  the name/description (matches both references — Slack in particular
+  puts its buttons directly under the price); the feature checklist
+  moved below a divider instead of being the thing you scroll past to
+  reach the price. Price itself is bigger now (`--font-anton`, 30px,
+  new `.tierPrice` class) instead of reusing the 22px tier-name style.
+- **Change Plan gets ONE shared Monthly/Yearly toggle above the whole
+  grid** (new `IntervalToggle`, [tier-card.tsx](app/billing/tier-card.tsx)),
+  replacing its old per-card interval picker — matches Shopify's single
+  pill toggle exactly. Clarified with the user mid-build: this
+  Monthly/Yearly-only restriction is for existing students
+  upgrading/downgrading ONLY — the public pricing page
+  (pricing-client.tsx) keeps its own per-card picker with all 4
+  intervals, since 3-month/6-month stay promotional-checkout pricing
+  for new signups. `TierCard` grew a `showIntervalPicker` prop (default
+  true) so the same component serves both shapes.
+  [request-change-plan/route.ts](app/api/billing/request-change-plan/route.ts)
+  now validates against `["monthly","yearly"]` only (was the full
+  `BILLING_INTERVALS`) — matches the UI, rejects a direct POST with a
+  promo interval too.
+- **A tier missing the globally-selected interval now falls back to its
+  monthly price** instead of showing "—" — matters for Lite (free,
+  monthly-only) and Elite (custom) under the shared toggle, and for any
+  paid tier without a yearly price configured. `TierCard` computes an
+  `effectiveInterval` (not the raw prop) for every label/math so the
+  fallback never mislabels a monthly price as "Yearly"; the API route
+  does the equivalent server-side.
+- **"CURRENT PLAN" ribbon confirmed working** — earlier reports of it
+  missing were the browser tab showing a stale pre-deploy version, not
+  a real bug (verified: `curl` against the live public pricing page
+  showed the latest commit's markup already live). Ribbon copy changed
+  from "Your plan" to "Current plan" to read more like a status tag.
+- **Removed duplicate features between tiers** — Pro's list used to
+  re-list every Suite perk individually (VIP Community Access,
+  Backstage Challenges & Events, etc.) on top of its own; now says
+  "Everything in Suite, plus" and only lists what's actually new,
+  cutting Pro from 10 items to 7. Suite gained its own "Everything in
+  Lite, plus" lead-in for the same reason.
+
+Verified in the local Browser preview: built a throwaway routable test
+page (`app/billing/ztmp-preview/`, deleted before committing — App
+Router's `_`-prefixed folders aren't routable, first attempt 404'd)
+exercising `IntervalToggle` + `isCurrent` directly, since the real
+Change Plan picker needs an authenticated student session this
+environment doesn't have. Confirmed: ribbon renders, toggle switches
+all 4 cards, Lite/Elite correctly hold their flat price under Yearly,
+Suite/Pro show correct save-% math. Also re-verified the public
+pricing page separately (real per-card picker, unaffected). Cleared a
+stale `.next` build-cache error left over from the deleted test route
+before the final build. `npx tsc --noEmit -p .` and `next build` both
+clean.
+
 ## Tier cards decluttered: collapsible features, tidy interval grid (2026-09-11)
 
 Follow-up to the ribbon/savings work — once the studio's real (much

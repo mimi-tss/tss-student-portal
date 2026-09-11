@@ -80,6 +80,34 @@
   gap: 16px;
 }
 
+.globalToggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  margin: 0 auto 24px;
+}
+
+.globalToggleOption {
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.globalToggleOptionActive {
+  composes: globalToggleOption;
+  background: var(--gold);
+  color: var(--gold-text);
+  font-weight: 700;
+}
+
 .tierCard {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -95,11 +123,11 @@
   background: var(--coral);
   color: var(--coral-text);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   text-align: center;
-  padding: 7px 0;
+  padding: 8px 0;
   margin: -24px -24px 0;
   border-radius: 16px 16px 0 0;
 }
@@ -136,10 +164,19 @@
   font-weight: 700;
 }
 
+.tierPrice {
+  font-family: var(--font-anton), sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+}
+
 .tierPriceSub {
   color: var(--text-muted);
   font-size: 12px;
-  margin-top: -8px;
+}
+
+.divider {
+  border-top: 1px solid var(--border);
 }
 
 .tierName {
