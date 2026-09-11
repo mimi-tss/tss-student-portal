@@ -22,15 +22,24 @@ export async function GET(req: NextRequest) {
   const to = req.nextUrl.searchParams.get("to");
   const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
 
+  // "Previous sessions" — never future. With no explicit `to`, an
+  // unfiltered query returned every row including a recurring student's
+  // far-future scheduled sessions, ordered newest-first, so the page
+  // showed a year-out 2027 booking before any actual history (confirmed
+  // live). Capped here rather than just defaulting the client's date
+  // picker, so it holds regardless of what the client sends.
+  const now = new Date().toISOString();
+  const effectiveTo = to && to < now ? to : now;
+
   let query = supabase
     .from("sessions")
     .select("id, scheduled_at, duration_minutes, actual_coach_id, status, is_makeup", { count: "exact" })
     .eq("student_id", studentId)
+    .lte("scheduled_at", effectiveTo)
     .order("scheduled_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
   if (from) query = query.gte("scheduled_at", from);
-  if (to) query = query.lte("scheduled_at", to);
 
   const { data: sessions, count, error } = await query;
 

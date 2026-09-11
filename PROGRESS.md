@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Admin's "previous sessions" page was showing future bookings, oldest history buried (2026-09-11)
+
+You flagged Mimi Orac's session-history page (`/admin/students/[id]/sessions`)
+opening on a random-looking list — turned out to be exactly correct given
+the code, just not what "previous sessions" should mean: with no
+default date filter,
+[/api/admin/session-history](app/api/admin/session-history/route.ts)
+returned literally every session ever, newest-`scheduled_at`-first — for
+a student with a weekly recurring slot booked a year out, that's a
+2027 future booking sitting at the top of a page titled "previous
+sessions," with any real history from months ago buried behind
+however many pages of future bookings came before it.
+
+Two fixes, both apply to every student (shared component/endpoint, not
+per-student):
+1. The route now hard-caps `to` at "now" regardless of what the client
+   sends — a real server-side guarantee this endpoint never returns a
+   future session, not just a client-side default that a cleared date
+   field would undo.
+2. [SessionHistoryClient](<app/(admin)/admin/students/[studentId]/sessions/session-history-client.tsx>)'s
+   "From" field now defaults to the 1st of the current calendar month
+   instead of blank, so the page opens on recent history instead of
+   the entire lifetime of the account. "To" stays blank by default
+   (relies on the server's own cap) — "Clear dates" still works as the
+   deliberate "show full history" escape hatch, just never past today.
+
+Verified the exact fixed query against Mimi Orac's real production data
+(the student from your screenshot) before trusting it — 3 real
+September sessions (attended/cancelled-with-notice), zero future ones,
+where the unfiltered query had been surfacing 2027 bookings first.
+`npx tsc --noEmit -p .` and `next build` both clean. No migration.
+
 ## Change Plan made self-serve/instant; Elite made application-only (2026-09-10)
 
 Two decisions from live testing of the billing account page:

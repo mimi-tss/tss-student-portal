@@ -55,6 +55,16 @@ function coachName(coaches: Coach[], id: string): string {
   return coaches.find((c) => c.id === id)?.name ?? "Unknown coach";
 }
 
+// Default "From" to the 1st of the current calendar month — an empty
+// default showed every session ever, oldest history buried behind
+// however many pages a long-tenured student had. The API itself caps
+// "To" at now regardless of what's sent (never future), independent of
+// this default.
+function firstOfMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 // A session's date/time/coach/duration/status, editable inline — shared
 // shape for both "Edit" on an existing row and "Add past session" for one
 // that never existed in this app at all (e.g. a late cancellation that
@@ -204,7 +214,7 @@ export default function SessionHistoryClient({
   yearlyCreditsUsed: number;
   credits: Credit[];
 }) {
-  const [from, setFrom] = useState("");
+  const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
