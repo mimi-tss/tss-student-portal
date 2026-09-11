@@ -45,6 +45,37 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## "Mark resolved" silently did nothing on a stuck Change Plan request (2026-09-10)
+
+Live bug, caught resolving Mimi Orac's own Change Plan request in Needs
+Review: clicking "Mark resolved" looked like it did nothing — item just
+stayed in the list. Two real bugs, not one:
+
+1. [attention-item-row.tsx](<app/(admin)/admin/attention-item-row.tsx>)'s
+   `setStatus()` never checked `res.ok` — a failed resolve (a real
+   thrown error from `resolveAttentionItem`) looked identical to a
+   successful one from the admin's side. Now surfaces the actual error
+   under the item's summary instead of swallowing it.
+2. The actual reason THIS one failed: Mimi is Opus-linked, but
+   `STRIPE_PRICE_BY_TIER` ([lib/stripe/tiers.ts](lib/stripe/tiers.ts))
+   only ever holds "own"-account price IDs — they don't exist on Opus,
+   so the swap threw Stripe's own cryptic "No such price" against the
+   Opus API. This is the still-deferred Opus→own migration piece (new
+   subscription with a `trial_end` anchored to the student's current
+   Opus next-charge date — see earlier entries). Not built yet, so
+   [lib/admin/attention-items.ts](lib/admin/attention-items.ts)'s
+   `applyBillingRequestOutcome` now throws a clear, actionable message
+   for this case instead of the raw Stripe error.
+
+Also added a plain "Deny (no Stripe change)" action on `pause_request`/
+`change_plan_request` rows — previously the ONLY way to close one of
+these out was "Mark resolved," which always meant approved-and-execute;
+there was no way to dismiss a stale or now-unsupported request (like
+this one) without it. `cancel_request` already has its own approve/deny
+UI on the student detail page's Stop panel, unaffected.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Coach dashboard couldn't surface an older unmarked class at all (2026-09-10)
 
 Coach Celine: "not able to validate the previous classes." Genuinely

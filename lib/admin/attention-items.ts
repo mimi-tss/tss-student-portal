@@ -813,6 +813,20 @@ async function applyBillingRequestOutcome(
 
   if (kind === "change_plan_request") {
     if (outcome !== "approved") return;
+
+    // STRIPE_PRICE_BY_TIER only ever holds "own"-account price IDs
+    // (see lib/stripe/tiers.ts) — they don't exist on Opus, so a swap
+    // attempted directly against an Opus subscription fails with a
+    // cryptic Stripe "No such price" error. This is the deferred
+    // Opus→own migration (new subscription with a trial_end anchored to
+    // the current Opus next-charge date) — not built yet, so fail loud
+    // and clear here instead of letting that Stripe error surface raw.
+    if (student.stripe_account === "opus") {
+      throw new Error(
+        "This student is still on the legacy Opus account — plan changes there need the Opus→own migration (not built yet). Handle manually for now.",
+      );
+    }
+
     const { data: request } = await supabase
       .from("student_requests")
       .select("requested_tier, requested_interval")

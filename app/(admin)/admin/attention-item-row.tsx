@@ -79,9 +79,17 @@ export function AttentionItemRow({
   showStudentLink?: boolean;
 }) {
   const [note, setNote] = useState(item.adminNote ?? "");
-  const [saving, setSaving] = useState<AttentionStatus | "note" | null>(null);
+  const [saving, setSaving] = useState<AttentionStatus | "note" | "deny" | null>(null);
   const [addingLesson, setAddingLesson] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // pause_request/change_plan_request have no dedicated approve/deny UI
+  // (unlike cancel_request, which gets one on the student detail page's
+  // Stop panel) — "Mark resolved" here always means "approved" and
+  // executes the real Stripe call. This is the only way to close one out
+  // without touching Stripe, e.g. an obsolete or now-unsupported request.
+  const isDenyableBillingRequest = item.kind === "pause_request" || item.kind === "change_plan_request";
 
   // Books the exact same day/time the student already has weekly — no
   // credit, no trial, same "admin can book a plain session on a
@@ -118,14 +126,20 @@ export function AttentionItemRow({
     onChanged();
   }
 
-  async function setStatus(status: AttentionStatus) {
-    setSaving(status);
-    await fetch("/api/admin/attention-items/resolve", {
+  async function setStatus(status: AttentionStatus, requestOutcome?: "approved" | "denied") {
+    setSaving(requestOutcome === "denied" ? "deny" : status);
+    setStatusError(null);
+    const res = await fetch("/api/admin/attention-items/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId: item.id, status, note: note.trim() || undefined }),
+      body: JSON.stringify({ itemId: item.id, status, note: note.trim() || undefined, requestOutcome }),
     });
     setSaving(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setStatusError(body.error ?? "Something went wrong — status wasn't changed.");
+      return;
+    }
     onChanged();
   }
 
@@ -154,6 +168,11 @@ export function AttentionItemRow({
           )}
         </div>
         <div className={styles.naSummary}>{item.summary}</div>
+        {statusError && (
+          <div className={styles.errorText} style={{ marginTop: 4 }}>
+            {statusError}
+          </div>
+        )}
         {item.kind === "fifth_week_available" && item.status !== "resolved" && (
           <div style={{ marginTop: 8 }}>
             <button className={styles.linkBtnSmall} disabled={addingLesson} onClick={addFifthWeekLesson}>
@@ -193,6 +212,16 @@ export function AttentionItemRow({
             {saving === tab.status ? "…" : `Mark ${tab.label.toLowerCase()}`}
           </button>
         ))}
+        {isDenyableBillingRequest && item.status !== "resolved" && (
+          <button
+            className={styles.badgeMuted}
+            style={{ border: "none", cursor: "pointer", font: "inherit" }}
+            disabled={saving !== null}
+            onClick={() => setStatus("resolved", "denied")}
+          >
+            {saving === "deny" ? "…" : "Deny (no Stripe change)"}
+          </button>
+        )}
       </div>
     </div>
   );
