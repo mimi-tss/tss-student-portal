@@ -127,6 +127,27 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Opus→own migration: confirmed working live (real test, not simulated) (2026-09-11)
+
+Ran the real thing — Mimi's actual Opus subscription, live Stripe, a
+real card. Selected Pro→Pro (same-tier reprice, the migration path)
+from `/billing/account`, entered a real card in the (now-compact,
+Link-email-prefilled) card form, and it worked: account page came back
+showing `Sing Smarter Pro`, `$399/month`, `VISA •••• 4779` (the new
+card), `Next charge: October 9, 2026` — matching her existing Opus
+period end, confirming the `trial_end` anchoring is doing its job
+(no double-charge). This is the first real confirmation the whole
+migration pipeline — SetupIntent → card confirm → cross-account
+subscription creation → Opus `cancel_at` scheduling → DB write — 
+actually works end to end, not just that the UI wiring is correct.
+
+One copy fix from this real run: the success message said "your
+current Opus period ends" — a real word a student has no reason to
+know. Changed to "your current billing period ends" in
+[migrate-card-form.tsx](app/billing/account/migrate-card-form.tsx).
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Pre-fill email so Link's card form doesn't expand into a signup prompt (2026-09-11)
 
 User compared two screenshots of the same embedded card form: a

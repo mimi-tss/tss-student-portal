@@ -70,7 +70,7 @@ function CardForm({
       return;
     }
     onDone(
-      `You're all set on ${TIER_LABEL[tier]} — your new billing starts when your current Opus period ends, so you won't be charged twice.`,
+      `You're all set on ${TIER_LABEL[tier]} — your new billing starts when your current billing period ends, so you won't be charged twice.`,
     );
   }
 
