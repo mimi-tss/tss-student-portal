@@ -127,6 +127,17 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Opus→own migration: Stripe-side dates confirmed matching exactly (2026-09-11)
+
+Follow-up to the live test two entries up — checked both Stripe
+dashboards directly rather than just trusting the account page.
+Opus: Mimi's old subscription shows "Cancels Oct 9, 2026". Own: the
+new subscription shows "Free trial ends Oct 9, 2026" / "Trialing until
+Oct 9" / next invoice $399.00 on Oct 9. Exact match on both sides —
+`trial_end` and `cancel_at` really do line up to the same instant, no
+gap and no double-charge. Migration pipeline is now fully verified,
+not just UI-wiring-verified.
+
 ## Opus→own migration: confirmed working live (real test, not simulated) (2026-09-11)
 
 Ran the real thing — Mimi's actual Opus subscription, live Stripe, a
