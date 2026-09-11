@@ -1,41 +1,64 @@
 import type { Tier } from "@/types/database";
 
-// Feature text sourced from TSS_App_Spec_1.md section 2 ("Subscription
-// Tiers") and its "Portal access by tier" table — not invented copy, so
-// this stays accurate if either changes; update both together. Shared by
-// the public pricing page and the account page's Change Plan picker, so
-// the two never drift into different descriptions of the same tier.
+// Studio's own marketing copy for the tiers, given directly by the
+// studio (not sourced from TSS_App_Spec_1.md — that doc's version is
+// now stale). Shared by the public pricing page and the account page's
+// Change Plan picker, so the two never drift into different
+// descriptions of the same tier.
 export const ELITE_APPLICATION_EMAIL = "info@tarasimonstudios.com";
 
 export const TIER_COPY: { tier: Tier; name: string; desc: string; features: string[]; applyOnly?: boolean }[] = [
   {
     tier: "lite",
     name: "Lite",
-    desc: "Course access and community — no 1:1 coaching portal.",
-    features: ["Practice sheet & 7-day challenge", "Community feed & channel", "All mini courses"],
+    desc: "Free community access — no coaching, but real feedback from fellow vocal athletes.",
+    features: [
+      "TSS Community Feed & Channel",
+      "Tara's 7-Day Challenge",
+      "Access to Tara's Corner",
+      "Access to Practice Sheet",
+    ],
   },
   {
     tier: "suite",
     name: "Suite",
-    desc: "Weekly 1:1 lessons plus everything in Lite.",
-    features: ["Everything in Lite", "One lifetime trial lesson with a coach", "VIP community feed & early access", "10% discount on add-ons"],
+    desc: "Your way into the VIP community, plus a first taste of 1:1 coaching with a TSS Master Coach.",
+    features: [
+      "VIP Community Access",
+      "Backstage Challenges & Events",
+      "Tarabytes Exclusive Access",
+      "12+ Mini Courses",
+      "Bonus: your first 1:1 coaching session with a TSS Master Coach",
+    ],
   },
   {
     tier: "pro",
     name: "Pro",
-    desc: "More frequent coaching and priority scheduling.",
-    features: ["Everything in Suite", "4 weekly 30-min coach lessons/month", "Mastercourse unlock after 1 year", "Exclusive group chat", "15% discount on add-ons"],
+    desc: "For the serious singer — vocal athletes and working professionals training every week.",
+    features: [
+      "1:1 private 30-min coaching session with a TSS Master Coach (4 sessions/month)",
+      "Sing Like a Superstar (8-week mastercourse)",
+      "Riffs & Runs (6-week mastercourse)",
+      "Access to the TSS Vocal Exercises Library",
+      "First access to new courses, exercises & events",
+      "VIP Community Access",
+      "Backstage Challenges & Events",
+      "Tarabytes Exclusive Access",
+      "12+ Mini Courses",
+      "Bonus on annual: 1 Instareaction, 1 Private Vocal Artistry Session, 1 Semi-Private Session with Tara Simon",
+    ],
   },
   {
     tier: "elite",
     name: "Elite",
-    desc: "Our most comprehensive coaching plan — by application only.",
+    desc: "For the super-serious singer ready to go all-in on a career — by application only.",
     features: [
-      "Everything in Pro",
-      "Bi-annual group session with Tara",
-      "2 lifetime success calls with Mimi",
-      "1 lifetime onboarding/goal session",
-      "Monthly 1:1 goal/marketing session",
+      "Everything in Pro, plus",
+      "Tara's Monthly Masterclass",
+      "Collaboration & Promotion Opportunities",
+      "Marketing & Branding Sessions — learn how to market yourself as an artist",
+      "Vocal Artistry Sessions — everything you need as a professional singer",
+      "Recording Opportunities",
     ],
     applyOnly: true,
   },
