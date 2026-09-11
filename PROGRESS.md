@@ -77,6 +77,21 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Collapsed Change Plan card was too narrow for the embedded card form (2026-09-11)
+
+The metadata fix worked — live-tested by the user right after: ribbon
+and the collapsed single-card view both confirmed working on the real
+Opus migration flow. But the wrapper around the collapsed card
+([change-plan-client.tsx](app/billing/account/change-plan-client.tsx))
+was `maxWidth: 320` (sized for one column of the old 4-card grid),
+which squeezed the embedded Stripe Payment Element (card
+number/expiry/CVC) into a visibly cramped form. Widened to `480` —
+matches this app's own convention elsewhere (payment-method-client.tsx
+uses the same 480 for its card form). Confirmed the rendered card
+width locally (473px vs. the previous ~272px of usable space).
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Change Plan collapses to the selected card; dropped the reason field (2026-09-11)
 
 Live feedback right after the migration/downgrade work shipped: the

@@ -187,7 +187,7 @@ export default function ChangePlanClient({
       )}
 
       {showNextStep && selectedTier && selectedCopy && (
-        <div style={{ maxWidth: 320, margin: "0 auto" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto" }}>
           <button type="button" className={styles.linkBtn} onClick={backToPlans} style={{ marginBottom: 16 }}>
             ← Back to plans
           </button>
