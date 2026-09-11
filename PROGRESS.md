@@ -3,6 +3,56 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## The stale cross-domain cookie fix, attempt 3 — done via middleware this time, actually verified (2026-09-10)
+
+Third time this exact "logged in, immediately bounced back" symptom
+came up today (Celine, twice by report), and you asked for it to
+actually stop rather than telling people to clear cookies indefinitely.
+The first two attempts both lived in
+[lib/supabase/server.ts](lib/supabase/server.ts) and both called
+`cookieStore.set()` on the same cookie name Supabase's own client was
+about to read — Next's `cookies()` store keys its internal Map by name
+only (confirmed by reading `@edge-runtime/cookies`'s actual source), so
+either attempt clobbered the CURRENT valid cookie's value before it
+could be read, breaking auth for everyone (b5863e4, reverted by
+1d824b0).
+
+New [middleware.ts](middleware.ts) instead — structurally can't repeat
+that failure, not just written more carefully: middleware only ever
+touches the OUTGOING `NextResponse` it builds and returns; it has no
+way to affect what THIS request's own Server Components/Route Handlers
+see when they separately call `cookies()` on the original incoming
+request moments later. And unlike `cookies().set()`, appending directly
+to the response's `Headers` object (`response.headers.append("Set-Cookie",
+...)`) genuinely preserves two independent `Set-Cookie` lines for the
+same cookie name with different `Domain` attributes — additive, never
+overwriting.
+
+Did not trust this on reasoning alone this time, given the last two
+misses. Verified in three separate real steps before touching
+production:
+1. An isolated Node `Headers` test confirmed the platform itself
+   preserves two same-name `Set-Cookie` entries via `.append()`
+   (`getSetCookie()` returned both).
+2. A real `next start` server, hit with `curl` and a spoofed
+   `Host: portal.tarasimonstudios.com` header plus a fake chunked auth
+   cookie, produced exactly two real `set-cookie:` response lines for
+   `/login` — both correctly targeting `Domain=.tarasimonstudios.com`,
+   `Max-Age=0`. A request to the wrong host, and a request with no
+   matching cookie, both correctly produced zero extra headers — the
+   guard only fires where it should.
+3. Hit a real API route (`/api/auth/request-login-code`) the same way
+   to confirm the route's own response body/status and middleware's
+   appended header coexist in one real response, rather than one
+   clobbering the other.
+
+`npx tsc --noEmit -p .` and `next build` both clean (middleware now
+shows up in the build output, 26.6kB). `lib/supabase/server.ts` itself
+is untouched — still exactly the safe, pre-incident version. Not yet
+observed against a REAL affected browser (Celine's) — worth confirming
+next time she hits it, though the mechanism itself is now genuinely
+proven, not just plausible.
+
 ## Meet link now auto-sent to chat as a Join-button safety net (2026-09-10)
 
 Direct follow-up to today's Join-button bugs (Charity, Ayla) — you asked
