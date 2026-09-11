@@ -3,6 +3,38 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach dashboard couldn't surface an older unmarked class at all (2026-09-10)
+
+Coach Celine: "not able to validate the previous classes." Genuinely
+ambiguous at first — even you weren't sure what she meant — so checked
+production directly rather than guessing blind. Found a real backlog:
+several of her 1:1 sessions from Sep 3 onward were still sitting at
+status `scheduled`, never marked attended/no-show.
+
+Root cause: [getTodaysSchedule/getTodaysGroupLessons](lib/coach/dashboard-data.ts)
+back the coach dashboard and are hard-scoped to TODAY by design —
+correct for what "today's schedule" means, but it also meant there was
+no dashboard signal an older class ever existed unmarked at all. The
+only way to find and mark one was already knowing to go dig back
+through the full Schedule calendar (`/coach/schedule`) day by day —
+nothing on the dashboard pointed her there, and the "Needs Attendance"
+stat pill only ever counted today's.
+
+New `getPastUnmarkedAttendance` (90-day lookback, everything before
+today's own start) feeds a new "Needs Attendance — Previous Classes"
+panel on the coach dashboard, same quick Attended/No-show buttons
+Today's Schedule already has. Unlike Today's list (which keeps
+showing a session after marking it, just with updated status), an
+item here drops off the moment it's marked — this panel exists purely
+to flag the backlog, not to be a permanent log.
+
+`npx tsc --noEmit -p .` and `next build` both clean. This is my best
+read of the evidence (real unmarked sessions + a dashboard that
+structurally couldn't show them), not something confirmed with Celine
+directly — worth a check-in that this is actually what she meant. No
+migration; RLS ("coaches can update their own sessions", 0010) already
+covers a coach marking her own past sessions regardless of age.
+
 ## The stale cross-domain cookie fix, attempt 3 — done via middleware this time, actually verified (2026-09-10)
 
 Third time this exact "logged in, immediately bounced back" symptom
