@@ -3,6 +3,48 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Change Plan made self-serve/instant; Elite made application-only (2026-09-10)
+
+Two decisions from live testing of the billing account page:
+
+1. **Change Plan no longer needs admin approval.** Was request-gated like
+   pause/cancel (student submits, admin approves before Stripe changes)
+   — user decided that's unnecessary friction for a plain upgrade/
+   downgrade: "no need for admin approval. just upgrade them if they
+   want to. just notify admin right away." [app/api/billing/request-change-plan/route.ts](app/api/billing/request-change-plan/route.ts)
+   now swaps the Stripe subscription's price directly (reusing the same
+   retrieve-then-update-item logic `resolveAttentionItem` already had
+   for the admin-approval path in [lib/admin/attention-items.ts](lib/admin/attention-items.ts),
+   left in place but now effectively unused for this flow), logs an
+   already-`approved` `student_requests` row for the record, and pings
+   Slack via `notifyStaff` — informational only, nothing for admin to
+   action. Pause and Cancel are UNCHANGED — still request-gated, still
+   need the 3-step salvage workflow; this only applies to plan changes.
+   [change-plan-client.tsx](app/billing/account/change-plan-client.tsx)'s
+   reason field is now optional ("Note") and the confirmation copy
+   reflects it taking effect immediately.
+
+2. **Elite is application-only, not self-serve.** No `STRIPE_PRICE_ELITE_*`
+   price is meant to exist at all — this was mistaken for a missing-env-
+   var bug (Elite showed "—" with no toggle) before the user clarified
+   it's by design: "elite is application only. so they need to send
+   their application to us." Both the public pricing page and the
+   Change Plan picker now show Elite with a Claude-Enterprise-style
+   "Custom" price label and a "Contact us" button (`mailto:` to
+   `info@tarasimonstudios.com`, see `ELITE_APPLICATION_EMAIL` in
+   [lib/billing/tier-copy.ts](lib/billing/tier-copy.ts)) instead of a
+   price/interval toggle and a Stripe-touching button. Both
+   [checkout/route.ts](app/api/billing/checkout/route.ts) and
+   [request-change-plan/route.ts](app/api/billing/request-change-plan/route.ts)
+   also reject `elite` server-side now (defense in depth — the UI never
+   sends it, but a direct POST shouldn't be able to self-serve into it
+   either).
+
+`npx tsc --noEmit -p .` and `next build` both clean. Verified locally in
+the Browser preview (no Stripe keys in this dev environment, so real
+tier prices show "—" there same as always — only the Elite card's
+layout/copy was checkable locally).
+
 ## Coach dashboard couldn't surface an older unmarked class at all (2026-09-10)
 
 Coach Celine: "not able to validate the previous classes." Genuinely

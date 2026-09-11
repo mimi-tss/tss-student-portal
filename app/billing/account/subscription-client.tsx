@@ -282,7 +282,8 @@ export default function SubscriptionClient() {
             currentTier={detail.tier}
             onDone={() => {
               setShowChangePlanForm(false);
-              setConfirmation("Plan change request sent — the studio will follow up shortly.");
+              setConfirmation("Plan changed.");
+              load();
             }}
           />
         </div>

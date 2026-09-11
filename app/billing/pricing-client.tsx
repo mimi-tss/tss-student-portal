@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import styles from "./billing.module.css";
 import type { Tier } from "@/types/database";
 import { formatPrice, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
-import { TIER_COPY } from "@/lib/billing/tier-copy";
+import { TIER_COPY, ELITE_APPLICATION_EMAIL } from "@/lib/billing/tier-copy";
 
 interface PriceInfo {
   amount: number | null;
@@ -79,7 +79,7 @@ export default function PricingClient() {
                 ))}
               </ul>
 
-              {availableIntervals.length > 1 && (
+              {!t.applyOnly && availableIntervals.length > 1 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {availableIntervals.map((i) => (
                     <button
@@ -95,8 +95,8 @@ export default function PricingClient() {
               )}
 
               <div className={styles.tierName} style={{ fontSize: 22 }}>
-                {formatPrice(price?.amount, price?.currency) ?? "—"}
-                {price && price.amount !== 0 && (
+                {t.applyOnly ? "Custom" : formatPrice(price?.amount, price?.currency) ?? "—"}
+                {!t.applyOnly && price && price.amount !== 0 && (
                   <span className={styles.statLabel} style={{ fontSize: 13 }}>
                     {" "}
                     / {INTERVAL_LABEL[selected]}
@@ -104,9 +104,19 @@ export default function PricingClient() {
                 )}
               </div>
 
-              <button className={styles.cta} disabled={loadingTier !== null || !price} onClick={() => choose(t.tier)}>
-                {loadingTier === t.tier ? "Starting…" : `Choose ${t.name}`}
-              </button>
+              {t.applyOnly ? (
+                <a
+                  className={styles.cta}
+                  style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+                  href={`mailto:${ELITE_APPLICATION_EMAIL}?subject=${encodeURIComponent(`${t.name} application`)}`}
+                >
+                  Contact us
+                </a>
+              ) : (
+                <button className={styles.cta} disabled={loadingTier !== null || !price} onClick={() => choose(t.tier)}>
+                  {loadingTier === t.tier ? "Starting…" : `Choose ${t.name}`}
+                </button>
+              )}
             </div>
           );
         })}

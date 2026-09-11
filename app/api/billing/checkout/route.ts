@@ -3,7 +3,10 @@ import { stripe } from "@/lib/stripe/client";
 import { STRIPE_PRICE_BY_TIER, BILLING_INTERVALS, type BillingInterval } from "@/lib/stripe/tiers";
 import type { Tier } from "@/types/database";
 
-const VALID_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
+// Elite is application-only (see lib/billing/tier-copy.ts) — the public
+// pricing page sends it to a mailto instead of Checkout, and this rejects
+// a direct POST too.
+const VALID_TIERS: Tier[] = ["lite", "suite", "pro"];
 
 // Unauthenticated by design — this is the public signup path (new
 // student, no account yet). Stripe Checkout is fully hosted: no card

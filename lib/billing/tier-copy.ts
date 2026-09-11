@@ -5,7 +5,9 @@ import type { Tier } from "@/types/database";
 // this stays accurate if either changes; update both together. Shared by
 // the public pricing page and the account page's Change Plan picker, so
 // the two never drift into different descriptions of the same tier.
-export const TIER_COPY: { tier: Tier; name: string; desc: string; features: string[] }[] = [
+export const ELITE_APPLICATION_EMAIL = "info@tarasimonstudios.com";
+
+export const TIER_COPY: { tier: Tier; name: string; desc: string; features: string[]; applyOnly?: boolean }[] = [
   {
     tier: "lite",
     name: "Lite",
@@ -27,7 +29,7 @@ export const TIER_COPY: { tier: Tier; name: string; desc: string; features: stri
   {
     tier: "elite",
     name: "Elite",
-    desc: "Our most comprehensive coaching plan.",
+    desc: "Our most comprehensive coaching plan — by application only.",
     features: [
       "Everything in Pro",
       "Bi-annual group session with Tara",
@@ -35,5 +37,6 @@ export const TIER_COPY: { tier: Tier; name: string; desc: string; features: stri
       "1 lifetime onboarding/goal session",
       "Monthly 1:1 goal/marketing session",
     ],
+    applyOnly: true,
   },
 ];
