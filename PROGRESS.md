@@ -77,6 +77,18 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Current-plan card gets a full coral border, not just the ribbon (2026-09-11)
+
+Referenced Slack's own pricing page: their highlighted "Pro" card has
+a solid border matching its "BEST VALUE" ribbon color, not just the
+top banner on an otherwise plain-bordered card. [tier-card.tsx](app/billing/tier-card.tsx)'s
+current-plan card now gets the same treatment — a 2px coral border
+around the whole card (was just the ribbon strip before). Stacks
+cleanly with the gold selection outline for the case introduced in the
+previous entry (a student can now click their own current tier to
+reprice it, so `isCurrent` and `highlighted` can both be true at once)
+— verified both rings render together correctly in the local preview.
+
 ## Change Plan: current tier stays selectable (legacy → current pricing); "current plan" ribbon root cause found (2026-09-11)
 
 Two things from live testing on Mimi's own (Opus) account:

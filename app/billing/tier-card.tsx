@@ -62,7 +62,20 @@ export function TierCard({
   const visibleFeatures = expanded || tier.features.length <= collapseAt ? tier.features : tier.features.slice(0, collapseAt);
 
   return (
-    <div className={styles.tierCard} style={highlighted ? { outline: "2px solid var(--gold)", outlineOffset: 2 } : undefined}>
+    <div
+      className={styles.tierCard}
+      style={{
+        // Current-plan card gets a coral border matching its ribbon
+        // (the whole card reads as highlighted, not just the top strip —
+        // same idea as a "Best Value" card getting a matching border on
+        // reference pricing pages). Selection (highlighted) layers a gold
+        // outline on top — both can be true at once now that a student
+        // can reselect their own current tier to move onto current
+        // pricing, so this stacks rather than picking one.
+        ...(isCurrent ? { border: "2px solid var(--coral)" } : undefined),
+        ...(highlighted ? { outline: "2px solid var(--gold)", outlineOffset: 2 } : undefined),
+      }}
+    >
       {isCurrent && <div className={styles.currentRibbon}>Current plan</div>}
       <div>
         <div className={styles.tierName}>{tier.name}</div>
