@@ -86,6 +86,11 @@ export async function GET() {
     return NextResponse.json({
       linked: true,
       studentName: billingStudent.name,
+      // Drives the Opus→own migration prompt on Change Plan
+      // (app/billing/account/change-plan-client.tsx) — an Opus-linked
+      // student needs a new card + a new subscription on "own" instead
+      // of the plain instant price-swap an "own" student gets.
+      stripeAccount: billingStudent.stripeAccount,
       planName,
       tier: resolveTierFromPrice(price),
       status: deriveDisplayStatus(subscription),

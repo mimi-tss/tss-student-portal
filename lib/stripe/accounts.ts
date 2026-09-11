@@ -1,6 +1,18 @@
 import { stripe, stripeOpus } from "@/lib/stripe/client";
 import type { StripeAccount } from "@/types/database";
 
+// Opus→own migration (app/api/billing/migrate/*): an Opus-linked
+// student moving to current billing needs a Customer on the "own"
+// account, which they may not have at all yet. Reuses one if a prior
+// attempt already created it (e.g. the student abandoned the flow after
+// the SetupIntent step) rather than creating a duplicate every retry.
+export async function findOrCreateOwnCustomer(email: string, name: string): Promise<string> {
+  const existing = await stripe.customers.list({ email, limit: 1 });
+  if (existing.data[0]) return existing.data[0].id;
+  const created = await stripe.customers.create({ email, name });
+  return created.id;
+}
+
 // Cross-account customer lookup for a student who hasn't been linked to
 // either Stripe account yet (a pre-migration Opus customer visiting
 // /billing/account for the first time — see app/api/billing/subscription/

@@ -1,19 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Tier } from "@/types/database";
-import { TIER_COPY, ELITE_APPLICATION_EMAIL } from "@/lib/billing/tier-copy";
+import type { Tier, StripeAccount } from "@/types/database";
+import { TIER_RANK } from "@/lib/stripe/tiers";
+import { TIER_COPY, ELITE_APPLICATION_EMAIL, featuresLostGoingTo } from "@/lib/billing/tier-copy";
 import { TierCard, IntervalToggle, type TierPricing } from "../tier-card";
+import MigrateCardForm from "./migrate-card-form";
 import styles from "../billing.module.css";
 
 type PricingData = Record<Tier, TierPricing>;
 
 // Same visual tier-card grid as the public pricing page (app/billing/
 // pricing-client.tsx) — the student asked to see and compare plans the
-// same way, not pick from a plain dropdown. Unlike pause/cancel, this is
-// self-serve and instant: selecting a tier and confirming swaps the
-// Stripe subscription's price right away (see the API route) — staff
-// just get a Slack heads-up, no approval step.
+// same way, not pick from a plain dropdown.
+//
+// Two very different things happen after a student picks a tier here,
+// depending on which Stripe account they're actually on:
+//  - "own" (current billing): instant self-serve swap, same as before —
+//    no admin approval, just a Slack heads-up afterward.
+//  - "opus" (legacy billing): Opus's saved card can't be reused (it
+//    belongs to a different Stripe account entirely), so this prompts
+//    for a new card and then creates a real new subscription on "own",
+//    trial_end-anchored to their current Opus period end so they're
+//    never charged twice — see .../migrate/setup-intent and
+//    .../migrate/complete.
+// A downgrade (lower-ranked tier, either path) always confirms first —
+// a plain pop-up listing exactly what they'd lose access to.
 //
 // Interval is Monthly/Yearly only, via one shared toggle above the grid
 // — unlike the public pricing page's per-card picker, an existing
@@ -21,14 +33,17 @@ type PricingData = Record<Tier, TierPricing>;
 // intervals (those stay checkout-only, for new signups).
 export default function ChangePlanClient({
   currentTier,
+  stripeAccount,
   onDone,
 }: {
   currentTier: Tier | null | undefined;
-  onDone: () => void;
+  stripeAccount: StripeAccount | null | undefined;
+  onDone: (message?: string) => void;
 }) {
   const [pricing, setPricing] = useState<PricingData | null>(null);
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const [selectedTier, setSelectedTier] = useState<Tier | null>(null);
+  const [downgradeConfirmed, setDowngradeConfirmed] = useState(false);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +55,20 @@ export default function ChangePlanClient({
       .catch(() => setPricing(null));
   }, []);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function chooseTier(tier: Tier) {
+    setSelectedTier(tier);
+    setDowngradeConfirmed(false);
+    setError(null);
+  }
+
+  const isDowngrade =
+    !!selectedTier && !!currentTier && TIER_RANK[selectedTier] < TIER_RANK[currentTier] && selectedTier !== currentTier;
+  const lostFeatures = selectedTier && currentTier ? featuresLostGoingTo(currentTier, selectedTier) : [];
+  const showDowngradeModal = isDowngrade && !downgradeConfirmed;
+  const showNextStep = !!selectedTier && (!isDowngrade || downgradeConfirmed);
+  const isMigration = stripeAccount === "opus";
+
+  async function submit() {
     if (!selectedTier) return;
     setSubmitting(true);
     setError(null);
@@ -97,17 +124,7 @@ export default function ChangePlanClient({
                     </a>
                   )
                 ) : (
-                  // Still clickable even when this is the student's current
-                  // tier — a legacy/Opus-priced student staying on the same
-                  // tier can use this to move onto the current standard
-                  // price instead of doing nothing (the ribbon alone marks
-                  // "current", it doesn't lock the button).
-                  <button
-                    type="button"
-                    className={styles.cta}
-                    disabled={!price}
-                    onClick={() => setSelectedTier(t.tier)}
-                  >
+                  <button type="button" className={styles.cta} disabled={!price} onClick={() => chooseTier(t.tier)}>
                     {isChosen ? "Selected" : isCurrent ? `Update ${t.name} pricing` : `Select ${t.name}`}
                   </button>
                 )
@@ -117,18 +134,64 @@ export default function ChangePlanClient({
         })}
       </div>
 
-      {selectedTier && (
-        <form onSubmit={submit} className={`${styles.card} ${styles.form}`} style={{ maxWidth: 480, marginTop: 16 }}>
+      {showDowngradeModal && selectedTier && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalCard}>
+            <div className={styles.tierName} style={{ marginBottom: 12 }}>
+              Switch to {TIER_COPY.find((t) => t.tier === selectedTier)?.name}?
+            </div>
+            {lostFeatures.length > 0 && (
+              <>
+                <p className={styles.helpText} style={{ margin: "0 0 8px" }}>
+                  You&apos;ll lose access to:
+                </p>
+                <ul className={styles.featureList} style={{ flex: "none", marginBottom: 20 }}>
+                  {lostFeatures.map((f) => (
+                    <li key={f} className={styles.featureItem}>
+                      <span className={styles.errorText} style={{ margin: 0 }}>
+                        ✕
+                      </span>{" "}
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className={styles.linkBtn}
+                onClick={() => {
+                  setSelectedTier(null);
+                }}
+              >
+                Never mind
+              </button>
+              <button
+                type="button"
+                className={styles.cta}
+                style={{ marginLeft: "auto" }}
+                onClick={() => setDowngradeConfirmed(true)}
+              >
+                Yes, switch plans
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNextStep && selectedTier && (
+        <div className={`${styles.card} ${styles.form}`} style={{ maxWidth: 480, marginTop: 16 }}>
           <p className={styles.helpText} style={{ margin: 0 }}>
             {selectedTier === currentTier ? (
               <>
                 Moving to the current <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong>{" "}
-                pricing — takes effect right away.
+                pricing.
               </>
             ) : (
               <>
-                Switching to <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong> — takes effect
-                right away.
+                Switching to <strong>{TIER_COPY.find((t) => t.tier === selectedTier)?.name}</strong>
+                {!isMigration && " — takes effect right away."}
               </>
             )}
           </p>
@@ -142,10 +205,15 @@ export default function ChangePlanClient({
             onChange={(e) => setReason(e.target.value)}
             className={styles.input}
           />
-          <button type="submit" className={styles.cta} disabled={submitting}>
-            {submitting ? "Switching…" : "Confirm plan change"}
-          </button>
-        </form>
+
+          {isMigration ? (
+            <MigrateCardForm tier={selectedTier} interval={interval} reason={reason} onDone={onDone} />
+          ) : (
+            <button type="button" className={styles.cta} disabled={submitting} onClick={submit}>
+              {submitting ? "Switching…" : "Confirm plan change"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

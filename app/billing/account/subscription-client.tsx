@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { STATUS_LABEL, type BillingDisplayStatus } from "@/lib/stripe/status";
 import { TIER_LABEL, formatPrice } from "@/lib/stripe/tiers";
-import type { Tier } from "@/types/database";
+import type { Tier, StripeAccount } from "@/types/database";
 import PaymentMethodClient from "./payment-method-client";
 import ChangePlanClient from "./change-plan-client";
 import styles from "../billing.module.css";
@@ -13,6 +13,7 @@ interface SubscriptionDetail {
   studentName?: string | null;
   planName?: string | null;
   tier?: Tier | null;
+  stripeAccount?: StripeAccount | null;
   status?: BillingDisplayStatus;
   amount?: number | null;
   currency?: string | null;
@@ -280,9 +281,10 @@ export default function SubscriptionClient() {
         <div style={{ marginBottom: 16 }}>
           <ChangePlanClient
             currentTier={detail.tier}
-            onDone={() => {
+            stripeAccount={detail.stripeAccount}
+            onDone={(message) => {
               setShowChangePlanForm(false);
-              setConfirmation("Plan changed.");
+              setConfirmation(message ?? "Plan changed.");
               load();
             }}
           />

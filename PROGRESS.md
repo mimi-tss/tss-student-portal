@@ -77,6 +77,81 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Opus→own migration built; downgrade confirmation pop-up (2026-09-11)
+
+The biggest piece of billing work this session: Change Plan now does
+three genuinely different things depending on the student, per direct
+instruction —
+
+1. **"own"-account student**: unchanged — instant self-serve price
+   swap, Slack heads-up after.
+2. **Opus-linked student (legacy billing)**: this was the deferred
+   piece flagged repeatedly earlier this session ("the next real piece
+   of work," never buildable/testable until the "own" account was
+   fully set up — it is now). Selecting any tier now prompts for a new
+   card ([migrate-card-form.tsx](app/billing/account/migrate-card-form.tsx),
+   same Payment Element pattern as the existing "Update payment
+   method" flow, but against a NEW Customer on the "own" account — an
+   Opus card can't be reused, it belongs to a different Stripe account
+   entirely). Two new routes:
+   - [migrate/setup-intent](app/api/billing/migrate/setup-intent/route.ts) —
+     finds-or-creates the "own"-account Customer
+     ([lib/stripe/accounts.ts](lib/stripe/accounts.ts)'s new
+     `findOrCreateOwnCustomer`), returns a SetupIntent client secret.
+   - [migrate/complete](app/api/billing/migrate/complete/route.ts) —
+     sets the new card as default, reads the Opus subscription's
+     current period end, creates a brand new subscription on "own"
+     with `trial_end` anchored to that exact instant (so the student
+     is never charged twice for the same stretch), schedules the Opus
+     subscription to `cancel_at` that same instant, then flips
+     `students.stripe_customer_id/stripe_subscription_id/stripe_account`
+     to the new "own" identity — written before the new subscription's
+     own webhook event can arrive, same benign-race posture as
+     `checkout.session.completed` elsewhere in this codebase. Ends
+     with the same `student_requests` audit row + `notifyStaff` Slack
+     ping (`opus_migration` kind) as the instant own-account path.
+3. **Downgrade, either account**: confirms first — a real modal
+   overlay (new `.modalOverlay`/`.modalCard` in
+   [billing.module.css](app/billing/billing.module.css)) listing
+   exactly what the student loses, computed by new
+   `featuresLostGoingTo(current, target)`
+   ([tier-copy.ts](lib/billing/tier-copy.ts)): every tier strictly
+   between the target and current tier's own unique feature list
+   (each tier's list already only holds what IT adds on top of the
+   one below — the "Everything in X, plus" line is filtered out as a
+   pointer, not a real perk). New `TIER_RANK`
+   ([lib/stripe/tiers.ts](lib/stripe/tiers.ts)) determines up vs.
+   down. Reselecting the current tier (the legacy→current-pricing
+   case) is never treated as a downgrade.
+
+`app/api/billing/subscription/route.ts` now also returns
+`stripeAccount` so the UI knows which of these three paths to take.
+
+**Verified locally**: a throwaway test harness
+(`app/billing/ztmp-preview/`, deleted before committing) rendered
+`ChangePlanClient` directly with fake `currentTier`/`stripeAccount`
+props, driven via `javascript_tool` clicks (the Browser pane was
+hidden this session, so `computer` clicks couldn't composite — DOM
+`.click()` calls worked fine instead). Confirmed all 5 real
+combinations: own+downgrade → modal → reason form; own+reprice →
+reason form directly; opus+reprice, opus+upgrade, and opus+downgrade
+(→modal→) all correctly route to the card-collection step; the
+lost-features list for Pro→Suite exactly matched Pro's own unique
+feature list. The actual Stripe orchestration in `migrate/complete`
+(SetupIntent confirmation, cross-account subscription creation,
+`trial_end` math against a real Opus period end) is NOT verified
+against live Stripe — no auth session or Stripe keys in this
+environment — same posture as every other Stripe-execution path this
+session flagged as needing a real test. **This needs a real
+end-to-end test against Mimi's own Opus subscription before trusting
+it with a real student**: confirm the new "own" subscription actually
+lands in `trialing`, the Opus subscription's `cancel_at` actually
+lines up with the new subscription's `trial_end` (no double-charge,
+no gap), and the account page correctly shows the new state
+afterward.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Current-plan card gets a full coral border, not just the ribbon (2026-09-11)
 
 Referenced Slack's own pricing page: their highlighted "Pro" card has

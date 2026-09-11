@@ -69,6 +69,12 @@ export const TIER_LABEL: Record<Tier, string> = {
   elite: "Elite",
 };
 
+// Ordinal ranking — lower is cheaper/fewer features. Used only to tell
+// an upgrade from a downgrade when a student picks a target tier on the
+// Change Plan picker (app/billing/account/change-plan-client.tsx); has
+// nothing to do with checkout or price lookups.
+export const TIER_RANK: Record<Tier, number> = { lite: 0, suite: 1, pro: 2, elite: 3 };
+
 // Shared by every billing UI that shows a price (pricing page, change-plan
 // picker, the account page's own amount row) — was drifting into 2-3
 // near-identical local copies before this.

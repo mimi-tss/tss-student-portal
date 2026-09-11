@@ -1,4 +1,5 @@
 import type { Tier } from "@/types/database";
+import { TIER_RANK } from "@/lib/stripe/tiers";
 
 // Studio's own marketing copy for the tiers, given directly by the
 // studio (not sourced from TSS_App_Spec_1.md — that doc's version is
@@ -70,3 +71,18 @@ export const TIER_COPY: {
     applyOnly: true,
   },
 ];
+
+// What a student going FROM `current` TO a lower-ranked `target` loses —
+// each tier's own feature list already only holds what THAT tier adds on
+// top of the one below it (the "Everything in X, plus" line is a
+// pointer, not a real perk, so it's filtered out here), so the lost set
+// is just every tier strictly above target, up to and including current.
+// Used only for the downgrade confirmation's "you'll lose access to…"
+// list (app/billing/account/change-plan-client.tsx) — an upgrade or a
+// same-tier reprice never calls this.
+export function featuresLostGoingTo(current: Tier, target: Tier): string[] {
+  if (TIER_RANK[target] >= TIER_RANK[current]) return [];
+  return TIER_COPY.filter((t) => TIER_RANK[t.tier] > TIER_RANK[target] && TIER_RANK[t.tier] <= TIER_RANK[current])
+    .flatMap((t) => t.features)
+    .filter((f) => !f.toLowerCase().startsWith("everything in"));
+}
