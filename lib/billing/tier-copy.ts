@@ -45,7 +45,7 @@ export const TIER_COPY: { tier: Tier; name: string; desc: string; features: stri
       "Backstage Challenges & Events",
       "Tarabytes Exclusive Access",
       "12+ Mini Courses",
-      "Bonus on annual: 1 Instareaction, 1 Private Vocal Artistry Session, 1 Semi-Private Session with Tara Simon",
+      "Bonus on annual: Instareaction, Private Vocal Artistry Session & Semi-Private Session with Tara",
     ],
   },
   {

@@ -105,24 +105,22 @@
 }
 
 .intervalRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .intervalPill {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 6px 8px;
   font-size: 12px;
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .intervalPillActive {
@@ -130,15 +128,12 @@
   background: var(--gold-dim);
   border-color: var(--gold);
   color: var(--gold);
+  font-weight: 700;
 }
 
 .saveBadge {
-  font-size: 10px;
-  font-weight: 700;
   color: var(--coral);
-}
-.intervalPillActive .saveBadge {
-  color: inherit;
+  font-weight: 700;
 }
 
 .tierPriceSub {
@@ -256,6 +251,12 @@
 .linkBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.featureToggle {
+  composes: linkBtn;
+  font-size: 12px;
+  align-self: flex-start;
 }
 
 .statRow {

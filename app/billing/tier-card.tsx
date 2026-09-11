@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Tier } from "@/types/database";
 import { formatPrice, BILLING_INTERVALS, INTERVAL_LABEL, INTERVAL_MONTHS, type BillingInterval } from "@/lib/stripe/tiers";
 import type { TIER_COPY } from "@/lib/billing/tier-copy";
@@ -38,6 +38,14 @@ export function TierCard({
   const availableIntervals = BILLING_INTERVALS.filter((i) => prices?.[i]);
   const price = prices?.[selectedInterval] ?? null;
   const monthlyPrice = prices?.monthly ?? null;
+  const savePct =
+    selectedInterval !== "monthly" && monthlyPrice?.amount && price?.amount
+      ? Math.round((1 - price.amount / INTERVAL_MONTHS[selectedInterval] / monthlyPrice.amount) * 100)
+      : null;
+
+  const [expanded, setExpanded] = useState(false);
+  const collapseAt = 5;
+  const visibleFeatures = expanded || tier.features.length <= collapseAt ? tier.features : tier.features.slice(0, collapseAt);
 
   return (
     <div className={styles.tierCard} style={highlighted ? { outline: "2px solid var(--gold)", outlineOffset: 2 } : undefined}>
@@ -45,34 +53,33 @@ export function TierCard({
       <div className={styles.tierName}>{tier.name}</div>
       <p className={styles.tierDesc}>{tier.desc}</p>
 
-      <ul className={styles.featureList}>
-        {tier.features.map((f) => (
-          <li key={f} className={styles.featureItem}>
-            <span className={styles.featureCheck}>✓</span> {f}
-          </li>
-        ))}
-      </ul>
+      <div style={{ flex: 1 }}>
+        <ul className={styles.featureList} style={{ flex: "none" }}>
+          {visibleFeatures.map((f) => (
+            <li key={f} className={styles.featureItem}>
+              <span className={styles.featureCheck}>✓</span> {f}
+            </li>
+          ))}
+        </ul>
+        {tier.features.length > collapseAt && (
+          <button type="button" className={styles.featureToggle} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Show less" : `Show ${tier.features.length - collapseAt} more`}
+          </button>
+        )}
+      </div>
 
       {!tier.applyOnly && availableIntervals.length > 1 && (
         <div className={styles.intervalRow}>
-          {availableIntervals.map((i) => {
-            const p = prices?.[i];
-            const savePct =
-              i !== "monthly" && monthlyPrice?.amount && p?.amount
-                ? Math.round((1 - p.amount / INTERVAL_MONTHS[i] / monthlyPrice.amount) * 100)
-                : null;
-            return (
-              <button
-                key={i}
-                type="button"
-                className={selectedInterval === i ? styles.intervalPillActive : styles.intervalPill}
-                onClick={() => onSelectInterval(i)}
-              >
-                <span>{INTERVAL_LABEL[i]}</span>
-                {savePct != null && savePct > 0 && <span className={styles.saveBadge}>Save {savePct}%</span>}
-              </button>
-            );
-          })}
+          {availableIntervals.map((i) => (
+            <button
+              key={i}
+              type="button"
+              className={selectedInterval === i ? styles.intervalPillActive : styles.intervalPill}
+              onClick={() => onSelectInterval(i)}
+            >
+              {INTERVAL_LABEL[i]}
+            </button>
+          ))}
         </div>
       )}
 
@@ -87,8 +94,8 @@ export function TierCard({
       </div>
       {!tier.applyOnly && selectedInterval !== "monthly" && price?.amount ? (
         <div className={styles.tierPriceSub}>
-          {formatPrice(Math.round(price.amount / INTERVAL_MONTHS[selectedInterval]), price.currency)}/mo, billed
-          every {INTERVAL_MONTHS[selectedInterval]} months
+          {formatPrice(Math.round(price.amount / INTERVAL_MONTHS[selectedInterval]), price.currency)}/mo
+          {savePct != null && savePct > 0 && <> · <span className={styles.saveBadge}>save {savePct}%</span></>}
         </div>
       ) : null}
 

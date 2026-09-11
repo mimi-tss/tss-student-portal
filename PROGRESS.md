@@ -45,6 +45,36 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Tier cards decluttered: collapsible features, tidy interval grid (2026-09-11)
+
+Follow-up to the ribbon/savings work — once the studio's real (much
+longer) marketing copy landed, the cards themselves got "clunky": Pro's
+10-item list made that card way taller than its neighbors, the Save %
+badge on every interval pill pushed 4-interval tiers to an awkward
+2-row wrap, and the "Bonus on annual" bullet was a full sentence
+breaking the checklist's rhythm.
+
+[tier-card.tsx](app/billing/tier-card.tsx):
+- Feature lists collapse to 5 items with a "Show N more"/"Show less"
+  toggle (only appears past 5 — Lite/Suite stay as-is, Pro/Elite
+  collapse).
+- Interval pills lost their per-pill Save % badge (was crowding a
+  4-option tier into 2 uneven rows); `.intervalRow` is now a fixed
+  2-column CSS grid instead of `flex-wrap`, so it's always a tidy
+  square regardless of 1/2/4 options. The savings number moved to one
+  place instead of four: next to the per-month-equivalent line under
+  the price ("$319.20/mo · save 20%"), only for the interval actually
+  selected.
+- Shortened Pro's bonus bullet (dropped the "1 / 1 / 1" counts).
+
+Verified in the local Browser preview at desktop width with a temporary
+stubbed `/api/billing/pricing` (same throwaway-stub-then-revert
+approach as before, diffed clean against the real route afterward):
+confirmed collapse/expand works, the 2-column interval grid renders
+correctly for Suite (1 row) and Pro (2 rows), and the save-% line
+updates correctly on selection ($1,915.20/6 Months → "$319.20/mo · save
+20%"). `npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Tier cards: "Your Plan" ribbon + savings-aware interval picker (2026-09-10)
 
 Two rough edges the user flagged live on the Change Plan picker (shared
