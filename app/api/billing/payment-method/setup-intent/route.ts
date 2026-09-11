@@ -36,5 +36,10 @@ export async function POST() {
   return NextResponse.json({
     clientSecret: setupIntent.client_secret,
     publishableKey: PUBLISHABLE_KEY_BY_ACCOUNT[billingStudent.stripeAccount],
+    // Pre-fills the Payment Element's email field so Link can recognize
+    // a known email immediately instead of showing its full "save my
+    // info for faster checkout" signup prompt (name/phone/email) —
+    // Stripe's own documented way to keep Link's inline UI compact.
+    email: billingStudent.email,
   });
 }

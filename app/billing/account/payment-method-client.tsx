@@ -22,7 +22,7 @@ function getStripePromise(publishableKey: string) {
   return promise;
 }
 
-function CardForm({ onDone }: { onDone: () => void }) {
+function CardForm({ email, onDone }: { email: string; onDone: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -70,7 +70,7 @@ function CardForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
-      <PaymentElement />
+      <PaymentElement options={{ defaultValues: { billingDetails: { email } } }} />
       {error && <p className={styles.errorText}>{error}</p>}
       <button type="submit" className={styles.cta} disabled={!stripe || submitting}>
         {submitting ? "Saving…" : "Save card"}
@@ -82,6 +82,7 @@ function CardForm({ onDone }: { onDone: () => void }) {
 export default function PaymentMethodClient({ onDone }: { onDone: () => void }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [publishableKey, setPublishableKey] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,17 +95,18 @@ export default function PaymentMethodClient({ onDone }: { onDone: () => void }) 
         }
         setClientSecret(data.clientSecret);
         setPublishableKey(data.publishableKey);
+        setEmail(data.email ?? "");
       })
       .catch(() => setError("Couldn't start card setup — try again."));
   }, []);
 
   if (error) return <p className={styles.errorText}>{error}</p>;
-  if (!clientSecret || !publishableKey) return <p className={styles.helpText}>Loading…</p>;
+  if (!clientSecret || !publishableKey || email == null) return <p className={styles.helpText}>Loading…</p>;
 
   return (
     <div className={styles.card} style={{ maxWidth: 480, marginBottom: 16, textAlign: "left" }}>
       <Elements stripe={getStripePromise(publishableKey)} options={{ clientSecret }}>
-        <CardForm onDone={onDone} />
+        <CardForm email={email} onDone={onDone} />
       </Elements>
     </div>
   );

@@ -26,11 +26,13 @@ function CardForm({
   tier,
   interval,
   ownCustomerId,
+  email,
   onDone,
 }: {
   tier: Tier;
   interval: "monthly" | "yearly";
   ownCustomerId: string;
+  email: string;
   onDone: (message: string) => void;
 }) {
   const stripe = useStripe();
@@ -74,7 +76,7 @@ function CardForm({
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
-      <PaymentElement />
+      <PaymentElement options={{ defaultValues: { billingDetails: { email } } }} />
       {error && <p className={styles.errorText}>{error}</p>}
       <button type="submit" className={styles.cta} disabled={!stripe || submitting}>
         {submitting ? "Switching…" : "Save card & switch plan"}
@@ -100,6 +102,7 @@ export default function MigrateCardForm({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [publishableKey, setPublishableKey] = useState<string | null>(null);
   const [ownCustomerId, setOwnCustomerId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,12 +116,13 @@ export default function MigrateCardForm({
         setClientSecret(data.clientSecret);
         setPublishableKey(data.publishableKey);
         setOwnCustomerId(data.ownCustomerId);
+        setEmail(data.email ?? "");
       })
       .catch(() => setError("Couldn't start card setup — try again."));
   }, []);
 
   if (error) return <p className={styles.errorText}>{error}</p>;
-  if (!clientSecret || !publishableKey || !ownCustomerId) {
+  if (!clientSecret || !publishableKey || !ownCustomerId || email == null) {
     return <p className={styles.helpText}>Setting up card entry…</p>;
   }
 
@@ -129,7 +133,7 @@ export default function MigrateCardForm({
         file here. Nothing is charged until your current period actually ends.
       </p>
       <Elements stripe={getStripePromise(publishableKey)} options={{ clientSecret }}>
-        <CardForm tier={tier} interval={interval} ownCustomerId={ownCustomerId} onDone={onDone} />
+        <CardForm tier={tier} interval={interval} ownCustomerId={ownCustomerId} email={email} onDone={onDone} />
       </Elements>
     </div>
   );

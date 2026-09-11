@@ -77,6 +77,38 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Pre-fill email so Link's card form doesn't expand into a signup prompt (2026-09-11)
+
+User compared two screenshots of the same embedded card form: a
+compact version (card number, expiry, CVC, country — done) and a much
+longer one with an extra "Optional — Save my information for faster
+checkout" block asking for email, phone, and full name. That block is
+Stripe Link's own inline signup prompt, and Stripe's documented fix is
+passing the customer's known email via the Payment Element's
+`defaultValues.billingDetails.email` so Link can recognize them
+immediately instead of asking it can already answer itself.
+
+Applied to both card forms:
+[payment-method-client.tsx](app/billing/account/payment-method-client.tsx)
+(existing "Update payment method") and
+[migrate-card-form.tsx](app/billing/account/migrate-card-form.tsx) (new
+Opus→own migration flow) — both setup-intent routes
+([payment-method/setup-intent](app/api/billing/payment-method/setup-intent/route.ts),
+[migrate/setup-intent](app/api/billing/migrate/setup-intent/route.ts))
+now return the student's own email alongside the client secret, and
+each `<PaymentElement>` is given it as a default value.
+
+Caveat worth being upfront about: this is Stripe's own documented lever
+for this exact behavior, but Link's inline UI can also depend on
+session/cookie state on the browser (e.g. whether that browser already
+has an active Link session from elsewhere) that isn't fully within this
+app's control — no live Stripe keys in this environment to confirm the
+expanded prompt is gone in every case, just that the documented fix is
+now wired up correctly. Worth a live check next time either card form
+is used.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Collapsed Change Plan card was too narrow for the embedded card form (2026-09-11)
 
 The metadata fix worked — live-tested by the user right after: ribbon
