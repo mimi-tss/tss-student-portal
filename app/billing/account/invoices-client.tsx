@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatPrice } from "@/lib/stripe/tiers";
 import styles from "../billing.module.css";
 
 interface Invoice {
@@ -11,10 +12,6 @@ interface Invoice {
   status: string | null;
   pdfUrl: string | null;
   hostedUrl: string | null;
-}
-
-function formatAmount(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
 }
 
 export default function InvoicesClient() {
@@ -40,7 +37,7 @@ export default function InvoicesClient() {
           <span className={styles.statLabel}>
             {inv.date ? new Date(inv.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
             {" · "}
-            {formatAmount(inv.amountPaid, inv.currency)}
+            {formatPrice(inv.amountPaid, inv.currency)}
           </span>
           {inv.pdfUrl ? (
             <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>

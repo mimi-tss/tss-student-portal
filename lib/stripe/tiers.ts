@@ -75,7 +75,16 @@ export const TIER_LABEL: Record<Tier, string> = {
 export function formatPrice(amount: number | null | undefined, currency: string | null | undefined): string | null {
   if (amount == null || !currency) return null;
   if (amount === 0) return "Free";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+  // Whole-dollar prices (the studio's now-standard pricing — no more
+  // .99 endings) drop the trailing ".00" so the price reads cleaner; an
+  // amount that does carry real cents still shows them.
+  const hasCents = amount % 100 !== 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: hasCents ? 2 : 0,
+  }).format(amount / 100);
 }
 
 const VALID_TIERS: readonly Tier[] = ["lite", "suite", "pro", "elite"];

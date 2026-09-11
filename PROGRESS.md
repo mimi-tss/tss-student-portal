@@ -77,6 +77,26 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Whole-dollar prices drop the trailing ".00" (2026-09-11)
+
+User repriced everything in Stripe off .99 endings onto clean whole
+dollars ($29/mo, $299/yr, etc. — confirmed via a Stripe Dashboard
+screenshot of Suite's own prices). `formatPrice`
+([lib/stripe/tiers.ts](lib/stripe/tiers.ts)) now shows 0 decimal places
+when the amount is a whole dollar figure (`amount % 100 === 0`) and
+still shows real cents otherwise (e.g. the per-month-equivalent line
+under a yearly price, `$24.92/mo`, unaffected) — one shared function,
+so every price on the site (pricing page, Change Plan picker, the
+account page's own Amount row) picks this up for free. Also
+consolidated [invoices-client.tsx](app/billing/account/invoices-client.tsx)'s
+own duplicate formatter onto the same shared `formatPrice` rather than
+fixing the cents logic in two places.
+
+Verified locally with a stubbed pricing response mixing whole-dollar
+and real-cents amounts in the same grid (`$30`, `$400` clean; `$299.99`
+still showing cents) — both cases render correctly side by side.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Pro's annual bonus now shown only when Yearly is actually selected (2026-09-11)
 
 Was a static bullet ("Bonus on annual: Instareaction, Private Vocal
