@@ -77,6 +77,36 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Change Plan collapses to the selected card; dropped the reason field (2026-09-11)
+
+Live feedback right after the migration/downgrade work shipped: the
+confirm step (reason form or card form) rendered below the full 4-card
+grid, easy to miss without scrolling — "I was confused for a while
+because I didn't know to scroll down." Picking a tier now collapses the
+grid down to just that one card (a "← Back to plans" link returns to
+the full grid) with the confirm step right in it — matches the request
+for something "kinda like slides." Also dropped the "Note (optional)"
+reason field entirely per direct instruction — the API routes already
+treated it as optional, so no server change needed.
+
+Also worth flagging: the user reported downgrading from Pro to Suite on
+their own real account did NOT show the confirmation pop-up. Root
+cause is almost certainly the same one from two entries ago — the
+"CURRENT PLAN" ribbon still isn't showing either (confirmed in their
+screenshot), and both the ribbon and the downgrade check depend
+entirely on `currentTier`, which is null whenever the live Stripe
+Price backing the subscription is missing its own `tier` metadata (see
+`resolveTierFromPrice`'s header comment, `lib/stripe/tiers.ts`). Told
+the user this needs checking directly: the SPECIFIC Price object their
+Opus subscription's item currently uses (not just any price under that
+product) needs `tier: pro` set in its Stripe Dashboard metadata.
+
+Verified the 3 UI fixes in a local test harness (grid → downgrade
+modal → collapsed single-card view → Back-to-plans all confirmed via
+DOM `.click()`, same approach as the previous entry since the Browser
+pane was hidden again this session). `npx tsc --noEmit -p .` and `next
+build` both clean.
+
 ## Opus→own migration built; downgrade confirmation pop-up (2026-09-11)
 
 The biggest piece of billing work this session: Change Plan now does

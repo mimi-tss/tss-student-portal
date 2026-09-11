@@ -25,13 +25,11 @@ function getStripePromise(publishableKey: string) {
 function CardForm({
   tier,
   interval,
-  reason,
   ownCustomerId,
   onDone,
 }: {
   tier: Tier;
   interval: "monthly" | "yearly";
-  reason: string;
   ownCustomerId: string;
   onDone: (message: string) => void;
 }) {
@@ -61,7 +59,7 @@ function CardForm({
     const res = await fetch("/api/billing/migrate/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier, interval, reason, ownCustomerId, setupIntentId: setupIntent.id }),
+      body: JSON.stringify({ tier, interval, ownCustomerId, setupIntentId: setupIntent.id }),
     });
     const data = await res.json().catch(() => null);
     setSubmitting(false);
@@ -93,12 +91,10 @@ function CardForm({
 export default function MigrateCardForm({
   tier,
   interval,
-  reason,
   onDone,
 }: {
   tier: Tier;
   interval: "monthly" | "yearly";
-  reason: string;
   onDone: (message: string) => void;
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -133,7 +129,7 @@ export default function MigrateCardForm({
         file here. Nothing is charged until your current period actually ends.
       </p>
       <Elements stripe={getStripePromise(publishableKey)} options={{ clientSecret }}>
-        <CardForm tier={tier} interval={interval} reason={reason} ownCustomerId={ownCustomerId} onDone={onDone} />
+        <CardForm tier={tier} interval={interval} ownCustomerId={ownCustomerId} onDone={onDone} />
       </Elements>
     </div>
   );
