@@ -3,6 +3,56 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Activity Log showed "Unknown" for every login/join-click — profiles never had an admin-wide read policy (2026-09-11)
+
+You flagged the Activity Log's "Logins & joins" view showing "Unknown"
+for every single row instead of the real student/coach name, and
+guessed it was connected to the "Never logged in" flood in Needs
+Review. Checked both — real bugs, but two SEPARATE ones, not one
+causing the other.
+
+**The "Unknown" names — a genuine, permanent gap, not a today-only
+regression.** [resolveActorNames](lib/admin/resolve-actor-names.ts)
+(used by [/api/admin/activity-log](app/api/admin/activity-log/route.ts))
+reads `profiles` under the caller's own RLS-scoped session to find each
+actor's role before looking up their real name in `students`/`coaches`.
+Checked `profiles`' actual RLS history: it's only ever had ONE policy,
+ever, since migration 0004 — "users can view their own profile" (`id =
+auth.uid()`). No admin-wide policy was ever added, unlike students/
+coaches. So as admin, that read silently returned nothing for anyone
+but your own row — every real login/join-click resolved to "Unknown,"
+for every admin, always, since this page was built. Confirmed the
+underlying data was completely fine the whole time (checked the same
+actor_ids directly with the service-role client — real names, right
+every time) — this was purely a caller-permission gap, not corrupted or
+missing data. New
+[0104_admin_view_all_profiles.sql](supabase/migrations/0104_admin_view_all_profiles.sql)
+adds the missing `is_admin()` policy, same pattern every other
+admin-wide table already uses. **Not yet applied — needs to run in the
+Supabase SQL editor before the Activity Log will show real names.**
+
+**The "Never logged in" flood — real, but a different mechanism
+entirely, not fixed by the above.**
+[syncComputedAttentionItems](lib/admin/attention-items.ts) flags this
+purely off `students.streak_last_active_date`, never touches
+`activity_events`/`profiles` at all. That column only updates on a real
+button CLICK inside the dashboard
+([streak/ping](app/api/student/streak/ping/route.ts)) — not just a
+successful login. Checked several real recent logins directly (Devynn,
+Brian, Angelica, others) against `activity_events` — they genuinely did
+log in. Given how many session/cookie/Join-button bugs got fixed
+*today*, it's very plausible a lot of these are students who logged in
+fine but hit one of those bugs before ever clicking anything that
+counts — flagged "never logged in" despite genuinely trying, repeatedly.
+Expect this list to thin out on its own now that those are fixed;
+didn't change the underlying "click-based streak, not login-based"
+definition itself, since that's a real product call (count a login as
+"active," or keep requiring an actual click?) — flagging for you to
+decide rather than assuming.
+
+No code changes this pass beyond the new migration — both findings were
+diagnosis, not something needing a code fix.
+
 ## Admin's "previous sessions" page was showing future bookings, oldest history buried (2026-09-11)
 
 You flagged Mimi Orac's session-history page (`/admin/students/[id]/sessions`)
@@ -8053,6 +8103,12 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0104 needs to run** (2026-09-11) —
+[0104_admin_view_all_profiles.sql](supabase/migrations/0104_admin_view_all_profiles.sql).
+Adds the missing admin-wide SELECT policy on `profiles` — without it,
+the Activity Log's "Logins & joins" view will keep showing "Unknown"
+for every real login/join-click. Please confirm once applied.
 
 **Migration 0103 confirmed applied** (2026-09-10) — user replied
 "successful migration"; verified directly against the real Supabase
