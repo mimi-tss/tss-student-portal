@@ -45,6 +45,38 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Tier cards: "Your Plan" ribbon + savings-aware interval picker (2026-09-10)
+
+Two rough edges the user flagged live on the Change Plan picker (shared
+visual with the public pricing page):
+
+- No clear "this is what you're on" marker — just a tiny `(current)`
+  label next to the tier name. Now a solid ribbon across the top of the
+  card, `Your plan`, in `--coral` (the existing red/pink token, already
+  used for error text) — the "red mark" asked for.
+- The Monthly/3-Month/6-Month/Yearly toggle was a plain row of text
+  links with no indication of what a longer term actually saves. Each
+  pill now shows a `Save X%` badge (computed against that tier's own
+  monthly price — `INTERVAL_MONTHS` new in [lib/stripe/tiers.ts](lib/stripe/tiers.ts)),
+  and selecting a non-monthly interval shows a per-month-equivalent line
+  under the price ("$319.20/mo, billed every 6 months") so the lump-sum
+  number isn't the only thing shown.
+
+Pulled the whole tier-card (ribbon, features, interval picker, price,
+savings line) into one shared [tier-card.tsx](app/billing/tier-card.tsx)
+— pricing-client.tsx and change-plan-client.tsx were already
+copy-pasting this exact block once (before Elite's Custom/Contact-us
+treatment landed) and were about to do it again for the savings math;
+only the action button still differs per caller (Checkout vs. tier
+selection vs. the Elite mailto), so that's the one thing passed in.
+
+Verified in the local Browser preview with a temporary stubbed
+`/api/billing/pricing` response (reverted before committing — diffed
+clean against the real Stripe-backed route afterward): ribbon renders,
+Save % badges compute correctly (20%/25% for 6-month/yearly on the test
+numbers), per-month-equivalent line shows on selection.
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## "Mark resolved" silently did nothing on a stuck Change Plan request (2026-09-10)
 
 Live bug, caught resolving Mimi Orac's own Change Plan request in Needs

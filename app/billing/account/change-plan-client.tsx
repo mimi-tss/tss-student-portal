@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { Tier } from "@/types/database";
-import { formatPrice, BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
+import type { BillingInterval } from "@/lib/stripe/tiers";
 import { TIER_COPY, ELITE_APPLICATION_EMAIL } from "@/lib/billing/tier-copy";
+import { TierCard, type TierPricing } from "../tier-card";
 import styles from "../billing.module.css";
 
-interface PriceInfo {
-  amount: number | null;
-  currency: string | null;
-}
-type PricingData = Record<Tier, Record<BillingInterval, PriceInfo | null>>;
+type PricingData = Record<Tier, TierPricing>;
 
 // Same visual tier-card grid as the public pricing page (app/billing/
 // pricing-client.tsx) — the student asked to see and compare plans the
@@ -68,82 +65,46 @@ export default function ChangePlanClient({
       {error && <p className={styles.errorText}>{error}</p>}
       <div className={styles.tierGrid}>
         {TIER_COPY.map((t) => {
-          const prices = pricing?.[t.tier];
-          const availableIntervals = BILLING_INTERVALS.filter((i) => prices?.[i]);
-          const selectedInterval = interval[t.tier];
-          const price = prices?.[selectedInterval] ?? null;
           const isCurrent = t.tier === currentTier;
           const isChosen = t.tier === selectedTier;
+          const price = pricing?.[t.tier]?.[interval[t.tier]] ?? null;
 
           return (
-            <div
+            <TierCard
               key={t.tier}
-              className={styles.tierCard}
-              style={isChosen ? { outline: "2px solid var(--gold)", outlineOffset: 2 } : undefined}
-            >
-              <div className={styles.tierName}>
-                {t.name} {isCurrent && <span className={styles.statLabel} style={{ fontSize: 12 }}>(current)</span>}
-              </div>
-              <p className={styles.tierDesc}>{t.desc}</p>
-
-              <ul className={styles.featureList}>
-                {t.features.map((f) => (
-                  <li key={f} className={styles.featureItem}>
-                    <span className={styles.featureCheck}>✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-
-              {!t.applyOnly && availableIntervals.length > 1 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {availableIntervals.map((i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={selectedInterval === i ? styles.badge : styles.linkBtn}
-                      onClick={() => setInterval((prev) => ({ ...prev, [t.tier]: i }))}
-                    >
-                      {INTERVAL_LABEL[i]}
+              tier={t}
+              prices={pricing?.[t.tier]}
+              selectedInterval={interval[t.tier]}
+              onSelectInterval={(i) => setInterval((prev) => ({ ...prev, [t.tier]: i }))}
+              isCurrent={isCurrent}
+              highlighted={isChosen}
+              action={
+                t.applyOnly ? (
+                  isCurrent ? (
+                    <button type="button" className={styles.cta} disabled>
+                      Current plan
                     </button>
-                  ))}
-                </div>
-              )}
-
-              <div className={styles.tierName} style={{ fontSize: 22 }}>
-                {t.applyOnly ? "Custom" : formatPrice(price?.amount, price?.currency) ?? "—"}
-                {!t.applyOnly && price && price.amount !== 0 && (
-                  <span className={styles.statLabel} style={{ fontSize: 13 }}>
-                    {" "}
-                    / {INTERVAL_LABEL[selectedInterval]}
-                  </span>
-                )}
-              </div>
-
-              {t.applyOnly ? (
-                isCurrent ? (
-                  <button type="button" className={styles.cta} disabled>
-                    Current plan
-                  </button>
+                  ) : (
+                    <a
+                      className={styles.cta}
+                      style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+                      href={`mailto:${ELITE_APPLICATION_EMAIL}?subject=${encodeURIComponent(`${t.name} application`)}`}
+                    >
+                      Contact us
+                    </a>
+                  )
                 ) : (
-                  <a
+                  <button
+                    type="button"
                     className={styles.cta}
-                    style={{ display: "block", textAlign: "center", textDecoration: "none" }}
-                    href={`mailto:${ELITE_APPLICATION_EMAIL}?subject=${encodeURIComponent(`${t.name} application`)}`}
+                    disabled={isCurrent || !price}
+                    onClick={() => setSelectedTier(t.tier)}
                   >
-                    Contact us
-                  </a>
+                    {isCurrent ? "Current plan" : isChosen ? "Selected" : `Select ${t.name}`}
+                  </button>
                 )
-              ) : (
-                <button
-                  type="button"
-                  className={styles.cta}
-                  disabled={isCurrent || !price}
-                  onClick={() => setSelectedTier(t.tier)}
-                >
-                  {isCurrent ? "Current plan" : isChosen ? "Selected" : `Select ${t.name}`}
-                </button>
-              )}
-            </div>
+              }
+            />
           );
         })}
       </div>

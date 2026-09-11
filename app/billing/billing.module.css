@@ -88,6 +88,63 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+}
+
+.currentRibbon {
+  background: var(--coral);
+  color: var(--coral-text);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 7px 0;
+  margin: -24px -24px 0;
+  border-radius: 16px 16px 0 0;
+}
+
+.intervalRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.intervalPill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.intervalPillActive {
+  composes: intervalPill;
+  background: var(--gold-dim);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.saveBadge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--coral);
+}
+.intervalPillActive .saveBadge {
+  color: inherit;
+}
+
+.tierPriceSub {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: -8px;
 }
 
 .tierName {

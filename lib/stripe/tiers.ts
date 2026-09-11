@@ -18,6 +18,17 @@ export const INTERVAL_LABEL: Record<BillingInterval, string> = {
   yearly: "Yearly",
 };
 
+// How many calendar months each interval's price covers — used to work
+// out a per-month equivalent and the "Save X%" badge against the
+// tier's own monthly price (BILLING_INTERVALS' order elsewhere is
+// display order; this is just the length of each billing period).
+export const INTERVAL_MONTHS: Record<BillingInterval, number> = {
+  monthly: 1,
+  "3month": 3,
+  "6month": 6,
+  yearly: 12,
+};
+
 const ENV_SUFFIX: Record<BillingInterval, string> = {
   monthly: "MONTHLY",
   "3month": "3MONTH",
