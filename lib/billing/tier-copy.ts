@@ -7,7 +7,16 @@ import type { Tier } from "@/types/database";
 // descriptions of the same tier.
 export const ELITE_APPLICATION_EMAIL = "info@tarasimonstudios.com";
 
-export const TIER_COPY: { tier: Tier; name: string; desc: string; features: string[]; applyOnly?: boolean }[] = [
+export const TIER_COPY: {
+  tier: Tier;
+  name: string;
+  desc: string;
+  features: string[];
+  applyOnly?: boolean;
+  // Shown only while the yearly interval is selected — see
+  // app/billing/tier-card.tsx's "Bonuses on Yearly Membership" block.
+  yearlyBonuses?: string[];
+}[] = [
   {
     tier: "lite",
     name: "Lite",
@@ -43,13 +52,13 @@ export const TIER_COPY: { tier: Tier; name: string; desc: string; features: stri
       "Riffs & Runs (6-week mastercourse)",
       "Access to the TSS Vocal Exercises Library",
       "First access to new courses, exercises & events",
-      "Bonus on annual: Instareaction, Private Vocal Artistry Session & Semi-Private Session with Tara",
     ],
+    yearlyBonuses: ["Instareaction", "Private Vocal Artistry Session", "Semi-Private Vocal Session with Tara"],
   },
   {
     tier: "elite",
     name: "Elite",
-    desc: "For the super-serious singer ready to go all-in on a career — by application only.",
+    desc: "For the Vocal Superstars ready to go all-in on their singing career — by application only.",
     features: [
       "Everything in Pro, plus",
       "Tara's Monthly Masterclass",

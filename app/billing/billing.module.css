@@ -159,6 +159,19 @@
   font-weight: 700;
 }
 
+.bonusBlock {
+  background: var(--gold-dim);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.bonusHeading {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
 .saveBadge {
   color: var(--coral);
   font-weight: 700;

@@ -77,6 +77,33 @@ the Browser preview (no Stripe keys in this dev environment, so real
 tier prices show "—" there same as always — only the Elite card's
 layout/copy was checkable locally).
 
+## Pro's annual bonus now shown only when Yearly is actually selected (2026-09-11)
+
+Was a static bullet ("Bonus on annual: Instareaction, Private Vocal
+Artistry Session & Semi-Private Session with Tara") sitting in Pro's
+feature list regardless of which interval was picked — misleading, since
+it only applies on yearly. New `yearlyBonuses` field on a `TIER_COPY`
+entry ([tier-copy.ts](lib/billing/tier-copy.ts), Pro only for now) and
+a small highlighted "Bonuses on Yearly Membership:" box in
+[tier-card.tsx](app/billing/tier-card.tsx) that only renders when
+`effectiveInterval === "yearly"` — appears/disappears live as the
+toggle changes, verified in the local preview on both the per-card
+picker (public pricing page) and would work identically under the
+Change Plan picker's shared toggle (same `effectiveInterval` the price
+math already uses).
+
+Also updated Elite's tagline per the studio's wording.
+
+Hit a real environment snag mid-verification: had run `next build`
+(production) in the same working directory a running `dev` preview
+server was using — that overwrites `.next` with production artifacts
+and corrupts the dev server's live manifests, causing every asset to
+404 and the page to render stale data. Fixed by stopping the preview,
+clearing `.next`, and restarting — worth remembering: don't run a
+production `next build` while a `dev` preview is live in the same repo.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Change Plan restructured: price-up-top layout, shared Monthly/Yearly toggle, no duplicate features (2026-09-11)
 
 Third round of live feedback on the tier cards, this time pointed at

@@ -102,6 +102,19 @@ export function TierCard({
         ) : null}
       </div>
 
+      {tier.yearlyBonuses && effectiveInterval === "yearly" && (
+        <div className={styles.bonusBlock}>
+          <div className={styles.bonusHeading}>Bonuses on Yearly Membership:</div>
+          <ul className={styles.featureList} style={{ flex: "none", gap: 4 }}>
+            {tier.yearlyBonuses.map((b) => (
+              <li key={b} className={styles.featureItem}>
+                <span className={styles.featureCheck}>✓</span> {b}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {action}
 
       <div className={styles.divider} />
