@@ -80,6 +80,8 @@ export default function DashboardClient({
   currentProfileId,
   today,
   todayGroupLessons,
+  pastUnmarkedSessions,
+  pastUnmarkedGroupLessons,
   expiringMakeups,
   birthdays,
   catalog,
@@ -94,6 +96,8 @@ export default function DashboardClient({
   currentProfileId: string;
   today: TodaySession[];
   todayGroupLessons: CoachGroupLesson[];
+  pastUnmarkedSessions: TodaySession[];
+  pastUnmarkedGroupLessons: CoachGroupLesson[];
   expiringMakeups: ExpiringMakeup[];
   birthdays: UpcomingBirthday[];
   catalog: { id: string; title: string }[];
@@ -108,6 +112,8 @@ export default function DashboardClient({
   const [collapsed, setCollapsed] = useState(false);
   const [sessions, setSessions] = useState(today);
   const [groupLessons, setGroupLessons] = useState(todayGroupLessons);
+  const [pastSessions, setPastSessions] = useState(pastUnmarkedSessions);
+  const [pastGroupLessons, setPastGroupLessons] = useState(pastUnmarkedGroupLessons);
   const [selectedId, setSelectedId] = useState(initialStudentId);
   const [selectedGroupLessonId, setSelectedGroupLessonId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState(initialSnapshot);
@@ -206,6 +212,19 @@ export default function DashboardClient({
           attendees: g.attendees.map((a) => (a.registrationId === registrationId ? { ...a, status } : a)),
         })),
       );
+      // The past-unmarked panel only exists to surface a backlog — once
+      // every attendee on a past lesson has a real mark, that lesson has
+      // nothing left to flag and drops off the list entirely (unlike
+      // today's list, which keeps showing a marked session, just with
+      // its status updated).
+      setPastGroupLessons((prev) =>
+        prev
+          .map((g) => ({
+            ...g,
+            attendees: g.attendees.map((a) => (a.registrationId === registrationId ? { ...a, status } : a)),
+          }))
+          .filter((g) => g.attendees.some((a) => a.status === "registered")),
+      );
     }
   }
 
@@ -220,6 +239,9 @@ export default function DashboardClient({
     });
     if (res.ok) {
       setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, status, needsAttendance: false } : s)));
+      // Same reasoning as handleMarkGroupAttendee's own pastGroupLessons
+      // filter — once marked, it's resolved and has nothing left to flag.
+      setPastSessions((prev) => prev.filter((s) => s.id !== sessionId));
     }
   }
 
@@ -300,6 +322,71 @@ export default function DashboardClient({
           >
             View payroll →
           </a>
+        </div>
+      )}
+
+      {(pastSessions.length > 0 || pastGroupLessons.length > 0) && (
+        <div
+          className={styles.panel}
+          style={{ marginBottom: 16, borderColor: "var(--coral)" }}
+        >
+          <h2>Needs Attendance — Previous Classes</h2>
+          <p className={styles.panelText} style={{ marginBottom: 8 }}>
+            Already happened but never marked — Today&rsquo;s Schedule below only ever shows today, so these can sit
+            here unnoticed until someone looks back.
+          </p>
+          {pastSessions.map((s) => (
+            <div key={s.id} className={styles.reminderItem} style={{ justifyContent: "space-between" }}>
+              <span>
+                <b>{s.studentName}</b> — <FormattedDate value={s.scheduledAt} />
+              </span>
+              <span className={styles.quickMark}>
+                <button
+                  className={`${styles.quickMarkBtn} ${s.status === "attended" ? styles.quickMarkYesActive : styles.quickMarkYes}`}
+                  onClick={() => handleMark(s.id, "attended")}
+                  title="Mark attended"
+                >
+                  ✓
+                </button>
+                <button
+                  className={`${styles.quickMarkBtn} ${s.status === "no-show" ? styles.quickMarkNoActive : styles.quickMarkNo}`}
+                  onClick={() => handleMark(s.id, "no-show")}
+                  title="Mark no-show"
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          ))}
+          {pastGroupLessons.flatMap((g) =>
+            g.attendees
+              .filter((a) => a.status === "registered")
+              .map((a) => (
+                <div key={a.registrationId} className={styles.reminderItem} style={{ justifyContent: "space-between" }}>
+                  <span>
+                    <b>{a.studentName}</b> — {g.topic || "Group Lesson"}, <FormattedDate value={g.scheduledAt} />
+                  </span>
+                  <span className={styles.quickMark}>
+                    <button
+                      className={`${styles.quickMarkBtn} ${styles.quickMarkYes}`}
+                      onClick={() => handleMarkGroupAttendee(a.registrationId, "attended")}
+                      disabled={markingGroup}
+                      title="Mark attended"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      className={`${styles.quickMarkBtn} ${styles.quickMarkNo}`}
+                      onClick={() => handleMarkGroupAttendee(a.registrationId, "no-show")}
+                      disabled={markingGroup}
+                      title="Mark no-show"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                </div>
+              )),
+          )}
         </div>
       )}
 

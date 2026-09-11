@@ -84,6 +84,64 @@ export async function getTodaysSchedule(
   });
 }
 
+const PAST_ATTENDANCE_LOOKBACK_DAYS = 90;
+
+// Backlog of already-happened sessions/group lessons this coach never
+// marked — getTodaysSchedule/getTodaysGroupLessons are hard-scoped to
+// TODAY (by design, that's what "today's schedule" means), so a coach
+// who missed marking a PREVIOUS day's class had no dashboard signal
+// that it was still sitting there at all — the only way to find and
+// mark it was to know to go dig back through the full Schedule
+// calendar day by day. Confirmed live via Coach Celine's report ("not
+// able to validate the previous classes") plus real unmarked sessions
+// still sitting in production days old. Capped at 90 days back — a
+// genuinely ancient miss isn't something surfacing here helps with,
+// and an unbounded query isn't worth it for that.
+export async function getPastUnmarkedAttendance(
+  supabase: SupabaseClient,
+  coachId: string,
+  timeZone: string,
+): Promise<{ sessions: TodaySession[]; groupLessons: CoachGroupLesson[] }> {
+  const { dayStart } = getTodayBounds(timeZone);
+  const lookbackStart = new Date(dayStart.getTime() - PAST_ATTENDANCE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  const { data } = await supabase
+    .from("sessions")
+    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier)")
+    .eq("actual_coach_id", coachId)
+    .eq("status", "scheduled")
+    .gte("scheduled_at", lookbackStart.toISOString())
+    .lt("scheduled_at", dayStart.toISOString())
+    .order("scheduled_at");
+
+  const sessions: TodaySession[] = (data ?? []).map((s) => {
+    const student = unwrapJoin(s.students as unknown as { name: string; tier: string } | { name: string; tier: string }[] | null);
+    return {
+      id: s.id,
+      scheduledAt: s.scheduled_at,
+      durationMinutes: s.duration_minutes,
+      status: s.status,
+      isTrial: s.is_trial,
+      studentId: s.student_id,
+      studentName: student?.name ?? "Student",
+      tier: student?.tier ?? "",
+      needsAttendance: true,
+    };
+  });
+
+  const allPastGroupLessons = await getCoachGroupLessons(
+    supabase,
+    coachId,
+    lookbackStart.toISOString(),
+    dayStart.toISOString(),
+  );
+  const groupLessons = allPastGroupLessons.filter((g) =>
+    g.attendees.some((a) => a.status === "registered"),
+  );
+
+  return { sessions, groupLessons };
+}
+
 export interface CoachStudent {
   id: string;
   name: string;

@@ -4,6 +4,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import {
   getTodaysSchedule,
   getTodaysGroupLessons,
+  getPastUnmarkedAttendance,
   getCoachStudents,
   getMakeupsExpiringSoon,
   getBirthdaysThisWeek,
@@ -45,9 +46,10 @@ export default async function CoachDashboardPage({
 
   const timeZone = coach.timezone ?? DEFAULT_TIMEZONE;
 
-  const [today, todayGroupLessons, students, { data: unseenPayroll }] = await Promise.all([
+  const [today, todayGroupLessons, pastUnmarked, students, { data: unseenPayroll }] = await Promise.all([
     getTodaysSchedule(supabase, coach.id, timeZone),
     getTodaysGroupLessons(supabase, coach.id, timeZone),
+    getPastUnmarkedAttendance(supabase, coach.id, timeZone),
     getCoachStudents(supabase, coach.id),
     // Flags a just-generated payroll run the coach hasn't looked at yet
     // (payroll_entries.coach_seen_at, migration 0048) — cleared the
@@ -119,6 +121,8 @@ export default async function CoachDashboardPage({
         currentProfileId={user.id}
         today={today}
         todayGroupLessons={todayGroupLessons}
+        pastUnmarkedSessions={pastUnmarked.sessions}
+        pastUnmarkedGroupLessons={pastUnmarked.groupLessons}
         newPayroll={newPayroll}
         expiringMakeups={expiringMakeups}
         birthdays={birthdays}
