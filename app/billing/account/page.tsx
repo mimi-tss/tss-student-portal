@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SubscriptionClient from "./subscription-client";
 import InvoicesClient from "./invoices-client";
+import AccountDetailsClient from "./account-details-client";
 import styles from "../billing.module.css";
 
 // Only page under /billing that requires a session — the pricing page
@@ -21,7 +22,11 @@ export default async function BillingAccountPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/billing/login");
 
-  const { data: student } = await supabase.from("students").select("id").eq("profile_id", user.id).maybeSingle();
+  const { data: student } = await supabase
+    .from("students")
+    .select("id, name, email, phone")
+    .eq("profile_id", user.id)
+    .maybeSingle();
   if (!student) redirect("/billing/login?error=student_not_found");
 
   return (
@@ -31,6 +36,7 @@ export default async function BillingAccountPage() {
       </h1>
       <SubscriptionClient />
       <InvoicesClient />
+      <AccountDetailsClient initial={{ name: student.name, email: student.email, phone: student.phone }} />
     </div>
   );
 }

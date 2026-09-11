@@ -428,16 +428,18 @@ export default async function StudentDashboardPage() {
             Book / reschedule a session
           </Link>
           <PlanRequestsClient initialPending={hasPendingCancelRequest} renewalDate={renewalDate.toISOString()} />
-          <NotificationPreferencesClient
-            initial={{
-              notify_digest_email: student.notify_digest_email,
-              notify_digest_sms: student.notify_digest_sms,
-              notify_digest_inapp: student.notify_digest_inapp,
-              notify_alerts_email: student.notify_alerts_email,
-              notify_alerts_sms: student.notify_alerts_sms,
-              notify_alerts_inapp: student.notify_alerts_inapp,
-            }}
-          />
+          <div id="notification-preferences">
+            <NotificationPreferencesClient
+              initial={{
+                notify_digest_email: student.notify_digest_email,
+                notify_digest_sms: student.notify_digest_sms,
+                notify_digest_inapp: student.notify_digest_inapp,
+                notify_alerts_email: student.notify_alerts_email,
+                notify_alerts_sms: student.notify_alerts_sms,
+                notify_alerts_inapp: student.notify_alerts_inapp,
+              }}
+            />
+          </div>
         </div>
 
         <Link href="/student/book" className={styles.panelLink}>
