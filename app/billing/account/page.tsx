@@ -33,9 +33,6 @@ export default async function BillingAccountPage() {
 
   return (
     <div className={styles.wrap}>
-      <h1 className={styles.title} style={{ textAlign: "left" }}>
-        Your plan
-      </h1>
       <AccountDetailsClient
         initial={{
           name: student.name,
@@ -54,6 +51,9 @@ export default async function BillingAccountPage() {
           guardianEmail: student.guardian_email,
         }}
       />
+      <h1 className={styles.title} style={{ textAlign: "left" }}>
+        Your plan
+      </h1>
       <SubscriptionClient />
       <InvoicesClient />
     </div>

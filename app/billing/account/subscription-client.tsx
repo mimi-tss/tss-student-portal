@@ -158,12 +158,6 @@ export default function SubscriptionClient() {
   return (
     <div style={{ marginBottom: 24 }}>
       <div className={styles.card} style={{ maxWidth: 480, margin: "0 0 16px", textAlign: "left" }}>
-        {detail.studentName && (
-          <div className={styles.statRow}>
-            <span className={styles.statLabel}>Student</span>
-            <span>{detail.studentName}</span>
-          </div>
-        )}
         <div className={styles.statRow}>
           <span className={styles.statLabel}>Plan</span>
           <span className={styles.badge}>{detail.planName ?? (detail.tier ? TIER_LABEL[detail.tier] : "—")}</span>
