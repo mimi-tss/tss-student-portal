@@ -11,7 +11,6 @@ import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/schedu
 import JoinButton from "./join-button";
 import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
-import NotificationPreferencesClient from "./notification-preferences-client";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import styles from "../../student.module.css";
@@ -52,7 +51,7 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count, ambassador, notify_digest_email, notify_digest_sms, notify_digest_inapp, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count, ambassador",
     )
     .eq("profile_id", user.id)
     .single();
@@ -428,18 +427,6 @@ export default async function StudentDashboardPage() {
             Book / reschedule a session
           </Link>
           <PlanRequestsClient initialPending={hasPendingCancelRequest} renewalDate={renewalDate.toISOString()} />
-          <div id="notification-preferences">
-            <NotificationPreferencesClient
-              initial={{
-                notify_digest_email: student.notify_digest_email,
-                notify_digest_sms: student.notify_digest_sms,
-                notify_digest_inapp: student.notify_digest_inapp,
-                notify_alerts_email: student.notify_alerts_email,
-                notify_alerts_sms: student.notify_alerts_sms,
-                notify_alerts_inapp: student.notify_alerts_inapp,
-              }}
-            />
-          </div>
         </div>
 
         <Link href="/student/book" className={styles.panelLink}>

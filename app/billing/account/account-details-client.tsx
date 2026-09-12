@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import styles from "../billing.module.css";
+import NotificationPreferencesClient, { type NotificationPrefs } from "./notification-preferences-client";
 
 export interface AccountDetails {
   name: string;
@@ -110,7 +110,13 @@ const GUARDIAN_FIELDS: { key: EditableKey; label: string }[] = [
 // login code" button reuses the billing site's own request-code route
 // (same one /billing/login posts to) so a student can pick up a fresh
 // code for signing in elsewhere.
-export default function AccountDetailsClient({ initial }: { initial: AccountDetails }) {
+export default function AccountDetailsClient({
+  initial,
+  notificationPrefs,
+}: {
+  initial: AccountDetails;
+  notificationPrefs: NotificationPrefs;
+}) {
   const [details, setDetails] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(toFormState(initial));
@@ -285,9 +291,7 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
         </div>
 
         <div className={styles.card} style={{ textAlign: "left" }}>
-          <Link href="/student/dashboard#notification-preferences" className={styles.linkBtn}>
-            Notification preferences
-          </Link>
+          <NotificationPreferencesClient initial={notificationPrefs} />
         </div>
       </div>
     </div>

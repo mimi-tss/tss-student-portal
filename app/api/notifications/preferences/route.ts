@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Updates the caller's own notification-channel preferences — 2 groups
 // (digest, alerts) x 3 channels (email, sms, in-app) each. Self-service
 // only, same "resolve student_id from auth.getUser(), no id in the body"
-// posture as /api/student/requests.
+// posture as /api/student/requests. `students` has no self-UPDATE RLS
+// policy (admin-only writes — see lib/billing/student-stripe-link.ts's
+// own comment on this), so the write below uses the admin client —
+// ownership is already established above via the session-scoped lookup,
+// same pattern as /api/billing/account-details.
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -32,7 +37,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "no valid preference fields provided" }, { status: 400 });
   }
 
-  const { error } = await supabase.from("students").update(update).eq("id", student.id);
+  const admin = createAdminClient();
+  const { error } = await admin.from("students").update(update).eq("id", student.id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -25,7 +25,7 @@ export default async function BillingAccountPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, phone, birth_date, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email",
+      "id, name, email, phone, birth_date, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, notify_digest_email, notify_digest_sms, notify_digest_inapp, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp",
     )
     .eq("profile_id", user.id)
     .maybeSingle();
@@ -49,6 +49,14 @@ export default async function BillingAccountPage() {
           guardianRelationship: student.guardian_relationship,
           guardianPhone: student.guardian_phone,
           guardianEmail: student.guardian_email,
+        }}
+        notificationPrefs={{
+          notify_digest_email: student.notify_digest_email,
+          notify_digest_sms: student.notify_digest_sms,
+          notify_digest_inapp: student.notify_digest_inapp,
+          notify_alerts_email: student.notify_alerts_email,
+          notify_alerts_sms: student.notify_alerts_sms,
+          notify_alerts_inapp: student.notify_alerts_inapp,
         }}
       />
       <h1 className={styles.title} style={{ textAlign: "left" }}>
