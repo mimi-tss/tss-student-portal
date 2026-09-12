@@ -3,14 +3,26 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { verifyLoginCode } from "@/lib/auth/login-code";
 
+// A same-site `/billing/*` path only — never anything else. This value
+// comes straight from a request body, so treating it as a trusted
+// redirect target without this check would be an open redirect (e.g.
+// "//evil.com" or "https://evil.com" both fail the startsWith/no-"//"
+// checks below).
+function safeNextPath(next: unknown): string | null {
+  if (typeof next !== "string" || !next.startsWith("/billing/") || next.startsWith("//") || next.includes("://")) {
+    return null;
+  }
+  return next;
+}
+
 // Billing-site equivalent of app/api/auth/verify-login-code — same
 // server-side generateLink()+verifyOtp() session-set pattern (robust
 // regardless of iframe; this site is never iframed but there's no reason
-// to use a weaker client-side flow here either), just redirecting to
-// /billing/account instead of a role-based path, since this host only
-// ever serves students.
+// to use a weaker client-side flow here either). Redirects to whichever
+// /billing/* page the student actually meant to reach (see
+// login-form.tsx's own `next`), defaulting to /billing/account.
 export async function POST(req: NextRequest) {
-  const { email, code } = await req.json();
+  const { email, code, next } = await req.json();
   if (typeof email !== "string" || typeof code !== "string" || !email.trim() || !code.trim()) {
     return NextResponse.json({ error: "email and code required" }, { status: 400 });
   }
@@ -41,5 +53,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Something went wrong creating your session — try again." }, { status: 500 });
   }
 
-  return NextResponse.json({ redirectUrl: "/billing/account" });
+  return NextResponse.json({ redirectUrl: safeNextPath(next) ?? "/billing/account" });
 }

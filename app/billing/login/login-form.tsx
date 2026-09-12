@@ -12,7 +12,7 @@ const RESEND_COOLDOWN_S = 60;
 // app's LoginForm (app/login/login-form.tsx), posting to the billing-
 // scoped routes instead. No iframe storage-access dance here (this site
 // is never embedded, always a real top-level tab/window).
-export default function BillingLoginForm() {
+export default function BillingLoginForm({ next }: { next?: string }) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -86,7 +86,7 @@ export default function BillingLoginForm() {
     const res = await fetch("/api/billing/auth/verify-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), code: code.trim() }),
+      body: JSON.stringify({ email: email.trim(), code: code.trim(), next }),
     });
     const data = await res.json().catch(() => null);
     if (res.ok && data?.redirectUrl) {
