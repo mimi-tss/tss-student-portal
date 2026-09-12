@@ -206,6 +206,36 @@ export async function POST(req: NextRequest) {
     ? 30
     : (credit?.duration_minutes ?? student.session_duration_minutes ?? 30);
 
+  // Same re-check for the coach's own group lessons — /api/booking/slots
+  // already excludes these from what it offers (confirmed live: it
+  // didn't, a real gap, fixed alongside this), but this route's own
+  // write path never independently verified it, so a stale slot list or
+  // a direct request could still double-book a coach into their own
+  // group class. A group lesson's start isn't grid-aligned like a 1:1
+  // session's, so this is a real overlap check, not an exact-match one —
+  // fetch anything within a generous window around the requested slot
+  // and compare in JS, same reasoning coach-calendar.tsx's own overlap
+  // checks already use.
+  const slotStartDate = new Date(slotStart);
+  const slotEndDate = new Date(slotStartDate.getTime() + durationMinutes * 60 * 1000);
+  const { data: nearbyGroupLessons } = await supabase
+    .from("group_lessons")
+    .select("scheduled_at, duration_minutes")
+    .eq("coach_id", coachId)
+    .is("cancelled_at", null)
+    .gte("scheduled_at", new Date(slotStartDate.getTime() - 4 * 60 * 60 * 1000).toISOString())
+    .lte("scheduled_at", slotEndDate.toISOString());
+
+  const groupClash = (nearbyGroupLessons ?? []).some((g) => {
+    const gStart = new Date(g.scheduled_at);
+    const gEnd = new Date(gStart.getTime() + g.duration_minutes * 60 * 1000);
+    return slotStartDate < gEnd && slotEndDate > gStart;
+  });
+
+  if (groupClash) {
+    return NextResponse.json({ error: "slot no longer available" }, { status: 409 });
+  }
+
   const { data: session, error } = await supabase
     .from("sessions")
     .insert({

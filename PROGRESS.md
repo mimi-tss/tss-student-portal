@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Makeup-credit booking could double-book a coach's group lesson slot (2026-09-12)
+
+You flagged students being able to book a weekly-makeup 1:1 slot even
+when the coach's calendar was blocked for a group class. Checked
+[/api/booking/slots](app/api/booking/slots/route.ts) — it already
+excluded `coach_blocks`, existing 1:1 `sessions`, and held recurring
+slots (a paused student's reserved time) from what it offers, but
+`group_lessons` was never one of its busy-range sources at all — a
+coach's own group class was simply invisible to this route, so any
+overlapping 1:1 time showed as a normal open slot. Added it as a fourth
+source, same overlap-range treatment as the others (a cancelled group
+lesson correctly frees the time back up, same as a with-notice 1:1
+cancellation already does).
+
+Also closed the same gap on the actual write path —
+[/api/booking/book](app/api/booking/book/route.ts)'s own "is this slot
+still free" re-check (guards against a stale slot list or two students
+racing for the same time) only ever re-queried `sessions`, never
+`group_lessons` either. Added a real overlap check there too (a group
+lesson's start isn't grid-aligned like a 1:1 session's, so this is a
+genuine start/end overlap comparison, not an exact-time match) — moved
+`durationMinutes`'s computation earlier in the route since the new
+check needs it before the point it used to be calculated.
+
+Verified against Nikki's real "Semi-Private Vocal Group Class" (real
+production data, 2026-09-16, 6:00-7:00 PM Bangkok / 11:00 PM-12:00 AM
+UTC) — confirmed the new query correctly finds and would exclude/reject
+a slot request landing on it, where the old code would have let it
+through. `npx tsc --noEmit -p .` and `next build` both clean. No
+migration — every table involved already existed.
+
 ## Kajabi grant now creates the contact if it doesn't exist yet (2026-09-12)
 
 Traced through why a brand-new signup off the new `singsmarter.tarasimonstudios.com` landing page might not get Kajabi course access automatically: `grantKajabiOffer` ([lib/kajabi/client.ts](lib/kajabi/client.ts)) only ever looked up an existing Kajabi contact by email and threw if none existed — no auto-create. The studio's own normal process is manual (add the contact by hand, then assign the offer), which is exactly why this gap never showed up before; a cold lead off a new landing page who's never been in Kajabi at all is the first real case that hits it.

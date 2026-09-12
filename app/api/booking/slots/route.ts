@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
 
   const timeZone = coach?.timezone ?? "America/New_York";
 
-  const [{ data: blocks }, { data: existingSessions }, heldSlots] = await Promise.all([
+  const [{ data: blocks }, { data: existingSessions }, heldSlots, { data: groupLessons }] = await Promise.all([
     supabase
       .from("coach_blocks")
       .select("start_at, end_at")
@@ -120,6 +120,19 @@ export async function GET(req: NextRequest) {
     // session row exists for it during the pause, so it needs its own
     // fetch to stay blocked from other students booking into it.
     getHeldRecurringSlots(supabase, coachId, rangeStart, rangeEnd),
+    // A coach's own group lesson was never excluded here at all —
+    // confirmed live: a student could book a 1:1 makeup slot directly
+    // on top of that coach's group class, since group_lessons was never
+    // one of this route's busy-range sources (coach_blocks/sessions/held
+    // recurring slots only). A cancelled group lesson genuinely frees
+    // the time back up, same as a with-notice 1:1 cancellation above.
+    supabase
+      .from("group_lessons")
+      .select("scheduled_at, duration_minutes")
+      .eq("coach_id", coachId)
+      .is("cancelled_at", null)
+      .gte("scheduled_at", rangeStart.toISOString())
+      .lte("scheduled_at", rangeEnd.toISOString()),
   ]);
 
   const busyRanges = [
@@ -132,6 +145,11 @@ export async function GET(req: NextRequest) {
     ...(existingSessions ?? []).map((s) => {
       const start = new Date(s.scheduled_at);
       const end = new Date(start.getTime() + s.duration_minutes * 60 * 1000);
+      return [start, end] as const;
+    }),
+    ...(groupLessons ?? []).map((g) => {
+      const start = new Date(g.scheduled_at);
+      const end = new Date(start.getTime() + g.duration_minutes * 60 * 1000);
       return [start, end] as const;
     }),
   ];
