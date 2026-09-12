@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     addonItems
       .filter((item) => {
         const addon = resolveAddonFromPrice(item.price);
-        return addon && addon.tier !== (tier as Tier);
+        return addon && !addon.tiers.includes(tier as Tier);
       })
       .map((item) => client.subscriptionItems.del(item.id)),
   );

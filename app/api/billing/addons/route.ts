@@ -4,15 +4,19 @@ import { addonsForTier, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib
 import { getStripeClient } from "@/lib/stripe/client";
 import { resolveTierFromPrice } from "@/lib/stripe/tiers";
 
-// Lists the add-ons available for the student's current tier, whether
-// each is currently active, and whether it can be self-serve toggled.
-// "Active" is read off the real subscription's items by Price metadata
-// (resolveAddonFromPrice) rather than a fixed Price ID — a legacy
-// (Opus-account) student can already have one of these on an old Price
-// this app never created. Adding a NEW item, though, only ever uses the
-// current "own"-account Price (resolveAddonPriceId) — Opus isn't meant
-// to gain new priced items, only keep whatever it already has until that
-// student migrates (see change-plan-client.tsx's own migration path).
+// Lists the add-ons available for the student's current tier. Two very
+// different shapes share this one response:
+//
+// - "recurring" (a second subscription item, toggled on/off): active is
+//   read off the real subscription's items by Price metadata
+//   (resolveAddonFromPrice), not a fixed Price ID — a legacy
+//   (Opus-account) student can already have one on an old Price this app
+//   never created. Adding a NEW item only ever uses the current "own"
+//   Price — Opus isn't meant to gain new priced items.
+// - "one_time" (a straight off-session charge, see .../purchase/route.ts):
+//   no ongoing state at all — buyable repeatedly by design (e.g.
+//   Spotlight, purchased fresh for every recital), so there's no
+//   active/canRemove for these, just a price and whether it's configured.
 export async function GET() {
   try {
     const billingStudent = await resolveBillingStudent();
@@ -40,22 +44,39 @@ export async function GET() {
 
     const addons = await Promise.all(
       catalog.map(async (def) => {
-        const activeItem = activeItemByAddonId.get(def.id);
-        const active = !!activeItem;
         const currentPriceId = resolveAddonPriceId(def);
+        const activeItem = def.kind === "recurring" ? activeItemByAddonId.get(def.id) : undefined;
+        const active = !!activeItem;
 
-        // Only fetches the catalog Price (to show a price tag before
-        // anyone's added it) via the "own" account specifically — that
-        // Price never lives on Opus, so looking it up through an
-        // Opus-linked student's own client would 404.
+        // The catalog Price never lives on Opus — looked up through the
+        // "own" account specifically (not the student's own account
+        // client) so it resolves even before an Opus-linked student has
+        // anything active yet.
         let price = active && activeItem && typeof activeItem.price !== "string" ? activeItem.price : null;
         if (!price && currentPriceId) {
           price = await getStripeClient("own").prices.retrieve(currentPriceId);
         }
 
-        return {
+        const base = {
           id: def.id,
           label: def.label,
+          description: def.description ?? null,
+          kind: def.kind,
+          amount: price?.unit_amount ?? null,
+          currency: price?.currency ?? null,
+          interval: price?.recurring?.interval ?? null,
+        };
+
+        if (def.kind === "one_time") {
+          return {
+            ...base,
+            canPurchase: !!currentPriceId,
+            requiresGroupLessonSpot: !!def.requiresGroupLessonSpot,
+          };
+        }
+
+        return {
+          ...base,
           active,
           // Can start a NEW add-on only with a configured "own" Price,
           // and only for a student already on the "own" account.
@@ -63,9 +84,6 @@ export async function GET() {
           // Removing an existing item never needs a fresh Price lookup —
           // works regardless of which account it's actually on.
           canRemove: true,
-          amount: price?.unit_amount ?? null,
-          currency: price?.currency ?? null,
-          interval: price?.recurring?.interval ?? null,
         };
       }),
     );

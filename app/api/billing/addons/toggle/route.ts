@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
 
   const addon = findAddon(addonId);
   if (!addon) return NextResponse.json({ error: "Unknown add-on" }, { status: 400 });
+  if (addon.kind !== "recurring") {
+    return NextResponse.json({ error: "This add-on is a one-time purchase — see /api/billing/addons/purchase." }, { status: 400 });
+  }
 
   const billingStudent = await resolveBillingStudent();
   if (!billingStudent) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -46,7 +49,7 @@ export async function POST(req: NextRequest) {
   });
 
   const tier = resolveTierFromPrice(subscription.items.data[0]?.price);
-  if (tier !== addon.tier) {
+  if (!tier || !addon.tiers.includes(tier)) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }
 

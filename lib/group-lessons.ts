@@ -263,6 +263,52 @@ export async function notifyCoachOfGroupLessonSignup(
   });
 }
 
+export interface OpenGroupLesson {
+  id: string;
+  topic: string | null;
+  scheduledAt: string;
+  durationMinutes: number;
+  coachName: string;
+  spotsLeft: number | null; // null = uncapped
+}
+
+// Every future, non-cancelled occurrence with room, this student isn't
+// already registered in — unlike getRedeemableGroupLessons (lib/
+// group-lesson-credits.ts), not filtered to one topic, since this backs
+// the Drop-In add-on's own spot picker (app/api/billing/addons/purchase),
+// which is browsing ALL open classes to buy into, not redeeming a credit
+// against one specific topic. Uses the admin client for the same reason
+// that function does: a student has no RLS visibility into a
+// group_lessons row they aren't registered in yet (0056).
+export async function getOpenGroupLessons(supabase: SupabaseClient, excludeStudentId: string): Promise<OpenGroupLesson[]> {
+  const { data } = await supabase
+    .from("group_lessons")
+    .select("id, topic, scheduled_at, duration_minutes, max_students, coaches(name), group_lesson_registrations(student_id)")
+    .is("cancelled_at", null)
+    .gt("scheduled_at", new Date().toISOString())
+    .order("scheduled_at");
+
+  return (data ?? [])
+    .map((l) => {
+      const registrations = (l.group_lesson_registrations as unknown as { student_id: string }[] | null) ?? [];
+      if (registrations.some((r) => r.student_id === excludeStudentId)) return null;
+
+      const coach = unwrapJoin(l.coaches as unknown as { name: string } | { name: string }[] | null);
+      const spotsLeft = l.max_students === null ? null : l.max_students - registrations.length;
+      if (spotsLeft !== null && spotsLeft <= 0) return null;
+
+      return {
+        id: l.id,
+        topic: l.topic,
+        scheduledAt: l.scheduled_at,
+        durationMinutes: l.duration_minutes,
+        coachName: coach?.name ?? "Coach",
+        spotsLeft,
+      };
+    })
+    .filter((l): l is OpenGroupLesson => l !== null);
+}
+
 export interface RegisterSeriesResult {
   total: number;
   registered: number;

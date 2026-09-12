@@ -8,18 +8,24 @@ import styles from "../billing.module.css";
 interface AddonRow {
   id: string;
   label: string;
-  active: boolean;
+  kind: "recurring" | "one_time";
+  active?: boolean;
   amount: number | null;
   currency: string | null;
   interval: string | null;
 }
 
-// Read-only — purchasing/removing an add-on happens on its own page
-// (/billing/addons, deliberately separate so the studio can share that
-// link directly). This just folds whatever's already active into the
-// account page's billing info, plus a "Manage" link over to the real
-// page. Renders nothing at all for a tier with no add-ons in the catalog
-// (lite/elite today).
+// Read-only — purchasing/removing/buying an add-on happens on its own
+// page (/billing/addons, deliberately separate so the studio can share
+// that link directly). This just folds whatever's currently ACTIVE into
+// the account page's billing info, plus a "Manage" link over to the real
+// page. Only "recurring" add-ons have an ongoing active state to show —
+// "one_time" purchases (4-Pack, Drop-In, Spotlight, etc.) are
+// deliberately not tracked anywhere beyond a Slack ping (confirmed with
+// the user), so there's nothing to list here for those; they only ever
+// show up as a line item on the student's real Stripe billing history.
+// Renders nothing at all for a tier with no add-ons in the catalog
+// (lite today).
 export default function AddonsClient() {
   const [addons, setAddons] = useState<AddonRow[] | null>(null);
 
@@ -31,7 +37,7 @@ export default function AddonsClient() {
   }, []);
 
   if (!addons || addons.length === 0) return null;
-  const active = addons.filter((a) => a.active);
+  const active = addons.filter((a) => a.kind === "recurring" && a.active);
 
   return (
     <div className={styles.card} style={{ maxWidth: 480, marginBottom: 24, textAlign: "left" }}>
