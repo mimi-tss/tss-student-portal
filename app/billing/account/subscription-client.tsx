@@ -6,6 +6,7 @@ import { TIER_LABEL, formatPrice } from "@/lib/stripe/tiers";
 import type { Tier, StripeAccount } from "@/types/database";
 import PaymentMethodClient from "./payment-method-client";
 import ChangePlanClient from "./change-plan-client";
+import AddonsClient from "./addons-client";
 import styles from "../billing.module.css";
 
 interface SubscriptionDetail {
@@ -193,6 +194,8 @@ export default function SubscriptionClient() {
           </p>
         )}
       </div>
+
+      {isActionable && <AddonsClient />}
 
       {confirmation && <p className={styles.successText} style={{ marginTop: 0 }}>{confirmation}</p>}
       {error && <p className={styles.errorText}>{error}</p>}

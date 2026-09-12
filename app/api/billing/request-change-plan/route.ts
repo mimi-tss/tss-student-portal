@@ -5,6 +5,7 @@ import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
 import { getStripeClient } from "@/lib/stripe/client";
 import { STRIPE_PRICE_BY_TIER, TIER_LABEL, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
+import { validAddonPriceIdsForTier } from "@/lib/billing/addons";
 import type { Tier } from "@/types/database";
 
 // Elite is application-only (see lib/billing/tier-copy.ts) — no self-serve
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
   }
 
   const client = getStripeClient(billingStudent.stripeAccount);
-  const subscription = await client.subscriptions.retrieve(billingStudent.stripeSubscriptionId);
+  const subscription = await client.subscriptions.retrieve(billingStudent.stripeSubscriptionId, {
+    expand: ["items.data.price"],
+  });
   const currentItemId = subscription.items.data[0]?.id;
   if (!currentItemId) {
     return NextResponse.json({ error: "Subscription has no items to update." }, { status: 500 });
@@ -59,6 +62,21 @@ export async function POST(req: NextRequest) {
   await client.subscriptions.update(billingStudent.stripeSubscriptionId, {
     items: [{ id: currentItemId, price: newPriceId }],
   });
+
+  // Drop any add-on subscription item that isn't offered on the new tier
+  // (e.g. Suite's biweekly-lessons add-on doesn't carry over to Pro) —
+  // per-student instant self-serve, so this has to happen right here
+  // rather than relying on an admin to notice and clean it up.
+  const validAddonPriceIds = validAddonPriceIdsForTier(tier as Tier);
+  const addonItems = subscription.items.data.slice(1);
+  await Promise.all(
+    addonItems
+      .filter((item) => {
+        const priceId = typeof item.price === "string" ? item.price : item.price.id;
+        return !validAddonPriceIds.has(priceId);
+      })
+      .map((item) => client.subscriptionItems.del(item.id)),
+  );
 
   const supabase = await createClient();
   const { data: inserted } = await supabase
