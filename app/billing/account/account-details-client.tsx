@@ -55,6 +55,17 @@ function formatBirthDate(value: string): string | null {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
+function calcAge(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const [y, m, d] = birthDate.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let age = today.getFullYear() - y;
+  const hadBirthdayThisYear = today.getMonth() + 1 > m || (today.getMonth() + 1 === m && today.getDate() >= d);
+  if (!hadBirthdayThisYear) age--;
+  return age;
+}
+
 const BASIC_FIELDS: { key: EditableKey; label: string; type?: string }[] = [
   { key: "name", label: "Name" },
   { key: "phone", label: "Phone" },
@@ -72,7 +83,10 @@ const ADDRESS_FIELDS: { key: EditableKey; label: string }[] = [
 
 // Contact info for a minor's parent/guardian, admin reference only —
 // not a second login (that's still the student's own `email`, see
-// supabase/migrations/0070_student_contact_and_guardian_info.sql).
+// supabase/migrations/0070_student_contact_and_guardian_info.sql). An
+// adult student shows "N/A" for a blank field instead of "—" — a
+// guardian genuinely doesn't apply once birthDate says 18+, vs. "—"
+// meaning just not filled in yet.
 const GUARDIAN_FIELDS: { key: EditableKey; label: string }[] = [
   { key: "guardianName", label: "Name" },
   { key: "guardianRelationship", label: "Relationship" },
@@ -110,6 +124,12 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
 
   function setField(key: EditableKey, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setForm(toFormState(details));
+    setError(null);
   }
 
   async function save(e: React.FormEvent) {
@@ -157,41 +177,136 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
     setCodeSent(true);
   }
 
-  return (
-    <div className={styles.card} style={{ maxWidth: 480, marginBottom: 24, textAlign: "left" }}>
-      <div className={styles.tierName} style={{ marginBottom: 12 }}>
-        Account details
+  const guardianFallback = calcAge(details.birthDate) !== null && (calcAge(details.birthDate) as number) >= 18 ? "N/A" : "—";
+
+  const row = (
+    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div className={styles.card} style={{ flex: "2 1 380px", textAlign: "left" }}>
+        <div className={styles.tierName} style={{ marginBottom: 12 }}>
+          Account details
+        </div>
+
+        {!editing ? (
+          <>
+            {BASIC_FIELDS.map(({ key, label }) => (
+              <div className={styles.statRow} key={key}>
+                <span className={styles.statLabel}>{label}</span>
+                <span>{key === "birthDate" ? (formatBirthDate(details.birthDate ?? "") ?? "—") : details[key] || "—"}</span>
+              </div>
+            ))}
+
+            <div className={styles.statLabel} style={{ marginTop: 16, marginBottom: 4 }}>
+              Address
+            </div>
+            {ADDRESS_FIELDS.map(({ key, label }) => (
+              <div className={styles.statRow} key={key}>
+                <span className={styles.statLabel}>{label}</span>
+                <span>{details[key] || "—"}</span>
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            {BASIC_FIELDS.map(({ key, label, type }) => (
+              <label className={styles.statLabel} key={key}>
+                {label}
+                <input
+                  className={styles.input}
+                  type={type ?? "text"}
+                  value={form[key]}
+                  onChange={(e) => setField(key, e.target.value)}
+                  required={key === "name"}
+                  style={{ marginTop: 4, marginBottom: 10, width: "100%" }}
+                />
+              </label>
+            ))}
+
+            <div className={styles.statLabel} style={{ marginTop: 8, marginBottom: 4 }}>
+              Address
+            </div>
+            {ADDRESS_FIELDS.map(({ key, label }) => (
+              <label className={styles.statLabel} key={key}>
+                {label}
+                <input
+                  className={styles.input}
+                  value={form[key]}
+                  onChange={(e) => setField(key, e.target.value)}
+                  style={{ marginTop: 4, marginBottom: 10, width: "100%" }}
+                />
+              </label>
+            ))}
+          </>
+        )}
+
+        <div className={styles.divider} style={{ margin: "16px 0" }} />
+
+        <div className={styles.statRow}>
+          <span className={styles.statLabel}>Login email</span>
+          <span>{details.email}</span>
+        </div>
+        <button className={styles.cta} style={{ marginTop: 8 }} onClick={sendLoginCode} disabled={sendingCode}>
+          {sendingCode ? "Sending…" : "Email me a login code"}
+        </button>
+        {codeSent && (
+          <p className={styles.successText} style={{ marginTop: 8 }}>
+            Code sent — check your email.
+          </p>
+        )}
+        {codeError && (
+          <p className={styles.errorText} style={{ marginTop: 8 }}>
+            {codeError}
+          </p>
+        )}
       </div>
 
-      {!editing ? (
-        <>
-          {BASIC_FIELDS.map(({ key, label }) => (
-            <div className={styles.statRow} key={key}>
-              <span className={styles.statLabel}>{label}</span>
-              <span>{key === "birthDate" ? (formatBirthDate(details.birthDate ?? "") ?? "—") : details[key] || "—"}</span>
-            </div>
-          ))}
+      <div className={styles.card} style={{ flex: "1 1 260px", textAlign: "left" }}>
+        <div className={styles.tierName} style={{ marginBottom: 12 }}>
+          Guardian details
+        </div>
+        {!editing
+          ? GUARDIAN_FIELDS.map(({ key, label }) => (
+              <div className={styles.statRow} key={key}>
+                <span className={styles.statLabel}>{label}</span>
+                <span>{details[key] || guardianFallback}</span>
+              </div>
+            ))
+          : GUARDIAN_FIELDS.map(({ key, label }) => (
+              <label className={styles.statLabel} key={key}>
+                {label}
+                <input
+                  className={styles.input}
+                  value={form[key]}
+                  onChange={(e) => setField(key, e.target.value)}
+                  style={{ marginTop: 4, marginBottom: 10, width: "100%" }}
+                />
+              </label>
+            ))}
+      </div>
+    </div>
+  );
 
-          <div className={styles.statLabel} style={{ marginTop: 16, marginBottom: 4 }}>
-            Address
+  return (
+    <>
+      {editing ? (
+        <form onSubmit={save} style={{ marginBottom: 24 }}>
+          {row}
+          {error && (
+            <p className={styles.errorText} style={{ marginTop: 12 }}>
+              {error}
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button type="submit" className={styles.cta} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button type="button" className={styles.linkBtn} disabled={saving} onClick={cancelEdit}>
+              Cancel
+            </button>
           </div>
-          {ADDRESS_FIELDS.map(({ key, label }) => (
-            <div className={styles.statRow} key={key}>
-              <span className={styles.statLabel}>{label}</span>
-              <span>{details[key] || "—"}</span>
-            </div>
-          ))}
-
-          <div className={styles.statLabel} style={{ marginTop: 16, marginBottom: 4 }}>
-            Guardian
-          </div>
-          {GUARDIAN_FIELDS.map(({ key, label }) => (
-            <div className={styles.statRow} key={key}>
-              <span className={styles.statLabel}>{label}</span>
-              <span>{details[key] || "—"}</span>
-            </div>
-          ))}
-
+        </form>
+      ) : (
+        <div style={{ marginBottom: 24 }}>
+          {row}
           {confirmation && (
             <p className={styles.successText} style={{ marginTop: 12 }}>
               {confirmation}
@@ -199,7 +314,7 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
           )}
           <button
             className={styles.cta}
-            style={{ marginTop: 12 }}
+            style={{ marginTop: 16 }}
             onClick={() => {
               setEditing(true);
               setConfirmation(null);
@@ -207,99 +322,14 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
           >
             Edit
           </button>
-        </>
-      ) : (
-        <form className={styles.form} onSubmit={save}>
-          {BASIC_FIELDS.map(({ key, label, type }) => (
-            <label className={styles.statLabel} key={key}>
-              {label}
-              <input
-                className={styles.input}
-                type={type ?? "text"}
-                value={form[key]}
-                onChange={(e) => setField(key, e.target.value)}
-                required={key === "name"}
-                style={{ marginTop: 4, width: "100%" }}
-              />
-            </label>
-          ))}
-
-          <div className={styles.statLabel} style={{ marginTop: 8 }}>
-            Address
-          </div>
-          {ADDRESS_FIELDS.map(({ key, label }) => (
-            <label className={styles.statLabel} key={key}>
-              {label}
-              <input
-                className={styles.input}
-                value={form[key]}
-                onChange={(e) => setField(key, e.target.value)}
-                style={{ marginTop: 4, width: "100%" }}
-              />
-            </label>
-          ))}
-
-          <div className={styles.statLabel} style={{ marginTop: 8 }}>
-            Guardian
-          </div>
-          {GUARDIAN_FIELDS.map(({ key, label }) => (
-            <label className={styles.statLabel} key={key}>
-              {label}
-              <input
-                className={styles.input}
-                value={form[key]}
-                onChange={(e) => setField(key, e.target.value)}
-                style={{ marginTop: 4, width: "100%" }}
-              />
-            </label>
-          ))}
-
-          {error && <p className={styles.errorText}>{error}</p>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="submit" className={styles.cta} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
-              className={styles.linkBtn}
-              disabled={saving}
-              onClick={() => {
-                setEditing(false);
-                setForm(toFormState(details));
-                setError(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
-      <div className={styles.divider} style={{ margin: "16px 0" }} />
-
-      <div className={styles.statRow}>
-        <span className={styles.statLabel}>Login email</span>
-        <span>{details.email}</span>
+      <div className={styles.card} style={{ maxWidth: 480, marginBottom: 24, textAlign: "left" }}>
+        <Link href="/student/dashboard#notification-preferences" className={styles.linkBtn}>
+          Notification preferences
+        </Link>
       </div>
-      <button className={styles.cta} style={{ marginTop: 8 }} onClick={sendLoginCode} disabled={sendingCode}>
-        {sendingCode ? "Sending…" : "Email me a login code"}
-      </button>
-      {codeSent && (
-        <p className={styles.successText} style={{ marginTop: 8 }}>
-          Code sent — check your email.
-        </p>
-      )}
-      {codeError && (
-        <p className={styles.errorText} style={{ marginTop: 8 }}>
-          {codeError}
-        </p>
-      )}
-
-      <div className={styles.divider} style={{ margin: "16px 0" }} />
-
-      <Link href="/student/dashboard#notification-preferences" className={styles.linkBtn}>
-        Notification preferences
-      </Link>
-    </div>
+    </>
   );
 }
