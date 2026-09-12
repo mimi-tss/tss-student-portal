@@ -24,7 +24,9 @@ export default async function BillingAccountPage() {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, email, phone")
+    .select(
+      "id, name, email, phone, birth_date, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email",
+    )
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!student) redirect("/billing/login?error=student_not_found");
@@ -34,9 +36,26 @@ export default async function BillingAccountPage() {
       <h1 className={styles.title} style={{ textAlign: "left" }}>
         Your plan
       </h1>
+      <AccountDetailsClient
+        initial={{
+          name: student.name,
+          email: student.email,
+          phone: student.phone,
+          birthDate: student.birth_date,
+          gender: student.gender,
+          addressStreet: student.address_street,
+          addressCity: student.address_city,
+          addressState: student.address_state,
+          addressZip: student.address_zip,
+          addressCountry: student.address_country,
+          guardianName: student.guardian_name,
+          guardianRelationship: student.guardian_relationship,
+          guardianPhone: student.guardian_phone,
+          guardianEmail: student.guardian_email,
+        }}
+      />
       <SubscriptionClient />
       <InvoicesClient />
-      <AccountDetailsClient initial={{ name: student.name, email: student.email, phone: student.phone }} />
     </div>
   );
 }

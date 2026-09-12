@@ -8,26 +8,98 @@ export interface AccountDetails {
   name: string;
   email: string;
   phone: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  addressStreet: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressZip: string | null;
+  addressCountry: string | null;
+  guardianName: string | null;
+  guardianRelationship: string | null;
+  guardianPhone: string | null;
+  guardianEmail: string | null;
 }
 
-// Name/phone live on `students`, which has no self-UPDATE RLS policy
-// (admin-only writes — see lib/billing/student-stripe-link.ts's own
-// comment on this) — saving goes through /api/billing/account-details,
-// which re-derives the student from the session (resolveBillingStudent)
-// before writing with the admin client, same ownership-checked
-// privileged-write pattern as request-cancel/request-pause.
+type EditableKey = Exclude<keyof AccountDetails, "email">;
+
+type FormState = Record<EditableKey, string>;
+
+function toFormState(d: AccountDetails): FormState {
+  return {
+    name: d.name,
+    phone: d.phone ?? "",
+    birthDate: d.birthDate ?? "",
+    gender: d.gender ?? "",
+    addressStreet: d.addressStreet ?? "",
+    addressCity: d.addressCity ?? "",
+    addressState: d.addressState ?? "",
+    addressZip: d.addressZip ?? "",
+    addressCountry: d.addressCountry ?? "",
+    guardianName: d.guardianName ?? "",
+    guardianRelationship: d.guardianRelationship ?? "",
+    guardianPhone: d.guardianPhone ?? "",
+    guardianEmail: d.guardianEmail ?? "",
+  };
+}
+
+// Birthday is a plain DATE column (no time) — parsing "1998-05-02" via
+// `new Date(str)` reads it as UTC midnight, which can print a day early
+// in a timezone behind UTC. Building the Date from explicit y/m/d parts
+// instead keeps it local-midnight, so the printed date always matches
+// the stored one.
+function formatBirthDate(value: string): string | null {
+  if (!value) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return value;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+const BASIC_FIELDS: { key: EditableKey; label: string; type?: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "phone", label: "Phone" },
+  { key: "birthDate", label: "Birthday", type: "date" },
+  { key: "gender", label: "Gender" },
+];
+
+const ADDRESS_FIELDS: { key: EditableKey; label: string }[] = [
+  { key: "addressStreet", label: "Street" },
+  { key: "addressCity", label: "City" },
+  { key: "addressState", label: "State" },
+  { key: "addressZip", label: "ZIP" },
+  { key: "addressCountry", label: "Country" },
+];
+
+// Contact info for a minor's parent/guardian, admin reference only —
+// not a second login (that's still the student's own `email`, see
+// supabase/migrations/0070_student_contact_and_guardian_info.sql).
+const GUARDIAN_FIELDS: { key: EditableKey; label: string }[] = [
+  { key: "guardianName", label: "Name" },
+  { key: "guardianRelationship", label: "Relationship" },
+  { key: "guardianPhone", label: "Phone" },
+  { key: "guardianEmail", label: "Email" },
+];
+
+// Name/phone/etc. all live on `students`, which has no self-UPDATE RLS
+// policy (admin-only writes — see lib/billing/student-stripe-link.ts's
+// own comment on this) — saving goes through /api/billing/account-
+// details, which re-derives the student from the session
+// (resolveBillingStudent) before writing with the admin client, same
+// ownership-checked privileged-write pattern as request-cancel/
+// request-pause. All fields here are free text/optional except name —
+// same convention migration 0070 chose for gender (source data too
+// inconsistent for a fixed set) extended to everything else it added.
 //
-// Email is display-only here, never editable: it's also the magic-
-// link/OTP login identity (lib/auth/login-code.ts), and changing it
-// would need its own re-verification step this doesn't build. The
-// "Email me a login code" button reuses the billing site's own
-// request-code route (same one /billing/login posts to) so a student
-// can pick up a fresh code for signing in elsewhere.
+// Email is display-only, never editable: it's also the magic-link/OTP
+// login identity (lib/auth/login-code.ts), and changing it would need
+// its own re-verification step this doesn't build. The "Email me a
+// login code" button reuses the billing site's own request-code route
+// (same one /billing/login posts to) so a student can pick up a fresh
+// code for signing in elsewhere.
 export default function AccountDetailsClient({ initial }: { initial: AccountDetails }) {
   const [details, setDetails] = useState(initial);
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(initial.name);
-  const [phone, setPhone] = useState(initial.phone ?? "");
+  const [form, setForm] = useState<FormState>(toFormState(initial));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -36,15 +108,23 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
   const [codeSent, setCodeSent] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
 
+  function setField(key: EditableKey, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
     setError(null);
+    const payload: Record<string, string | null> = {};
+    for (const key of Object.keys(form) as EditableKey[]) {
+      payload[key] = key === "name" ? form.name.trim() : form[key].trim() || null;
+    }
     const res = await fetch("/api/billing/account-details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), phone: phone.trim() || null }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => null);
     setSaving(false);
@@ -52,7 +132,9 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
       setError(data?.error ?? "Couldn't save your details.");
       return;
     }
-    setDetails((d) => ({ ...d, name: name.trim(), phone: phone.trim() || null }));
+    const next: AccountDetails = { ...details, ...(payload as Partial<AccountDetails>), name: payload.name as string };
+    setDetails(next);
+    setForm(toFormState(next));
     setEditing(false);
     setConfirmation("Saved.");
   }
@@ -83,14 +165,33 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
 
       {!editing ? (
         <>
-          <div className={styles.statRow}>
-            <span className={styles.statLabel}>Name</span>
-            <span>{details.name}</span>
+          {BASIC_FIELDS.map(({ key, label }) => (
+            <div className={styles.statRow} key={key}>
+              <span className={styles.statLabel}>{label}</span>
+              <span>{key === "birthDate" ? (formatBirthDate(details.birthDate ?? "") ?? "—") : details[key] || "—"}</span>
+            </div>
+          ))}
+
+          <div className={styles.statLabel} style={{ marginTop: 16, marginBottom: 4 }}>
+            Address
           </div>
-          <div className={styles.statRow}>
-            <span className={styles.statLabel}>Phone</span>
-            <span>{details.phone || "—"}</span>
+          {ADDRESS_FIELDS.map(({ key, label }) => (
+            <div className={styles.statRow} key={key}>
+              <span className={styles.statLabel}>{label}</span>
+              <span>{details[key] || "—"}</span>
+            </div>
+          ))}
+
+          <div className={styles.statLabel} style={{ marginTop: 16, marginBottom: 4 }}>
+            Guardian
           </div>
+          {GUARDIAN_FIELDS.map(({ key, label }) => (
+            <div className={styles.statRow} key={key}>
+              <span className={styles.statLabel}>{label}</span>
+              <span>{details[key] || "—"}</span>
+            </div>
+          ))}
+
           {confirmation && (
             <p className={styles.successText} style={{ marginTop: 12 }}>
               {confirmation}
@@ -109,25 +210,50 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
         </>
       ) : (
         <form className={styles.form} onSubmit={save}>
-          <label className={styles.statLabel}>
-            Name
-            <input
-              className={styles.input}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              style={{ marginTop: 4, width: "100%" }}
-            />
-          </label>
-          <label className={styles.statLabel}>
-            Phone
-            <input
-              className={styles.input}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              style={{ marginTop: 4, width: "100%" }}
-            />
-          </label>
+          {BASIC_FIELDS.map(({ key, label, type }) => (
+            <label className={styles.statLabel} key={key}>
+              {label}
+              <input
+                className={styles.input}
+                type={type ?? "text"}
+                value={form[key]}
+                onChange={(e) => setField(key, e.target.value)}
+                required={key === "name"}
+                style={{ marginTop: 4, width: "100%" }}
+              />
+            </label>
+          ))}
+
+          <div className={styles.statLabel} style={{ marginTop: 8 }}>
+            Address
+          </div>
+          {ADDRESS_FIELDS.map(({ key, label }) => (
+            <label className={styles.statLabel} key={key}>
+              {label}
+              <input
+                className={styles.input}
+                value={form[key]}
+                onChange={(e) => setField(key, e.target.value)}
+                style={{ marginTop: 4, width: "100%" }}
+              />
+            </label>
+          ))}
+
+          <div className={styles.statLabel} style={{ marginTop: 8 }}>
+            Guardian
+          </div>
+          {GUARDIAN_FIELDS.map(({ key, label }) => (
+            <label className={styles.statLabel} key={key}>
+              {label}
+              <input
+                className={styles.input}
+                value={form[key]}
+                onChange={(e) => setField(key, e.target.value)}
+                style={{ marginTop: 4, width: "100%" }}
+              />
+            </label>
+          ))}
+
           {error && <p className={styles.errorText}>{error}</p>}
           <div style={{ display: "flex", gap: 8 }}>
             <button type="submit" className={styles.cta} disabled={saving}>
@@ -139,8 +265,7 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
               disabled={saving}
               onClick={() => {
                 setEditing(false);
-                setName(details.name);
-                setPhone(details.phone ?? "");
+                setForm(toFormState(details));
                 setError(null);
               }}
             >
