@@ -217,7 +217,13 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
     }
   }
 
-  await syncKajabiForTierChange(admin, { studentId, email, newTier: tier, oldTier: priorTier });
+  await syncKajabiForTierChange(admin, {
+    studentId,
+    email,
+    name: session.customer_details?.name ?? undefined,
+    newTier: tier,
+    oldTier: priorTier,
+  });
 
   await issueAndSendBillingWelcomeLink(studentId, email).catch((err) =>
     console.error("Failed to send billing welcome link", err),
@@ -306,7 +312,13 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
   }
 
   if (tier && tier !== priorTier) {
-    await syncKajabiForTierChange(admin, { studentId: student.id, email: student.email, newTier: tier, oldTier: priorTier });
+    await syncKajabiForTierChange(admin, {
+      studentId: student.id,
+      email: student.email,
+      name: student.name,
+      newTier: tier,
+      oldTier: priorTier,
+    });
   }
 
   // Scheduled-cancellation detection — a student who cancelled (Billing

@@ -18,10 +18,16 @@ const OFFER_ID_BY_TIER: Record<Tier, string> = {
 // already happened in the webhook handler that calls this.
 export async function syncKajabiForTierChange(
   admin: SupabaseClient,
-  { studentId, email, newTier, oldTier }: { studentId: string; email: string; newTier: Tier | null; oldTier: Tier | null },
+  {
+    studentId,
+    email,
+    name,
+    newTier,
+    oldTier,
+  }: { studentId: string; email: string; name?: string; newTier: Tier | null; oldTier: Tier | null },
 ) {
   try {
-    if (newTier) await grantKajabiOffer(email, OFFER_ID_BY_TIER[newTier]);
+    if (newTier) await grantKajabiOffer(email, OFFER_ID_BY_TIER[newTier], name);
     if (oldTier && oldTier !== newTier) await revokeKajabiOffer(email, OFFER_ID_BY_TIER[oldTier]);
   } catch (err) {
     console.error("Kajabi sync failed", err);

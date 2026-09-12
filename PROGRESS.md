@@ -3,6 +3,16 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Kajabi grant now creates the contact if it doesn't exist yet (2026-09-12)
+
+Traced through why a brand-new signup off the new `singsmarter.tarasimonstudios.com` landing page might not get Kajabi course access automatically: `grantKajabiOffer` ([lib/kajabi/client.ts](lib/kajabi/client.ts)) only ever looked up an existing Kajabi contact by email and threw if none existed — no auto-create. The studio's own normal process is manual (add the contact by hand, then assign the offer), which is exactly why this gap never showed up before; a cold lead off a new landing page who's never been in Kajabi at all is the first real case that hits it.
+
+Looked up Kajabi's real OpenAPI spec (`help.kajabi.com/openapi.yaml`) rather than guessing — confirmed `POST /v1/contacts` exists, requires `Content-Type: application/vnd.api+json` (not the plain `application/json` this file's other calls use — left those alone since they're already confirmed working via real test purchases), and a `relationships.site.data.id` that has no way around being required. New `createKajabiContact(email, name)`; `grantKajabiOffer` now creates-then-grants when the lookup comes back empty. `name` threads through `syncKajabiForTierChange` → both webhook call sites (`checkout.session.completed` uses `session.customer_details?.name`, `customer.subscription.updated` uses the DB's own `student.name`) — the third call site (`customer.subscription.deleted`) only ever revokes, so it never needed a name.
+
+**New required env var: `KAJABI_SITE_ID`** — added to `.env.example` with where to find it. Without it set, this whole path throws immediately and falls back to the existing "flag it in Needs Review, admin fixes manually" behavior — same as before, not a regression, just still-manual until the var is set. **Not live-tested** — no Kajabi credentials in this environment; needs a real signup with an email that's genuinely never been in Kajabi before, run before the Friday launch, to confirm the create call actually succeeds against the real API (the site-id requirement in particular — if `KAJABI_SITE_ID` is wrong or missing, this fails loud in the logs but the student/Stripe side stays unaffected either way).
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Activity Log showed "Unknown" for every login/join-click — profiles never had an admin-wide read policy (2026-09-11)
 
 You flagged the Activity Log's "Logins & joins" view showing "Unknown"

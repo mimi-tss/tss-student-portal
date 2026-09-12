@@ -123,10 +123,50 @@ async function findKajabiContactIdByEmail(email: string): Promise<string | null>
   return body.data[0]?.id ?? null;
 }
 
-export async function grantKajabiOffer(email: string, offerId: string): Promise<void> {
-  const contactId = await findKajabiContactIdByEmail(email);
+// Confirmed against the real OpenAPI spec (help.kajabi.com/openapi.yaml,
+// POST /v1/contacts) — unlike grantKajabiOffer/revokeKajabiOffer below,
+// this one's request shape is verified, not assumed. Requires the
+// Content-Type Kajabi's spec actually asks for (application/vnd.api+json)
+// rather than the plain application/json every other call here uses —
+// left those alone since they're already confirmed working via real test
+// purchases, but this endpoint's spec is explicit about it. `KAJABI_SITE_ID`
+// is a required relationship the spec has no way around; find it in the
+// Kajabi Dashboard's own API/Site settings, or via a GET to any endpoint
+// that returns a site relationship.
+async function createKajabiContact(email: string, name: string): Promise<string> {
+  const siteId = process.env.KAJABI_SITE_ID;
+  if (!siteId) {
+    throw new Error("KAJABI_SITE_ID is not set — can't create a new Kajabi contact");
+  }
+
+  const res = await fetch(`${KAJABI_API_BASE}/contacts`, {
+    method: "POST",
+    headers: { ...(await kajabiHeaders()), "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({
+      data: {
+        type: "contacts",
+        attributes: { email, name },
+        relationships: { site: { data: { type: "sites", id: siteId } } },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Kajabi contact create failed (${res.status}): ${await res.text()}`);
+  }
+
+  const body = (await res.json()) as { data: { id: string } };
+  return body.data.id;
+}
+
+// `name` is only ever used on the create-if-missing path — a brand new
+// signup with no existing Kajabi contact (the normal case for a cold
+// lead off a landing page, versus this studio's own usual manual flow
+// of adding the contact by hand first, then granting the offer).
+export async function grantKajabiOffer(email: string, offerId: string, name?: string): Promise<void> {
+  let contactId = await findKajabiContactIdByEmail(email);
   if (!contactId) {
-    throw new Error(`No Kajabi contact found for ${email} — can't grant offer ${offerId}`);
+    contactId = await createKajabiContact(email, name?.trim() || email);
   }
 
   const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/offers`, {
