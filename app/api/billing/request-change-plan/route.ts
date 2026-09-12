@@ -5,7 +5,7 @@ import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
 import { getStripeClient } from "@/lib/stripe/client";
 import { STRIPE_PRICE_BY_TIER, TIER_LABEL, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
-import { validAddonPriceIdsForTier } from "@/lib/billing/addons";
+import { resolveAddonFromPrice } from "@/lib/billing/addons";
 import type { Tier } from "@/types/database";
 
 // Elite is application-only (see lib/billing/tier-copy.ts) — no self-serve
@@ -66,14 +66,17 @@ export async function POST(req: NextRequest) {
   // Drop any add-on subscription item that isn't offered on the new tier
   // (e.g. Suite's biweekly-lessons add-on doesn't carry over to Pro) —
   // per-student instant self-serve, so this has to happen right here
-  // rather than relying on an admin to notice and clean it up.
-  const validAddonPriceIds = validAddonPriceIdsForTier(tier as Tier);
+  // rather than relying on an admin to notice and clean it up. Matched by
+  // Price metadata (resolveAddonFromPrice), not a fixed ID, so this also
+  // catches a legacy (Opus-account) student's pre-existing add-on item.
+  // An item that doesn't resolve to any known add-on at all is left
+  // alone — never delete something this app doesn't recognize.
   const addonItems = subscription.items.data.slice(1);
   await Promise.all(
     addonItems
       .filter((item) => {
-        const priceId = typeof item.price === "string" ? item.price : item.price.id;
-        return !validAddonPriceIds.has(priceId);
+        const addon = resolveAddonFromPrice(item.price);
+        return addon && addon.tier !== (tier as Tier);
       })
       .map((item) => client.subscriptionItems.del(item.id)),
   );

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
-import { findAddon, resolveAddonPriceId } from "@/lib/billing/addons";
+import { findAddon, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib/billing/addons";
 import { getStripeClient } from "@/lib/stripe/client";
 import { resolveTierFromPrice } from "@/lib/stripe/tiers";
 
@@ -14,6 +14,13 @@ type AddonAction = (typeof VALID_ACTIONS)[number];
 // toggles an add-on and it applies right away on their real subscription
 // — no admin approval. Still logs a student_requests row (already
 // "approved") for the record and pings staff in Slack, informational only.
+//
+// "Remove" matches the existing item by Price metadata (addon_id), so it
+// works for a legacy (Opus-account) student's pre-existing add-on item
+// just as well as a new "own"-account one — see
+// lib/billing/addons.ts's resolveAddonFromPrice. "Add" always creates
+// against the current "own"-account Price, so it's own-account-only —
+// Opus isn't meant to gain new priced items.
 export async function POST(req: NextRequest) {
   const { addonId, action } = await req.json();
 
@@ -26,9 +33,6 @@ export async function POST(req: NextRequest) {
 
   const addon = findAddon(addonId);
   if (!addon) return NextResponse.json({ error: "Unknown add-on" }, { status: 400 });
-
-  const priceId = resolveAddonPriceId(addon);
-  if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
 
   const billingStudent = await resolveBillingStudent();
   if (!billingStudent) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -46,14 +50,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }
 
-  const existingItem = subscription.items.data.find(
-    (it) => (typeof it.price === "string" ? it.price : it.price.id) === priceId,
-  );
+  const existingItem = subscription.items.data
+    .slice(1)
+    .find((item) => resolveAddonFromPrice(item.price)?.id === addon.id);
 
   const addonAction = action as AddonAction;
 
   if (addonAction === "add") {
     if (existingItem) return NextResponse.json({ error: `${addon.label} is already active.` }, { status: 400 });
+    if (billingStudent.stripeAccount !== "own") {
+      return NextResponse.json(
+        { error: `${addon.label} can be added once your billing has moved to our current system — ask the studio.` },
+        { status: 400 },
+      );
+    }
+    const priceId = resolveAddonPriceId(addon);
+    if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
     await client.subscriptionItems.create({ subscription: billingStudent.stripeSubscriptionId, price: priceId });
   } else {
     if (!existingItem) return NextResponse.json({ error: `${addon.label} isn't active.` }, { status: 400 });

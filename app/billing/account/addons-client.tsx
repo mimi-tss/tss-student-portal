@@ -7,8 +7,9 @@ import styles from "../billing.module.css";
 interface AddonRow {
   id: string;
   label: string;
-  available: boolean;
   active: boolean;
+  canAdd: boolean;
+  canRemove: boolean;
   amount: number | null;
   currency: string | null;
   interval: string | null;
@@ -20,6 +21,11 @@ interface AddonRow {
 // toggle hits Stripe right away (a second subscription item on the same
 // subscription), no admin approval. Renders nothing for a tier with no
 // add-ons (lite/elite today) or while there's nothing to show yet.
+//
+// A legacy (Opus-account) student can already have one of these active
+// (see /api/billing/addons's own comment) — canRemove stays true either
+// way, but canAdd is false once they're not on "own" yet, since a brand
+// new item can only be created against the current account's Price.
 export default function AddonsClient() {
   const [addons, setAddons] = useState<AddonRow[] | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -65,28 +71,33 @@ export default function AddonsClient() {
         Add-ons
       </div>
       {error && <p className={styles.errorText}>{error}</p>}
-      {addons.map((addon) => (
-        <div key={addon.id} className={styles.statRow}>
-          <span className={styles.statLabel}>
-            {addon.label}
-            {addon.available && (
-              <>
-                {" — "}
-                {formatPrice(addon.amount, addon.currency) ?? "—"}
-                {addon.interval ? ` / ${addon.interval}` : ""}
-              </>
-            )}
-          </span>
-          <button
-            type="button"
-            className={addon.active ? styles.linkBtn : styles.cta}
-            disabled={!addon.available || pendingId === addon.id}
-            onClick={() => toggle(addon)}
-          >
-            {!addon.available ? "Coming soon" : pendingId === addon.id ? "…" : addon.active ? "Remove" : "Add"}
-          </button>
-        </div>
-      ))}
+      {addons.map((addon) => {
+        const canToggle = addon.active ? addon.canRemove : addon.canAdd;
+        const label = pendingId === addon.id ? "…" : addon.active ? "Remove" : addon.canAdd ? "Add" : addon.amount == null ? "Coming soon" : "Migrate first";
+
+        return (
+          <div key={addon.id} className={styles.statRow}>
+            <span className={styles.statLabel}>
+              {addon.label}
+              {addon.amount != null && (
+                <>
+                  {" — "}
+                  {formatPrice(addon.amount, addon.currency) ?? "—"}
+                  {addon.interval ? ` / ${addon.interval}` : ""}
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              className={addon.active ? styles.linkBtn : styles.cta}
+              disabled={!canToggle || pendingId === addon.id}
+              onClick={() => toggle(addon)}
+            >
+              {label}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

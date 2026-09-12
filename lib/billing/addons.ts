@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import type { Tier } from "@/types/database";
 
 export interface AddonDef {
@@ -41,9 +42,18 @@ export function findAddon(id: string): AddonDef | null {
   return null;
 }
 
-// All Stripe Price IDs valid for a given tier — used by Change Plan to
-// drop any add-on subscription item that doesn't belong on the new tier.
-export function validAddonPriceIdsForTier(tier: Tier): Set<string> {
-  const ids = TIER_ADDONS[tier].map(resolveAddonPriceId).filter((id): id is string => !!id);
-  return new Set(ids);
+// Legacy (Opus-account) students can already have an add-on's
+// subscription item today — on a Price that isn't the current "own"-
+// account one this catalog's priceEnvVar points at. Matching by a single
+// hardcoded Price ID would show those as inactive and misreport a
+// duplicate on any toggle. Instead, exactly like `tier` metadata
+// (resolveTierFromPrice, lib/stripe/tiers.ts), every Price that
+// represents a given add-on — old Opus Price or the new "own" one —
+// needs `metadata.addon_id` set to that add-on's catalog id in the
+// Stripe Dashboard. A Price without it simply doesn't resolve, same
+// null-and-move-on posture as tier resolution.
+export function resolveAddonFromPrice(price: Stripe.Price | string | null | undefined): AddonDef | null {
+  if (!price || typeof price === "string") return null;
+  const addonId = price.metadata?.addon_id;
+  return addonId ? findAddon(addonId) : null;
 }
