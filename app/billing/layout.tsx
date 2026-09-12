@@ -6,6 +6,8 @@ import styles from "./billing.module.css";
 const anton = Anton({ weight: "400", subsets: ["latin"], variable: "--font-anton" });
 const inter = Inter({ weight: ["400", "500", "600", "700"], subsets: ["latin"], variable: "--font-inter" });
 
+const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
+
 // Standalone site, not gated here — /billing and /billing/checkout/*
 // must stay reachable logged out (pricing + signup), only
 // /billing/account itself checks for a session (see its own page.tsx).
@@ -20,7 +22,16 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
           <img src="/logo.png" alt="Tara Simon Studios" className={styles.logo} />
           <span className={styles.brand}>Tara Simon Studios</span>
         </Link>
-        <ThemeToggle />
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          {/* Points at the Kajabi site, not /student/dashboard — this
+              header is shared by every /billing page, including the
+              logged-out pricing page, where there's no session to send
+              anyone to a dashboard with. */}
+          <a href={KAJABI_SITE_URL} className={styles.linkBtn}>
+            ← Back to Studio
+          </a>
+          <ThemeToggle />
+        </div>
       </header>
       {children}
     </div>

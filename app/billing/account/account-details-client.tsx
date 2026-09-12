@@ -259,28 +259,36 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
         )}
       </div>
 
-      <div className={styles.card} style={{ flex: "1 1 260px", textAlign: "left" }}>
-        <div className={styles.tierName} style={{ marginBottom: 12 }}>
-          Guardian details
+      <div style={{ flex: "1 1 260px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className={styles.card} style={{ textAlign: "left" }}>
+          <div className={styles.tierName} style={{ marginBottom: 12 }}>
+            Guardian details
+          </div>
+          {!editing
+            ? GUARDIAN_FIELDS.map(({ key, label }) => (
+                <div className={styles.statRow} key={key}>
+                  <span className={styles.statLabel}>{label}</span>
+                  <span>{details[key] || guardianFallback}</span>
+                </div>
+              ))
+            : GUARDIAN_FIELDS.map(({ key, label }) => (
+                <label className={styles.statLabel} key={key}>
+                  {label}
+                  <input
+                    className={styles.input}
+                    value={form[key]}
+                    onChange={(e) => setField(key, e.target.value)}
+                    style={{ marginTop: 4, marginBottom: 10, width: "100%" }}
+                  />
+                </label>
+              ))}
         </div>
-        {!editing
-          ? GUARDIAN_FIELDS.map(({ key, label }) => (
-              <div className={styles.statRow} key={key}>
-                <span className={styles.statLabel}>{label}</span>
-                <span>{details[key] || guardianFallback}</span>
-              </div>
-            ))
-          : GUARDIAN_FIELDS.map(({ key, label }) => (
-              <label className={styles.statLabel} key={key}>
-                {label}
-                <input
-                  className={styles.input}
-                  value={form[key]}
-                  onChange={(e) => setField(key, e.target.value)}
-                  style={{ marginTop: 4, marginBottom: 10, width: "100%" }}
-                />
-              </label>
-            ))}
+
+        <div className={styles.card} style={{ textAlign: "left" }}>
+          <Link href="/student/dashboard#notification-preferences" className={styles.linkBtn}>
+            Notification preferences
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -324,12 +332,6 @@ export default function AccountDetailsClient({ initial }: { initial: AccountDeta
           </button>
         </div>
       )}
-
-      <div className={styles.card} style={{ maxWidth: 480, marginBottom: 24, textAlign: "left" }}>
-        <Link href="/student/dashboard#notification-preferences" className={styles.linkBtn}>
-          Notification preferences
-        </Link>
-      </div>
     </>
   );
 }
