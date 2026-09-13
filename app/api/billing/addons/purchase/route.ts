@@ -52,9 +52,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Choose a group lesson spot first." }, { status: 400 });
   }
 
-  const priceId = resolveAddonPriceId(addon);
-  if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
-
   const billingStudent = await resolveBillingStudent();
   if (!billingStudent) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!billingStudent.stripeCustomerId || !billingStudent.stripeSubscriptionId || !billingStudent.stripeAccount) {
@@ -70,6 +67,13 @@ export async function POST(req: NextRequest) {
   if (!tier || !addon.tiers.includes(tier)) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }
+
+  // Resolved AFTER the tier is known, not before — some add-ons (e.g.
+  // 4-Pack) charge a different Price depending which tier is buying
+  // (priceEnvVarByTier), so which env var is even the right one to check
+  // can't be decided until here.
+  const priceId = resolveAddonPriceId(addon, tier);
+  if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
 
   const paymentMethodId = resolvePaymentMethodId(subscription);
   if (!paymentMethodId) {

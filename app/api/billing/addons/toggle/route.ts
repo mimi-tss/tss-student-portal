@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const priceId = resolveAddonPriceId(addon);
+    const priceId = resolveAddonPriceId(addon, tier);
     if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
 
     // Unlike a one-time purchase (which has to compute the discounted

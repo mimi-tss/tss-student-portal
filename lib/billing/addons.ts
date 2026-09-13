@@ -9,7 +9,15 @@ export interface AddonDef {
   kind: AddonKind;
   label: string;
   description?: string;
-  priceEnvVar: string;
+  priceEnvVar?: string;
+  // Per-tier override — only needed when an add-on open to multiple
+  // tiers charges a different amount depending which one (e.g. 4-Pack:
+  // Suite pays one rate, Pro/Elite pay another). A tier present here
+  // takes priority over the plain priceEnvVar above; a tier NOT listed
+  // here falls back to it. Special-cased per add-on rather than a
+  // blanket feature — most add-ons charge one flat rate regardless of
+  // which of their tiers is buying.
+  priceEnvVarByTier?: Partial<Record<Tier, string>>;
   // Drop-In needs a specific scheduled group-lesson spot picked (capacity-
   // capped) before it can be purchased — flagged so the UI/route branch to
   // that flow instead of a plain "Buy" button. See app/api/billing/addons/
@@ -51,13 +59,20 @@ export const ADDON_CATALOG: AddonDef[] = [
     priceEnvVar: "STRIPE_PRICE_ADDON_BIWEEKLY_60MIN_SUITE",
   },
   {
-    // Was Suite-only; opened up to every paid tier per the studio.
+    // Was Suite-only; opened up to every paid tier per the studio. Pro
+    // and Elite pay the same rate; Suite has its own (cheaper base tier,
+    // different price) — hence the per-tier override instead of one
+    // shared priceEnvVar.
     id: "four_pack_30min",
     tiers: ANY_PAID_TIER,
     kind: "one_time",
     label: "4-Pack 30-min Lessons",
     description: "Schedule anytime within a year",
-    priceEnvVar: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN",
+    priceEnvVarByTier: {
+      suite: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN_SUITE",
+      pro: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN_PRO_ELITE",
+      elite: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN_PRO_ELITE",
+    },
   },
   {
     id: "upgrade_60min_pro",
@@ -103,8 +118,9 @@ export function addonsForTier(tier: Tier | null | undefined): AddonDef[] {
   return tier ? ADDON_CATALOG.filter((a) => a.tiers.includes(tier)) : [];
 }
 
-export function resolveAddonPriceId(addon: AddonDef): string | null {
-  return process.env[addon.priceEnvVar] ?? null;
+export function resolveAddonPriceId(addon: AddonDef, tier?: Tier | null): string | null {
+  const envVar = (tier && addon.priceEnvVarByTier?.[tier]) || addon.priceEnvVar;
+  return envVar ? (process.env[envVar] ?? null) : null;
 }
 
 export function findAddon(id: string): AddonDef | null {

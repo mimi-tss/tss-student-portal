@@ -44,7 +44,7 @@ export async function GET() {
 
     const addons = await Promise.all(
       catalog.map(async (def) => {
-        const currentPriceId = resolveAddonPriceId(def);
+        const currentPriceId = resolveAddonPriceId(def, tier);
         const activeItem = def.kind === "recurring" ? activeItemByAddonId.get(def.id) : undefined;
         const active = !!activeItem;
 
