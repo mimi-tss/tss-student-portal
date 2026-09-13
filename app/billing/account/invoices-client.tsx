@@ -7,13 +7,15 @@ import styles from "../billing.module.css";
 interface Invoice {
   id: string;
   date: string | null;
+  description: string | null;
   amountPaid: number;
   currency: string;
-  status: string | null;
-  pdfUrl: string | null;
-  hostedUrl: string | null;
+  downloadUrl: string | null;
 }
 
+// Subscription invoices AND one-time add-on purchase receipts, merged
+// into one list by the API route (app/api/billing/invoices/route.ts) —
+// the student sees one "Invoices" history, not two separate concepts.
 export default function InvoicesClient() {
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
 
@@ -37,10 +39,11 @@ export default function InvoicesClient() {
           <span className={styles.statLabel}>
             {inv.date ? new Date(inv.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
             {" · "}
+            {inv.description ? `${inv.description} · ` : ""}
             {formatPrice(inv.amountPaid, inv.currency)}
           </span>
-          {inv.pdfUrl ? (
-            <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>
+          {inv.downloadUrl ? (
+            <a href={inv.downloadUrl} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>
               Download
             </a>
           ) : (
