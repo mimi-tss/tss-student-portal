@@ -80,6 +80,21 @@
   gap: 16px;
 }
 
+/* Add-ons grid (/billing/addons) — a fixed 3-per-row, unlike tierGrid's
+   auto-fit (which would pack 4+ across at this page's own width). Drops
+   to 1 column narrow rather than squeezing 3 into too little space. */
+.addonGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 700px) {
+  .addonGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .globalToggle {
   display: inline-flex;
   background: var(--surface-2);

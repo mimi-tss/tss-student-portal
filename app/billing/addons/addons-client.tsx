@@ -53,9 +53,12 @@ function formatSpotDate(iso: string) {
 // can share this link directly (e.g. a promo for Suite's biweekly-
 // lessons add-on) without routing someone through the whole account page
 // first. /billing/account only ever shows a read-only summary of what's
-// already active and links back here to manage. Each add-on gets its
-// own card (not one shared list) so a shared/deep-linked add-on reads as
-// its own thing, not buried in a long list.
+// already active and links back here to manage.
+//
+// Laid out like the tier-card grid (tier-card.tsx) — one box per add-on,
+// title+price bold up top, the action button pinned to the bottom via
+// the box's own flex-column + margin-top: auto, three per row
+// (.addonGrid, billing.module.css).
 //
 // Two very different shapes render here (see lib/billing/addons.ts):
 // "recurring" is Add/Remove, toggling a subscription item. "one_time" is
@@ -150,11 +153,9 @@ export default function AddonsClient() {
 
   if (loading) {
     return (
-      <div className={styles.card} style={{ maxWidth: 480, textAlign: "left" }}>
-        <p className={styles.helpText} style={{ margin: 0 }}>
-          Loading your add-ons…
-        </p>
-      </div>
+      <p className={styles.helpText} style={{ margin: 0 }}>
+        Loading your add-ons…
+      </p>
     );
   }
 
@@ -172,136 +173,138 @@ export default function AddonsClient() {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       {error && <p className={styles.errorText}>{error}</p>}
-      {addons.map((addon) => {
-        const priceLabel = addon.amount != null && (
-          <>
-            {" — "}
-            {formatPrice(addon.amount, addon.currency) ?? "—"}
-            {addon.interval ? ` / ${addon.interval}` : ""}
-          </>
-        );
-
-        if (addon.kind === "recurring") {
-          const canToggle = addon.active ? addon.canRemove : addon.canAdd;
-          const label =
-            pendingId === addon.id
-              ? "…"
-              : addon.active
-                ? "Remove"
-                : addon.canAdd
-                  ? "Add"
-                  : addon.amount == null
-                    ? "Coming soon"
-                    : "Migrate first";
-
-          return (
-            <div key={addon.id} className={styles.card} style={{ marginBottom: 16, textAlign: "left" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                <span className={styles.statLabel}>
-                  {addon.label}
-                  {priceLabel}
-                </span>
-                <button
-                  type="button"
-                  className={addon.active ? styles.linkBtn : styles.cta}
-                  disabled={!canToggle || pendingId === addon.id}
-                  onClick={() => toggleRecurring(addon)}
-                >
-                  {label}
-                </button>
-              </div>
-              {addon.description && (
-                <span className={styles.helpText} style={{ margin: 0, display: "block", marginTop: 4 }}>
-                  {addon.description}
-                </span>
+      <div className={styles.addonGrid}>
+        {addons.map((addon) => {
+          const titleLine = (
+            <div style={{ fontWeight: 700 }}>
+              {addon.label}
+              {addon.amount != null && (
+                <>
+                  {" — "}
+                  {formatPrice(addon.amount, addon.currency) ?? "—"}
+                  {addon.interval ? ` / ${addon.interval}` : ""}
+                </>
               )}
             </div>
           );
-        }
 
-        // one_time
-        const isConfirming = confirmingId === addon.id;
-        const isPicking = spotPickerFor === addon.id;
+          if (addon.kind === "recurring") {
+            const canToggle = addon.active ? addon.canRemove : addon.canAdd;
+            const label =
+              pendingId === addon.id
+                ? "…"
+                : addon.active
+                  ? "Remove"
+                  : addon.canAdd
+                    ? "Add"
+                    : addon.amount == null
+                      ? "Coming soon"
+                      : "Migrate first";
 
-        return (
-          <div key={addon.id} className={styles.card} style={{ marginBottom: 16, textAlign: "left" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-              <span className={styles.statLabel}>
-                {addon.label}
-                {priceLabel}
-              </span>
-              {addon.requiresGroupLessonSpot ? (
-                <button
-                  type="button"
-                  className={styles.cta}
-                  disabled={!addon.canPurchase || pendingId === addon.id}
-                  onClick={() => (isPicking ? setSpotPickerFor(null) : openSpotPicker(addon.id))}
-                >
-                  {!addon.canPurchase ? "Coming soon" : isPicking ? "Close" : "Choose a spot"}
-                </button>
-              ) : isConfirming ? (
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button type="button" className={styles.linkBtn} disabled={pendingId === addon.id} onClick={() => setConfirmingId(null)}>
-                    Never mind
-                  </button>
-                  <button type="button" className={styles.cta} disabled={pendingId === addon.id} onClick={() => purchase(addon.id)}>
-                    {pendingId === addon.id ? "Charging…" : `Confirm — ${formatPrice(addon.amount, addon.currency) ?? "buy"}`}
+            return (
+              <div key={addon.id} className={styles.tierCard} style={{ textAlign: "center", alignItems: "center" }}>
+                {titleLine}
+                {addon.description && (
+                  <p className={styles.tierDesc} style={{ margin: 0 }}>
+                    {addon.description}
+                  </p>
+                )}
+                <div style={{ marginTop: "auto" }}>
+                  <button
+                    type="button"
+                    className={addon.active ? styles.linkBtn : styles.cta}
+                    disabled={!canToggle || pendingId === addon.id}
+                    onClick={() => toggleRecurring(addon)}
+                  >
+                    {label}
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  className={styles.cta}
-                  disabled={!addon.canPurchase || pendingId === addon.id}
-                  onClick={() => setConfirmingId(addon.id)}
-                >
-                  {!addon.canPurchase ? "Coming soon" : "Buy"}
-                </button>
-              )}
-            </div>
-            {addon.description && (
-              <span className={styles.helpText} style={{ margin: 0, display: "block", marginTop: 4 }}>
-                {addon.description}
-              </span>
-            )}
-
-            {isPicking && (
-              <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid var(--border)" }}>
-                {spotsLoading && (
-                  <p className={styles.helpText} style={{ margin: 0 }}>
-                    Loading open classes…
-                  </p>
-                )}
-                {!spotsLoading && spots?.length === 0 && (
-                  <p className={styles.helpText} style={{ margin: 0 }}>
-                    No open spots right now — check back soon.
-                  </p>
-                )}
-                {!spotsLoading &&
-                  spots?.map((spot) => (
-                    <div key={spot.id} className={styles.statRow}>
-                      <span className={styles.statLabel}>
-                        {spot.topic || "Group class"} — {formatSpotDate(spot.scheduledAt)}
-                        {spot.spotsLeft != null && ` (${spot.spotsLeft} left)`}
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.cta}
-                        disabled={pendingId === addon.id}
-                        onClick={() => purchase(addon.id, spot.id)}
-                      >
-                        {pendingId === addon.id ? "Charging…" : "Buy this spot"}
-                      </button>
-                    </div>
-                  ))}
               </div>
-            )}
-          </div>
-        );
-      })}
-      <Link href="/billing/account" className={styles.linkBtn} style={{ marginTop: 8, display: "inline-block" }}>
+            );
+          }
+
+          // one_time
+          const isConfirming = confirmingId === addon.id;
+          const isPicking = spotPickerFor === addon.id;
+
+          return (
+            <div key={addon.id} className={styles.tierCard} style={{ textAlign: "center", alignItems: "center" }}>
+              {titleLine}
+              {addon.description && (
+                <p className={styles.tierDesc} style={{ margin: 0 }}>
+                  {addon.description}
+                </p>
+              )}
+
+              {isPicking && (
+                <div style={{ width: "100%", textAlign: "left" }}>
+                  {spotsLoading && (
+                    <p className={styles.helpText} style={{ margin: 0 }}>
+                      Loading open classes…
+                    </p>
+                  )}
+                  {!spotsLoading && spots?.length === 0 && (
+                    <p className={styles.helpText} style={{ margin: 0 }}>
+                      No open spots right now — check back soon.
+                    </p>
+                  )}
+                  {!spotsLoading &&
+                    spots?.map((spot) => (
+                      <div key={spot.id} className={styles.statRow}>
+                        <span className={styles.statLabel}>
+                          {spot.topic || "Group class"} — {formatSpotDate(spot.scheduledAt)}
+                          {spot.spotsLeft != null && ` (${spot.spotsLeft} left)`}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.cta}
+                          disabled={pendingId === addon.id}
+                          onClick={() => purchase(addon.id, spot.id)}
+                        >
+                          {pendingId === addon.id ? "Charging…" : "Buy this spot"}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div style={{ marginTop: "auto" }}>
+                {addon.requiresGroupLessonSpot ? (
+                  <button
+                    type="button"
+                    className={styles.cta}
+                    disabled={!addon.canPurchase || pendingId === addon.id}
+                    onClick={() => (isPicking ? setSpotPickerFor(null) : openSpotPicker(addon.id))}
+                  >
+                    {!addon.canPurchase ? "Coming soon" : isPicking ? "Close" : "Choose a spot"}
+                  </button>
+                ) : isConfirming ? (
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                    <button type="button" className={styles.linkBtn} disabled={pendingId === addon.id} onClick={() => setConfirmingId(null)}>
+                      Never mind
+                    </button>
+                    <button type="button" className={styles.cta} disabled={pendingId === addon.id} onClick={() => purchase(addon.id)}>
+                      {pendingId === addon.id ? "Charging…" : `Confirm — ${formatPrice(addon.amount, addon.currency) ?? "buy"}`}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.cta}
+                    disabled={!addon.canPurchase || pendingId === addon.id}
+                    onClick={() => setConfirmingId(addon.id)}
+                  >
+                    {!addon.canPurchase ? "Coming soon" : "Buy"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Link href="/billing/account" className={styles.linkBtn} style={{ marginTop: 16, display: "inline-block" }}>
         ← Back to your account
       </Link>
     </div>
