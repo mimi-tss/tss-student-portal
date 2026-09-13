@@ -130,19 +130,6 @@
     margin-top: 4px;
   }
 }
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--coral);
-  color: var(--coral-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
-  flex-shrink: 0;
-}
 
 .wrap {
   max-width: 1080px;

@@ -3,6 +3,36 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Student header decluttered — avatar is now a real account menu (2026-09-13)
+
+You flagged the student dashboard header as cluttered: "Fix stuck
+screen" and "Refresh" sat as permanent buttons next to the bell,
+something almost nobody clicks day to day. Replaced the plain avatar
+div with new [ProfileMenu](components/profile-menu.tsx) — clicking it
+opens a real dropdown (Account, Billing, Add Ons, then a divider, then
+Fix stuck screen / Refresh), closes on an outside click. The header now
+only shows the theme toggle and notification bell as standalone icons,
+same as you asked.
+
+Account/Billing both point at `/billing/account`, just different
+anchors (`#account`/`#billing`) added to that page — it's one page with
+the account-details section on top and the subscription/invoices
+("Your plan") section below, no second page existed to link "Account"
+to separately. Add Ons goes to the existing `/billing/addons` page.
+Fix-stuck-screen and Refresh keep the exact same logic as the standalone
+[session-reset-button.tsx](components/session-reset-button.tsx)/
+[refresh-button.tsx](components/refresh-button.tsx) they replaced here
+— those two components themselves are untouched and still back the
+error-boundary fallback pages, which render outside this layout
+entirely and still need their own standalone buttons.
+
+Verified structurally in the Browser pane against a throwaway
+unauthenticated test route (real student pages need a live session this
+environment doesn't have) — confirmed all five menu items render with
+the right hrefs/labels, the menu opens and closes correctly (including
+click-outside), removed the test route immediately after. `npx tsc
+--noEmit -p .` and `next build` both clean. No migration.
+
 ## Full double-booking audit — 5 more real gaps found and closed (2026-09-12)
 
 Direct follow-up to the makeup-booking/group-lesson fix just above —

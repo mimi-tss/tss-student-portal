@@ -33,6 +33,7 @@ export default async function BillingAccountPage() {
 
   return (
     <div className={styles.wrap}>
+      <div id="account" />
       <AccountDetailsClient
         initial={{
           name: student.name,
@@ -59,7 +60,7 @@ export default async function BillingAccountPage() {
           notify_alerts_inapp: student.notify_alerts_inapp,
         }}
       />
-      <h1 className={styles.title} style={{ textAlign: "left" }}>
+      <h1 id="billing" className={styles.title} style={{ textAlign: "left" }}>
         Your plan
       </h1>
       <SubscriptionClient />
