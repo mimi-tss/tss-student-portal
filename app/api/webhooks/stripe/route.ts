@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe, stripeOpus } from "@/lib/stripe/client";
-import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+import { resolveTier } from "@/lib/stripe/tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
@@ -260,9 +260,11 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
   // Subscription items always carry the full Price object inline
   // (unlike top-level relations such as `customer`, which need an
   // explicit `expand`), so its metadata is available here with no extra
-  // API call. Resolved from metadata, not a fixed price-ID list — see
-  // resolveTierFromPrice's own header comment for why.
-  const tier = resolveTierFromPrice(price) ?? undefined;
+  // API call. Resolved from metadata, not a fixed price-ID list, and
+  // falling back to the subscription's own metadata for a migrated
+  // account whose Price can never carry it — see resolveTier's own
+  // header comment (lib/stripe/tiers.ts) for why.
+  const tier = resolveTier(subscription, price) ?? undefined;
   const priceId = price?.id;
 
   const { data: student } = await admin

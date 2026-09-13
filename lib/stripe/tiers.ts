@@ -110,3 +110,31 @@ export function resolveTierFromPrice(price: Stripe.Price | null | undefined): Ti
   const tier = price?.metadata?.tier;
   return tier && (VALID_TIERS as readonly string[]).includes(tier) ? (tier as Tier) : null;
 }
+
+// Same idea, but reading the SUBSCRIPTION's own metadata instead of its
+// Price's. Needed because a Price can end up permanently un-taggable —
+// confirmed live: a Price Stripe creates automatically (e.g. during the
+// Opus→own migration's trial_end-anchored subscription creation, see
+// app/api/billing/migrate/complete/route.ts) throws "The price was
+// created by Stripe automatically and cannot be updated" on any metadata
+// write, forever. migrate/complete already anticipated exactly this and
+// stamps `tier` onto the subscription itself at creation time — this
+// just reads it back. A normal (non-migrated) subscription never has
+// this key at all, so it's purely additive.
+export function resolveTierFromSubscription(subscription: Stripe.Subscription | null | undefined): Tier | null {
+  const tier = subscription?.metadata?.tier;
+  return tier && (VALID_TIERS as readonly string[]).includes(tier) ? (tier as Tier) : null;
+}
+
+// The one both callers should actually use: Price metadata first (the
+// normal, current-signup case), falling back to the subscription's own
+// metadata for a migrated account whose Price can never carry it. Order
+// only matters in theory — the two populations don't overlap in
+// practice — but Price stays primary since it's the long-standing
+// convention every other Price-metadata caller already relies on.
+export function resolveTier(
+  subscription: Stripe.Subscription | null | undefined,
+  price: Stripe.Price | null | undefined,
+): Tier | null {
+  return resolveTierFromPrice(price) ?? resolveTierFromSubscription(subscription);
+}

@@ -6,7 +6,7 @@ import { notifyStaff } from "@/lib/notifications/create";
 import { findAddon, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib/billing/addons";
 import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
-import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+import { resolveTier } from "@/lib/stripe/tiers";
 
 const VALID_ACTIONS = ["add", "remove"] as const;
 type AddonAction = (typeof VALID_ACTIONS)[number];
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     expand: ["items.data.price"],
   });
 
-  const tier = resolveTierFromPrice(subscription.items.data[0]?.price);
+  const tier = resolveTier(subscription, subscription.items.data[0]?.price);
   if (!tier || !addon.tiers.includes(tier)) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }

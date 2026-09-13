@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { addonsForTier, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib/billing/addons";
 import { getStripeClient } from "@/lib/stripe/client";
-import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+import { resolveTier } from "@/lib/stripe/tiers";
 
 // Lists the add-ons available for the student's current tier. Two very
 // different shapes share this one response:
@@ -31,7 +31,7 @@ export async function GET() {
     });
 
     const planItem = subscription.items.data[0];
-    const tier = resolveTierFromPrice(planItem?.price);
+    const tier = resolveTier(subscription, planItem?.price);
     const catalog = addonsForTier(tier);
     const isOwnAccount = billingStudent.stripeAccount === "own";
 

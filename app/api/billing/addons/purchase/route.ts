@@ -7,7 +7,7 @@ import { notifyStaff } from "@/lib/notifications/create";
 import { findAddon, resolveAddonPriceId, applyCouponToAmount } from "@/lib/billing/addons";
 import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
-import { resolveTierFromPrice, formatPrice } from "@/lib/stripe/tiers";
+import { resolveTier, formatPrice } from "@/lib/stripe/tiers";
 import { registerStudentInGroupLesson, notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
 
 // One-time add-ons (lib/billing/addons.ts, kind: "one_time") — a straight
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     expand: ["items.data.price", "default_payment_method", "customer", "customer.invoice_settings.default_payment_method"],
   });
 
-  const tier = resolveTierFromPrice(subscription.items.data[0]?.price);
+  const tier = resolveTier(subscription, subscription.items.data[0]?.price);
   if (!tier || !addon.tiers.includes(tier)) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }

@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { getStripeClient } from "@/lib/stripe/client";
 import { deriveDisplayStatus } from "@/lib/stripe/status";
-import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+import { resolveTier } from "@/lib/stripe/tiers";
 
 interface CardInfo {
   brand: string;
@@ -92,7 +92,7 @@ export async function GET() {
       // of the plain instant price-swap an "own" student gets.
       stripeAccount: billingStudent.stripeAccount,
       planName,
-      tier: resolveTierFromPrice(price),
+      tier: resolveTier(subscription, price),
       status: deriveDisplayStatus(subscription),
       amount: price?.unit_amount ?? null,
       currency: price?.currency ?? null,

@@ -53,7 +53,9 @@ function formatSpotDate(iso: string) {
 // can share this link directly (e.g. a promo for Suite's biweekly-
 // lessons add-on) without routing someone through the whole account page
 // first. /billing/account only ever shows a read-only summary of what's
-// already active and links back here to manage.
+// already active and links back here to manage. Each add-on gets its
+// own card (not one shared list) so a shared/deep-linked add-on reads as
+// its own thing, not buried in a long list.
 //
 // Two very different shapes render here (see lib/billing/addons.ts):
 // "recurring" is Add/Remove, toggling a subscription item. "one_time" is
@@ -72,11 +74,6 @@ export default function AddonsClient() {
   const [spotPickerFor, setSpotPickerFor] = useState<string | null>(null);
   const [spots, setSpots] = useState<DropInSpot[] | null>(null);
   const [spotsLoading, setSpotsLoading] = useState(false);
-
-  // Coupons are real Stripe Promotion Codes (managed in the Dashboard,
-  // not this app) — a student just types the code they were given.
-  // Keyed per add-on so entering one doesn't leak into another row.
-  const [couponByAddonId, setCouponByAddonId] = useState<Record<string, string>>({});
 
   async function load() {
     setLoading(true);
@@ -104,11 +101,7 @@ export default function AddonsClient() {
     const res = await fetch("/api/billing/addons/toggle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        addonId: addon.id,
-        action: addon.active ? "remove" : "add",
-        couponCode: couponByAddonId[addon.id],
-      }),
+      body: JSON.stringify({ addonId: addon.id, action: addon.active ? "remove" : "add" }),
     });
     const data = await res.json().catch(() => null);
     setPendingId(null);
@@ -125,7 +118,7 @@ export default function AddonsClient() {
     const res = await fetch("/api/billing/addons/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addonId, groupLessonId, couponCode: couponByAddonId[addonId] }),
+      body: JSON.stringify({ addonId, groupLessonId }),
     });
     const data = await res.json().catch(() => null);
     setPendingId(null);
@@ -155,19 +148,6 @@ export default function AddonsClient() {
     setSpotsLoading(false);
   }
 
-  function couponField(addonId: string) {
-    return (
-      <input
-        type="text"
-        placeholder="Coupon code (optional)"
-        value={couponByAddonId[addonId] ?? ""}
-        onChange={(e) => setCouponByAddonId((c) => ({ ...c, [addonId]: e.target.value }))}
-        className={styles.input}
-        style={{ maxWidth: 180, padding: "4px 8px", fontSize: 13 }}
-      />
-    );
-  }
-
   if (loading) {
     return (
       <div className={styles.card} style={{ maxWidth: 480, textAlign: "left" }}>
@@ -192,7 +172,7 @@ export default function AddonsClient() {
   }
 
   return (
-    <div className={styles.card} style={{ maxWidth: 480, textAlign: "left" }}>
+    <div style={{ maxWidth: 480 }}>
       {error && <p className={styles.errorText}>{error}</p>}
       {addons.map((addon) => {
         const priceLabel = addon.amount != null && (
@@ -217,7 +197,7 @@ export default function AddonsClient() {
                     : "Migrate first";
 
           return (
-            <div key={addon.id} className={styles.statRow} style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+            <div key={addon.id} className={styles.card} style={{ marginBottom: 16, textAlign: "left" }}>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <span className={styles.statLabel}>
                   {addon.label}
@@ -233,11 +213,10 @@ export default function AddonsClient() {
                 </button>
               </div>
               {addon.description && (
-                <span className={styles.helpText} style={{ margin: 0 }}>
+                <span className={styles.helpText} style={{ margin: 0, display: "block", marginTop: 4 }}>
                   {addon.description}
                 </span>
               )}
-              {!addon.active && addon.canAdd && couponField(addon.id)}
             </div>
           );
         }
@@ -247,7 +226,7 @@ export default function AddonsClient() {
         const isPicking = spotPickerFor === addon.id;
 
         return (
-          <div key={addon.id} className={styles.statRow} style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
+          <div key={addon.id} className={styles.card} style={{ marginBottom: 16, textAlign: "left" }}>
             <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
               <span className={styles.statLabel}>
                 {addon.label}
@@ -264,7 +243,6 @@ export default function AddonsClient() {
                 </button>
               ) : isConfirming ? (
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {couponField(addon.id)}
                   <button type="button" className={styles.linkBtn} disabled={pendingId === addon.id} onClick={() => setConfirmingId(null)}>
                     Never mind
                   </button>
@@ -284,14 +262,13 @@ export default function AddonsClient() {
               )}
             </div>
             {addon.description && (
-              <span className={styles.helpText} style={{ margin: 0 }}>
+              <span className={styles.helpText} style={{ margin: 0, display: "block", marginTop: 4 }}>
                 {addon.description}
               </span>
             )}
 
             {isPicking && (
               <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid var(--border)" }}>
-                <div style={{ marginBottom: 8 }}>{couponField(addon.id)}</div>
                 {spotsLoading && (
                   <p className={styles.helpText} style={{ margin: 0 }}>
                     Loading open classes…
@@ -324,7 +301,7 @@ export default function AddonsClient() {
           </div>
         );
       })}
-      <Link href="/billing/account" className={styles.linkBtn} style={{ marginTop: 16, display: "inline-block" }}>
+      <Link href="/billing/account" className={styles.linkBtn} style={{ marginTop: 8, display: "inline-block" }}>
         ← Back to your account
       </Link>
     </div>
