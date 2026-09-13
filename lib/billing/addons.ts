@@ -97,6 +97,13 @@ export const ADDON_CATALOG: AddonDef[] = [
     priceEnvVar: "STRIPE_PRICE_ADDON_SINGLE_LESSON_PRO",
   },
   {
+    id: "single_lesson_60min_pro",
+    tiers: ["pro"],
+    kind: "one_time",
+    label: "1 Lesson Add-On (60-min)",
+    priceEnvVar: "STRIPE_PRICE_ADDON_SINGLE_LESSON_60MIN_PRO",
+  },
+  {
     id: "drop_in_group_lesson",
     tiers: ANY_PAID_TIER,
     kind: "one_time",
