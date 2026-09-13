@@ -127,6 +127,14 @@ export async function POST(req: NextRequest) {
         off_session: true,
         confirm: true,
         description: addon.label,
+        // A raw API-created PaymentIntent doesn't email a receipt on its
+        // own — Stripe only sends one when receipt_email is set on the
+        // PaymentIntent itself (confirmed live: none went out without
+        // this). Every other charge in this app goes through Checkout/
+        // subscriptions, where Stripe handles receipts automatically;
+        // this is the first plain PaymentIntent, so it needed this
+        // explicitly.
+        receipt_email: billingStudent.email,
         metadata: {
           addon_id: addon.id,
           student_id: billingStudent.studentId,
