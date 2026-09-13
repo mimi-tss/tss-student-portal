@@ -73,6 +73,11 @@ export default function AddonsClient() {
   const [spots, setSpots] = useState<DropInSpot[] | null>(null);
   const [spotsLoading, setSpotsLoading] = useState(false);
 
+  // Coupons are real Stripe Promotion Codes (managed in the Dashboard,
+  // not this app) — a student just types the code they were given.
+  // Keyed per add-on so entering one doesn't leak into another row.
+  const [couponByAddonId, setCouponByAddonId] = useState<Record<string, string>>({});
+
   async function load() {
     setLoading(true);
     try {
@@ -99,7 +104,11 @@ export default function AddonsClient() {
     const res = await fetch("/api/billing/addons/toggle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addonId: addon.id, action: addon.active ? "remove" : "add" }),
+      body: JSON.stringify({
+        addonId: addon.id,
+        action: addon.active ? "remove" : "add",
+        couponCode: couponByAddonId[addon.id],
+      }),
     });
     const data = await res.json().catch(() => null);
     setPendingId(null);
@@ -116,7 +125,7 @@ export default function AddonsClient() {
     const res = await fetch("/api/billing/addons/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addonId, groupLessonId }),
+      body: JSON.stringify({ addonId, groupLessonId, couponCode: couponByAddonId[addonId] }),
     });
     const data = await res.json().catch(() => null);
     setPendingId(null);
@@ -144,6 +153,19 @@ export default function AddonsClient() {
       setError("Couldn't load open spots.");
     }
     setSpotsLoading(false);
+  }
+
+  function couponField(addonId: string) {
+    return (
+      <input
+        type="text"
+        placeholder="Coupon code (optional)"
+        value={couponByAddonId[addonId] ?? ""}
+        onChange={(e) => setCouponByAddonId((c) => ({ ...c, [addonId]: e.target.value }))}
+        className={styles.input}
+        style={{ maxWidth: 180, padding: "4px 8px", fontSize: 13 }}
+      />
+    );
   }
 
   if (loading) {
@@ -215,6 +237,7 @@ export default function AddonsClient() {
                   {addon.description}
                 </span>
               )}
+              {!addon.active && addon.canAdd && couponField(addon.id)}
             </div>
           );
         }
@@ -240,7 +263,8 @@ export default function AddonsClient() {
                   {!addon.canPurchase ? "Coming soon" : isPicking ? "Close" : "Choose a spot"}
                 </button>
               ) : isConfirming ? (
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {couponField(addon.id)}
                   <button type="button" className={styles.linkBtn} disabled={pendingId === addon.id} onClick={() => setConfirmingId(null)}>
                     Never mind
                   </button>
@@ -267,6 +291,7 @@ export default function AddonsClient() {
 
             {isPicking && (
               <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid var(--border)" }}>
+                <div style={{ marginBottom: 8 }}>{couponField(addon.id)}</div>
                 {spotsLoading && (
                   <p className={styles.helpText} style={{ margin: 0 }}>
                     Loading open classes…

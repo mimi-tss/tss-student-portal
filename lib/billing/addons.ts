@@ -51,12 +51,13 @@ export const ADDON_CATALOG: AddonDef[] = [
     priceEnvVar: "STRIPE_PRICE_ADDON_BIWEEKLY_60MIN_SUITE",
   },
   {
-    id: "four_pack_30min_suite",
-    tiers: ["suite"],
+    // Was Suite-only; opened up to every paid tier per the studio.
+    id: "four_pack_30min",
+    tiers: ANY_PAID_TIER,
     kind: "one_time",
     label: "4-Pack 30-min Lessons",
     description: "Schedule anytime within a year",
-    priceEnvVar: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN_SUITE",
+    priceEnvVar: "STRIPE_PRICE_ADDON_FOUR_PACK_30MIN",
   },
   {
     id: "upgrade_60min_pro",
@@ -72,6 +73,13 @@ export const ADDON_CATALOG: AddonDef[] = [
     kind: "one_time",
     label: "30-min Lesson with Tara Simon",
     priceEnvVar: "STRIPE_PRICE_ADDON_LESSON_WITH_TARA_PRO",
+  },
+  {
+    id: "single_lesson_pro",
+    tiers: ["pro"],
+    kind: "one_time",
+    label: "1 Lesson Add-On",
+    priceEnvVar: "STRIPE_PRICE_ADDON_SINGLE_LESSON_PRO",
   },
   {
     id: "drop_in_group_lesson",
@@ -119,4 +127,19 @@ export function resolveAddonFromPrice(price: Stripe.Price | string | null | unde
   if (!price || typeof price === "string") return null;
   const addonId = price.metadata?.addon_id;
   return addonId ? findAddon(addonId) : null;
+}
+
+// A coupon reduces either a percentage or a flat amount off a Price's
+// unit_amount — same math Stripe itself would apply, done ourselves
+// because a one-time add-on is charged via a plain PaymentIntent (no
+// Checkout Session line items to attach a discount to), so the
+// discounted amount has to be computed before creating the charge. For a
+// recurring add-on, the coupon is instead attached directly to the
+// subscription item (see .../toggle/route.ts) — Stripe applies the math
+// there on its own, this function is only used for one-time purchases.
+export function applyCouponToAmount(amount: number, coupon: Stripe.Coupon): number {
+  if (!coupon.valid) return amount;
+  if (coupon.percent_off) return Math.round(amount * (1 - coupon.percent_off / 100));
+  if (coupon.amount_off) return Math.max(0, amount - coupon.amount_off);
+  return amount;
 }

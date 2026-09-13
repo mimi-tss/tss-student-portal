@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
-import { findAddon, resolveAddonPriceId } from "@/lib/billing/addons";
+import { findAddon, resolveAddonPriceId, applyCouponToAmount } from "@/lib/billing/addons";
+import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
-import { resolveTierFromPrice } from "@/lib/stripe/tiers";
+import { resolveTierFromPrice, formatPrice } from "@/lib/stripe/tiers";
 import { registerStudentInGroupLesson, notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
 
 // One-time add-ons (lib/billing/addons.ts, kind: "one_time") — a straight
@@ -36,7 +37,7 @@ function resolvePaymentMethodId(subscription: Stripe.Subscription): string | nul
 }
 
 export async function POST(req: NextRequest) {
-  const { addonId, groupLessonId } = await req.json();
+  const { addonId, groupLessonId, couponCode } = await req.json();
 
   if (typeof addonId !== "string" || !addonId) {
     return NextResponse.json({ error: "An add-on is required" }, { status: 400 });
@@ -84,6 +85,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
   }
 
+  // An unknown/expired/inactive code is silently treated as "no
+  // discount" rather than a hard error — see resolvePromotionCode's own
+  // comment — so a typo doesn't block the purchase, it just charges full
+  // price.
+  const resolvedCoupon = typeof couponCode === "string" && couponCode.trim() ? await resolvePromotionCode(couponCode) : null;
+  const chargeAmount = resolvedCoupon
+    ? applyCouponToAmount(catalogPrice.unit_amount, resolvedCoupon.coupon)
+    : catalogPrice.unit_amount;
+
   const admin = createAdminClient();
 
   if (addon.requiresGroupLessonSpot) {
@@ -98,39 +108,57 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let paymentIntent: Stripe.PaymentIntent;
-  try {
-    paymentIntent = await client.paymentIntents.create({
-      customer: billingStudent.stripeCustomerId,
-      payment_method: paymentMethodId,
-      amount: catalogPrice.unit_amount,
-      currency: catalogPrice.currency,
-      off_session: true,
-      confirm: true,
-      description: addon.label,
-      metadata: { addon_id: addon.id, student_id: billingStudent.studentId },
-    });
-  } catch (err) {
-    if (addon.requiresGroupLessonSpot) {
-      const { error: releaseError } = await admin
-        .from("group_lesson_registrations")
-        .delete()
-        .eq("group_lesson_id", groupLessonId as string)
-        .eq("student_id", billingStudent.studentId);
-      if (releaseError) console.error("Failed to release a group lesson spot after a failed charge", releaseError.message);
+  // A 100%-off coupon can legitimately zero out the charge — Stripe
+  // won't create a $0 PaymentIntent (and has its own currency minimums
+  // below that), so a fully-covered purchase skips the charge entirely
+  // rather than erroring on an amount Stripe would reject anyway.
+  let paymentIntent: Stripe.PaymentIntent | null = null;
+  if (chargeAmount > 0) {
+    try {
+      paymentIntent = await client.paymentIntents.create({
+        customer: billingStudent.stripeCustomerId,
+        payment_method: paymentMethodId,
+        amount: chargeAmount,
+        currency: catalogPrice.currency,
+        off_session: true,
+        confirm: true,
+        description: addon.label,
+        metadata: {
+          addon_id: addon.id,
+          student_id: billingStudent.studentId,
+          ...(resolvedCoupon
+          ? { promotion_code: resolvedCoupon.promotionCode.id, coupon: resolvedCoupon.coupon.id }
+          : {}),
+        },
+      });
+    } catch (err) {
+      if (addon.requiresGroupLessonSpot) {
+        const { error: releaseError } = await admin
+          .from("group_lesson_registrations")
+          .delete()
+          .eq("group_lesson_id", groupLessonId as string)
+          .eq("student_id", billingStudent.studentId);
+        if (releaseError) console.error("Failed to release a group lesson spot after a failed charge", releaseError.message);
+      }
+      console.error(`POST /api/billing/addons/purchase charge failed for ${addon.id}`, err);
+      const message =
+        err instanceof Stripe.errors.StripeCardError
+          ? err.message
+          : "Your card couldn't be charged — try again or update your payment method.";
+      return NextResponse.json({ error: message }, { status: 402 });
     }
-    console.error(`POST /api/billing/addons/purchase charge failed for ${addon.id}`, err);
-    const message =
-      err instanceof Stripe.errors.StripeCardError
-        ? err.message
-        : "Your card couldn't be charged — try again or update your payment method.";
-    return NextResponse.json({ error: message }, { status: 402 });
   }
+
+  // A stable reference either way — the real PaymentIntent id, or a
+  // synthetic one for a fully-comped purchase — so the dedup key below
+  // and the group-lesson audit trail both always have something to key
+  // off, not just when a real charge happened.
+  const paymentReference = paymentIntent?.id ?? `comped_${addon.id}_${billingStudent.studentId}_${Date.now()}`;
 
   if (addon.requiresGroupLessonSpot) {
     await admin
       .from("group_lesson_registrations")
-      .update({ stripe_reference: paymentIntent.id })
+      .update({ stripe_reference: paymentReference })
       .eq("group_lesson_id", groupLessonId as string)
       .eq("student_id", billingStudent.studentId);
 
@@ -151,10 +179,11 @@ export async function POST(req: NextRequest) {
     resolved_at: new Date().toISOString(),
   });
 
+  const priceNote = formatPrice(chargeAmount, catalogPrice.currency) ?? "—";
   await notifyStaff(admin, {
     kind: "addon_purchase",
-    dedupKey: paymentIntent.id,
-    text: `${billingStudent.name} bought ${addon.label}.`,
+    dedupKey: paymentReference,
+    text: `${billingStudent.name} bought ${addon.label} for ${priceNote}${resolvedCoupon ? ` (coupon ${resolvedCoupon.promotionCode.code})` : ""}.`,
   });
 
   return NextResponse.json({ success: true });

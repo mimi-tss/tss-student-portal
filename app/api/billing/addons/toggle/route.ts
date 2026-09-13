@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { notifyStaff } from "@/lib/notifications/create";
 import { findAddon, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib/billing/addons";
+import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
 import { resolveTierFromPrice } from "@/lib/stripe/tiers";
 
@@ -22,7 +23,7 @@ type AddonAction = (typeof VALID_ACTIONS)[number];
 // against the current "own"-account Price, so it's own-account-only —
 // Opus isn't meant to gain new priced items.
 export async function POST(req: NextRequest) {
-  const { addonId, action } = await req.json();
+  const { addonId, action, couponCode } = await req.json();
 
   if (typeof addonId !== "string" || !addonId) {
     return NextResponse.json({ error: "An add-on is required" }, { status: 400 });
@@ -69,7 +70,20 @@ export async function POST(req: NextRequest) {
     }
     const priceId = resolveAddonPriceId(addon);
     if (!priceId) return NextResponse.json({ error: `${addon.label} isn't available right now.` }, { status: 400 });
-    await client.subscriptionItems.create({ subscription: billingStudent.stripeSubscriptionId, price: priceId });
+
+    // Unlike a one-time purchase (which has to compute the discounted
+    // amount itself, see .../purchase/route.ts), a recurring add-on just
+    // hands Stripe the promotion code directly — it applies its own
+    // percent/amount-off math to every future invoice, for however long
+    // the underlying Coupon's own duration says to. An unknown/expired/
+    // inactive code is silently ignored (full price), same as purchase.
+    const resolvedCoupon = typeof couponCode === "string" && couponCode.trim() ? await resolvePromotionCode(couponCode) : null;
+
+    await client.subscriptionItems.create({
+      subscription: billingStudent.stripeSubscriptionId,
+      price: priceId,
+      ...(resolvedCoupon ? { discounts: [{ promotion_code: resolvedCoupon.promotionCode.id }] } : {}),
+    });
   } else {
     if (!existingItem) return NextResponse.json({ error: `${addon.label} isn't active.` }, { status: 400 });
     await client.subscriptionItems.del(existingItem.id);
