@@ -123,6 +123,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Same next-occurrence check, against the coach's own group lessons —
+  // confirmed live this was never checked anywhere a recurring 1:1 slot
+  // gets created, so a coach's standing weekly group class (itself
+  // materialized real rows, GROUP_LESSON_WEEKS_AHEAD weeks out) could
+  // silently collide with a brand-new weekly 1:1 slot at the exact same
+  // day/time, forever, with nothing here ever catching it. A real
+  // scheduled group lesson is at least as firm a commitment as a
+  // coach_blocks row, so this hard-blocks the same way. A group lesson's
+  // start isn't grid-aligned like a coach_blocks range, so this is a
+  // real overlap check in JS rather than a range-column comparison.
+  const { data: nearbyGroupLessons } = await supabase
+    .from("group_lessons")
+    .select("scheduled_at, duration_minutes")
+    .eq("coach_id", effectiveCoachId)
+    .is("cancelled_at", null)
+    .gte("scheduled_at", new Date(nextInstant.getTime() - 4 * 60 * 60 * 1000).toISOString())
+    .lte("scheduled_at", nextInstantEnd.toISOString());
+
+  const groupLessonConflict = (nearbyGroupLessons ?? []).some((g) => {
+    const gStart = new Date(g.scheduled_at);
+    const gEnd = new Date(gStart.getTime() + g.duration_minutes * 60 * 1000);
+    return nextInstant < gEnd && nextInstantEnd > gStart;
+  });
+
+  if (groupLessonConflict) {
+    return NextResponse.json(
+      { error: "the coach already has a group lesson scheduled at an overlapping time" },
+      { status: 409 },
+    );
+  }
+
   // A student can have more than one schedule row now (migration 0076)
   // — the (student_id, day_of_week, start_time) unique constraint only
   // catches an exact duplicate, not two slots on the same day whose

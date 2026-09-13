@@ -159,6 +159,15 @@ export async function getStudentUpcomingGroupLessons(
 // policy, migration 0031), not re-checked here; a non-admin's insert
 // simply gets rejected by the database, same posture as
 // app/api/admin/add-credit/route.ts.
+//
+// Checks the coach isn't already busy — confirmed live this had no
+// conflict check at all (a genuine oversight, not a documented
+// decision): admin could create a group lesson directly on top of that
+// same coach's existing 1:1 session, a standing coach_blocks entry, or
+// another group lesson. `skipConflictCheck` exists only for
+// materializeRecurringGroupLessons' own auto-generated occurrences,
+// which run their own equivalent check across the whole series at once
+// rather than one row at a time.
 export async function createGroupLesson(
   supabase: SupabaseClient,
   params: {
@@ -168,8 +177,19 @@ export async function createGroupLesson(
     topic?: string | null;
     maxStudents?: number | null;
     recurringGroupLessonId?: string | null;
+    skipConflictCheck?: boolean;
   },
 ): Promise<string> {
+  if (!params.skipConflictCheck) {
+    const conflict = await coachHasConflict(
+      supabase,
+      params.coachId,
+      params.scheduledAt,
+      params.durationMinutes,
+    );
+    if (conflict) throw new Error(conflict);
+  }
+
   const { data, error } = await supabase
     .from("group_lessons")
     .insert({
@@ -185,6 +205,60 @@ export async function createGroupLesson(
 
   if (error || !data) throw new Error(error?.message ?? "insert failed");
   return data.id;
+}
+
+// Shared by createGroupLesson (one-off) and materializeRecurringGroupLessons
+// (each auto-generated occurrence) — a coach is unavailable for a NEW
+// group lesson if they already have a 1:1 session, a coach_blocks entry,
+// or another group lesson overlapping that time. Returns a human-readable
+// reason, or null if the coach is free. A 4-hour padded window on the
+// duration-bearing queries covers any realistic overlap without a full
+// table scan; the real overlap check itself is exact, in JS.
+async function coachHasConflict(
+  supabase: SupabaseClient,
+  coachId: string,
+  scheduledAt: string,
+  durationMinutes: number,
+): Promise<string | null> {
+  const start = new Date(scheduledAt);
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+  const paddedStart = new Date(start.getTime() - 4 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: sessions }, { data: blocks }, { data: otherGroupLessons }] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select("scheduled_at, duration_minutes")
+      .eq("actual_coach_id", coachId)
+      .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,holiday)")
+      .gte("scheduled_at", paddedStart)
+      .lte("scheduled_at", end.toISOString()),
+    supabase
+      .from("coach_blocks")
+      .select("id")
+      .eq("coach_id", coachId)
+      .lt("start_at", end.toISOString())
+      .gt("end_at", start.toISOString()),
+    supabase
+      .from("group_lessons")
+      .select("scheduled_at, duration_minutes")
+      .eq("coach_id", coachId)
+      .is("cancelled_at", null)
+      .gte("scheduled_at", paddedStart)
+      .lte("scheduled_at", end.toISOString()),
+  ]);
+
+  const overlapsRange = (rows: { scheduled_at: string; duration_minutes: number }[]) =>
+    rows.some((r) => {
+      const rStart = new Date(r.scheduled_at);
+      const rEnd = new Date(rStart.getTime() + r.duration_minutes * 60 * 1000);
+      return start < rEnd && end > rStart;
+    });
+
+  if (overlapsRange(sessions ?? [])) return "the coach already has a 1:1 session at an overlapping time";
+  if (blocks && blocks.length > 0) return "that time is blocked off on the coach's calendar";
+  if (overlapsRange(otherGroupLessons ?? [])) return "the coach already has another group lesson at an overlapping time";
+
+  return null;
 }
 
 // Admin manually confirms the Stripe payment came through, then
@@ -648,6 +722,7 @@ export async function deactivateRecurringGroupLessonSeries(
 
 interface MaterializeGroupLessonsResult {
   created: number;
+  skipped: number;
 }
 
 // Creates any missing future group_lessons occurrences for active
@@ -655,13 +730,16 @@ interface MaterializeGroupLessonsResult {
 // (lib/scheduling/recurring.ts) on purpose: group lessons have no
 // per-student billing cycle, pause window, or cancellation-effective-date
 // to account for (those are all per-student concepts; a group lesson
-// series belongs to a coach, not a student) and no coach-conflict check
-// (the existing one-off creation flow doesn't have one either, so this
-// doesn't add a stricter bar recurring series alone would need to
-// clear). Idempotent the same way: an occurrence already materialized
-// for this series at that exact instant is skipped, cancelled or not,
-// so admin-cancelling one occurrence doesn't cause it to reappear on the
-// next top-up run.
+// series belongs to a coach, not a student). DOES now check the coach
+// isn't already busy (1:1 sessions, coach_blocks) — createGroupLesson's
+// own one-off flow used to have no conflict check either, which this
+// comment cited as the reason not to add a stricter bar here; that gap
+// is closed now, so leaving this one unchecked would silently keep
+// double-booking a coach every week even after the one-off path stopped
+// allowing it. Idempotent the same way as before: an occurrence already
+// materialized for this series at that exact instant is skipped,
+// cancelled or not, so admin-cancelling one occurrence doesn't cause it
+// to reappear on the next top-up run.
 export async function materializeRecurringGroupLessons(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -677,6 +755,7 @@ export async function materializeRecurringGroupLessons(
   const { data: series } = await query;
   const now = new Date();
   let created = 0;
+  let skipped = 0;
   const holidayDates = await getHolidayDateKeys(supabase);
 
   for (const s of series ?? []) {
@@ -715,8 +794,43 @@ export async function materializeRecurringGroupLessons(
       (existing ?? []).map((g: { scheduled_at: string }) => new Date(g.scheduled_at).getTime()),
     );
 
+    // Same "coach busy" sources materializeRecurringSessions checks —
+    // a 1:1 session or a standing block added after this series already
+    // existed would otherwise get silently double-booked every week.
+    const [{ data: coachSessions }, { data: coachBlocks }] = await Promise.all([
+      supabase
+        .from("sessions")
+        .select("scheduled_at, duration_minutes")
+        .eq("actual_coach_id", s.coach_id)
+        .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,holiday)")
+        .gte("scheduled_at", now.toISOString())
+        .lte("scheduled_at", horizonEnd.toISOString()),
+      supabase
+        .from("coach_blocks")
+        .select("start_at, end_at")
+        .eq("coach_id", s.coach_id)
+        .lte("start_at", horizonEnd.toISOString())
+        .gte("end_at", now.toISOString()),
+    ]);
+
+    const coachBusyRanges = [
+      ...(coachSessions ?? []).map((sess: { scheduled_at: string; duration_minutes: number }) => {
+        const start = new Date(sess.scheduled_at);
+        return [start, new Date(start.getTime() + sess.duration_minutes * 60 * 1000)] as const;
+      }),
+      ...(coachBlocks ?? []).map((b: { start_at: string; end_at: string }) => [new Date(b.start_at), new Date(b.end_at)] as const),
+    ];
+
     const rows = instants
-      .filter((i) => !taken.has(i.getTime()))
+      .filter((i) => {
+        if (taken.has(i.getTime())) return false;
+        const iEnd = new Date(i.getTime() + s.duration_minutes * 60 * 1000);
+        if (coachBusyRanges.some(([bStart, bEnd]) => i < bEnd && iEnd > bStart)) {
+          skipped++;
+          return false;
+        }
+        return true;
+      })
       .map((i) => ({
         coach_id: s.coach_id,
         topic: s.topic,
@@ -740,5 +854,5 @@ export async function materializeRecurringGroupLessons(
     }
   }
 
-  return { created };
+  return { created, skipped };
 }

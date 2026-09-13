@@ -40,8 +40,12 @@ export async function GET(req: NextRequest) {
   const resumed = await autoResumeExpiredPauses(admin);
   const holidayForfeit = await forfeitHolidaySessions(admin);
   const coachBlockResult = await materializeRecurringCoachBlocks(admin);
-  const result = await materializeRecurringSessions(admin);
+  // Group lessons before 1:1 sessions — materializeRecurringSessions now
+  // checks group_lessons as one of its own conflict sources, so a group
+  // lesson occurrence that would newly materialize in THIS SAME run
+  // needs to exist before sessions' own check runs, not after.
   const groupLessonResult = await materializeRecurringGroupLessons(admin);
+  const result = await materializeRecurringSessions(admin);
 
   return NextResponse.json({
     resumed,
@@ -49,5 +53,6 @@ export async function GET(req: NextRequest) {
     coachBlocksCreated: coachBlockResult.created,
     ...result,
     groupLessonsCreated: groupLessonResult.created,
+    groupLessonsSkipped: groupLessonResult.skipped,
   });
 }

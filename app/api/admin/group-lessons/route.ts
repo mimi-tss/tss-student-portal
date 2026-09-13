@@ -69,9 +69,12 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ success: true, id });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "couldn't create group lesson" },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : "couldn't create group lesson";
+    // createGroupLesson's own conflict check throws a plain sentence for
+    // this, distinct from a real insert/DB failure — surfaced as a 409
+    // so the admin UI can show it as "that time doesn't work," not a
+    // generic server error.
+    const isConflict = message.startsWith("the coach already has") || message.startsWith("that time is blocked");
+    return NextResponse.json({ error: message }, { status: isConflict ? 409 : 500 });
   }
 }

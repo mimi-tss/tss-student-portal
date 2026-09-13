@@ -91,6 +91,28 @@ export async function createRecurringSchedule(
     return { success: false, error: "that time is blocked off on the coach's calendar (e.g. a standing meeting or break)" };
   }
 
+  // Same next-occurrence check as app/api/admin/recurring-schedule's own
+  // route, against the coach's own group lessons — never checked here
+  // either, so a CSV bulk import could silently double-book a coach's
+  // standing group class the same way the single-add flow could.
+  const { data: nearbyGroupLessons } = await supabase
+    .from("group_lessons")
+    .select("scheduled_at, duration_minutes")
+    .eq("coach_id", effectiveCoachId)
+    .is("cancelled_at", null)
+    .gte("scheduled_at", new Date(nextInstant.getTime() - 4 * 60 * 60 * 1000).toISOString())
+    .lte("scheduled_at", nextInstantEnd.toISOString());
+
+  const groupLessonConflict = (nearbyGroupLessons ?? []).some((g: { scheduled_at: string; duration_minutes: number }) => {
+    const gStart = new Date(g.scheduled_at);
+    const gEnd = new Date(gStart.getTime() + g.duration_minutes * 60 * 1000);
+    return nextInstant < gEnd && nextInstantEnd > gStart;
+  });
+
+  if (groupLessonConflict) {
+    return { success: false, error: "the coach already has a group lesson scheduled at an overlapping time" };
+  }
+
   const { data: coachSchedules } = await supabase
     .from("recurring_schedules")
     .select("id, start_time, duration_minutes, students(name)")

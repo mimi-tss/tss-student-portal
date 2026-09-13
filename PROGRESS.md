@@ -3,6 +3,73 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Full double-booking audit — 5 more real gaps found and closed (2026-09-12)
+
+Direct follow-up to the makeup-booking/group-lesson fix just above —
+you asked for a coach to genuinely never be double-bookable, so audited
+every place that creates a `sessions` or `group_lessons` row for a
+real conflict check against everything else on that coach's calendar.
+Found five more real gaps, all now closed:
+
+1. **[materializeRecurringSessions](lib/scheduling/recurring.ts)** —
+   the biggest one. This is the DAILY CRON that generates every future
+   week's 1:1 sessions from an active recurring schedule, and it had
+   never once checked `coach_blocks` or `group_lessons` — only other
+   `sessions`. Not a one-time miss: since this runs every day rolling
+   the horizon forward, a block or a group lesson series added *after*
+   a recurring 1:1 slot already existed would get silently
+   double-booked into every subsequent week, forever, with nothing ever
+   catching it. Now skips (and counts) any occurrence overlapping
+   either.
+2. **[/api/admin/recurring-schedule](app/api/admin/recurring-schedule/route.ts)
+   and its CSV-bulk-import twin
+   [createRecurringSchedule](lib/admin/create-recurring-schedule.ts)** —
+   both already checked coach_blocks and other recurring schedules for
+   the new slot's very next occurrence, but never group_lessons. A
+   coach's standing weekly group class could silently collide with a
+   brand-new weekly 1:1 slot at the exact same day/time, forever, with
+   no check ever catching it (fix #1 above only guards the ongoing
+   generator, not this creation-time gate). Added the same
+   next-occurrence check both places.
+3. **[createGroupLesson](lib/group-lessons.ts)** (admin's one-off group
+   lesson creation) — had NO conflict check at all, not even a
+   documented reason not to (unlike #5 below). Admin could create a
+   group lesson directly on top of that coach's existing 1:1 session,
+   a coach_blocks entry, or another group lesson. Added a real check
+   against all three, surfaced as a 409 from the route.
+4. **[/api/booking/book](app/api/booking/book/route.ts)** and
+   **[/api/booking/slots](app/api/booking/slots/route.ts)** — logged
+   separately above (the original report); group_lessons was never
+   one of either route's busy-range sources.
+5. **[materializeRecurringGroupLessons](lib/group-lessons.ts)** — its
+   own comment explicitly said no conflict check was needed "since the
+   existing one-off creation flow doesn't have one either." That
+   justification went stale the moment #3 shipped, so this would have
+   been the one remaining place still silently double-booking a coach
+   every week. Now checks sessions/coach_blocks the same way #1 does,
+   and the cron ([materialize-recurring](app/api/cron/materialize-recurring/route.ts))
+   now runs group-lesson materialization BEFORE 1:1 sessions in the
+   same pass, so a group lesson occurrence newly created in THIS run is
+   visible to that same run's session check, not just prior runs'.
+
+**Deliberately left alone**, both explicitly documented as raw
+admin-override/backfill tools rather than live booking actions —
+flagging rather than silently changing behavior for either:
+[/api/admin/add-session](app/api/admin/add-session/route.ts) (backfills
+a historical record from the old app; its own comment frames this as
+"records something that already happened, not a live booking action,"
+though the form technically allows a future date + 'scheduled' status
+too) and [/api/admin/edit-session](app/api/admin/edit-session/route.ts)
+("raw correction tool," explicitly unrestricted by design). Worth a
+decision if you want either tightened too.
+
+Audited real production data before and after: 0 existing real
+1:1-vs-group-lesson conflicts found right now (checked every future
+session against every future group lesson directly) — the gaps were
+real but hadn't yet caused visible damage. `npx tsc --noEmit -p .` and
+`next build` both clean across every file touched. No migration —
+every table involved already existed.
+
 ## Makeup-credit booking could double-book a coach's group lesson slot (2026-09-12)
 
 You flagged students being able to book a weekly-makeup 1:1 slot even

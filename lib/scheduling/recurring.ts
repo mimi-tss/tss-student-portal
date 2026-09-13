@@ -540,9 +540,47 @@ export async function materializeRecurringSessions(
       ),
     );
 
+    // Neither coach_blocks nor group_lessons was ever checked here —
+    // confirmed live this is a real, ongoing gap: this function runs
+    // daily off the cron, generating each new week for every active
+    // recurring schedule, so a block or a group lesson added AFTER a
+    // recurring 1:1 slot already existed would get silently
+    // double-booked into every week from then on, not just missed once
+    // at creation time (the checks in app/api/admin/recurring-schedule
+    // and lib/admin/create-recurring-schedule only ever look at the
+    // very next occurrence, the moment the schedule is first created).
+    const [{ data: coachBlocks }, { data: coachGroupLessons }] = await Promise.all([
+      supabase
+        .from("coach_blocks")
+        .select("start_at, end_at")
+        .eq("coach_id", schedule.coach_id)
+        .lte("start_at", horizonEnd.toISOString())
+        .gte("end_at", now.toISOString()),
+      supabase
+        .from("group_lessons")
+        .select("scheduled_at, duration_minutes")
+        .eq("coach_id", schedule.coach_id)
+        .is("cancelled_at", null)
+        .gte("scheduled_at", now.toISOString())
+        .lte("scheduled_at", horizonEnd.toISOString()),
+    ]);
+
+    const coachBusyRanges = [
+      ...(coachBlocks ?? []).map((b: { start_at: string; end_at: string }) => [new Date(b.start_at), new Date(b.end_at)] as const),
+      ...(coachGroupLessons ?? []).map((g: { scheduled_at: string; duration_minutes: number }) => {
+        const start = new Date(g.scheduled_at);
+        return [start, new Date(start.getTime() + g.duration_minutes * 60 * 1000)] as const;
+      }),
+    ];
+
     const rows = [];
     for (const instant of instants) {
       if (taken.has(instant.getTime()) || coachTaken.has(instant.getTime())) {
+        skipped++;
+        continue;
+      }
+      const instantEnd = new Date(instant.getTime() + schedule.duration_minutes * 60 * 1000);
+      if (coachBusyRanges.some(([bStart, bEnd]) => instant < bEnd && instantEnd > bStart)) {
         skipped++;
         continue;
       }
