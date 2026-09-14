@@ -42,18 +42,6 @@ export default function StudentNav() {
         <Link href="/student/book" className={styles.navLink}>
           Scheduler
         </Link>
-        {/* Deliberately target="_blank" (unlike the Kajabi links above,
-            which stay in-frame) — a new top-level tab, same-origin (just
-            /billing, no separate subdomain), so the existing session
-            already covers it with no extra login. target="_blank" is
-            also the one signal we can give toward opening in a real
-            browser rather than staying inside a native app's embedded
-            webview, if this is ever viewed from one (e.g. a future
-            Kajabi Branded App) — whether that's honored depends on how
-            that shell is configured, outside what web code controls. */}
-        <a href="/billing/account" target="_blank" rel="noopener noreferrer" className={styles.navLink}>
-          Billing
-        </a>
         <TimeZoneNavControl />
       </div>
 
@@ -90,15 +78,6 @@ export default function StudentNav() {
           <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
             Scheduler
           </Link>
-          <a
-            href="/billing/account"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.navDropdownLink}
-            onClick={() => setOpen(false)}
-          >
-            Billing
-          </a>
           <div className={styles.navDropdownTz}>
             <TimeZoneNavControl />
           </div>
