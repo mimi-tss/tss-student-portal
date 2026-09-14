@@ -3,6 +3,39 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Regression from the Remove-recurring-schedule fix: couldn't re-add the same slot (2026-09-14)
+
+Direct fallout from the 2026-09-10 fix (Remove now flips
+`recurring_schedules.active` to false instead of hard-deleting, since
+real session history usually blocks an actual delete via FK). Left
+the old row physically in the table, and
+`recurring_schedules_student_day_time_key` (migration 0076) is a
+plain unique constraint on `(student_id, day_of_week, start_time)` —
+not scoped to active rows. So re-adding the exact same slot later
+23505'd against its own now-hidden dead row, and there was no way to
+reach or undo that row from the UI at all (the student page only ever
+shows active schedules, and "Set weekly schedule" only ever inserts).
+A genuine dead end. Caught live: you removed Victoria Alvarez's
+Friday 7:30pm slot, then couldn't schedule her back into that same
+slot for October — it kept erroring.
+
+[recurring-schedule](app/api/admin/recurring-schedule/route.ts)'s
+POST now checks for a matching inactive row before treating an add as
+a genuinely new insert, and reuses/reactivates that row instead —
+same effect a real re-add should have, and this can't recur for any
+other student either. Applied the same correction directly to
+Victoria's actual row in production — reactivated, `start_date`
+2026-10-02, Fridays 7:30pm with Celine, 30 min, weekly. The daily
+materialize-recurring cron will generate her real Friday sessions once
+that date arrives; nothing else needed from you.
+
+`npx tsc --noEmit -p .` clean. `next build` itself was racing a
+concurrent session's own build on the shared `.next` directory the
+whole time (ENOENT on manifest files mid-build) — unrelated to this
+change, tsc was the reliable signal. No migration; this is application
+logic, not a schema fix — the underlying unique constraint is still a
+plain one, just no longer something a real re-add can hit.
+
 ## Student header decluttered — avatar is now a real account menu (2026-09-13)
 
 You flagged the student dashboard header as cluttered: "Fix stuck
