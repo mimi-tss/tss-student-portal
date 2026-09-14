@@ -116,24 +116,16 @@ export default function AddonsSelectClient() {
           {addons.map((addon) => {
             const isSelected = selected.has(addon.id);
             return (
-              <label
+              <div
                 key={addon.id}
                 className={styles.tierCard}
                 style={{
                   textAlign: "center",
                   alignItems: "center",
-                  cursor: addon.available ? "pointer" : "not-allowed",
                   opacity: addon.available ? 1 : 0.6,
                   outline: isSelected ? "2px solid var(--gold)" : undefined,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  disabled={!addon.available}
-                  onChange={() => toggle(addon.id)}
-                  style={{ marginBottom: 8 }}
-                />
                 <div style={{ fontWeight: 700 }}>
                   {addon.label}
                   {addon.amount != null && (
@@ -154,7 +146,17 @@ export default function AddonsSelectClient() {
                     Not available right now
                   </p>
                 )}
-              </label>
+                <div style={{ marginTop: "auto" }}>
+                  <button
+                    type="button"
+                    className={isSelected ? styles.linkBtn : styles.cta}
+                    disabled={!addon.available}
+                    onClick={() => toggle(addon.id)}
+                  >
+                    {isSelected ? "Remove" : "Add"}
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>

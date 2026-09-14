@@ -1,3 +1,6 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Anton, Inter } from "next/font/google";
 import ThemeToggle from "@/components/theme-toggle";
@@ -15,23 +18,44 @@ const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
 // /billing/login) — deliberately not tied to the main app's iframe
 // session, per the "log in on the PC, Spotify/Netflix-style" ask.
 export default function BillingLayout({ children }: { children: React.ReactNode }) {
+  // The add-ons-select step (Suite checkout's step 2) wants a clean,
+  // distraction-free header — no "Back to Studio" link pulling someone
+  // out of a checkout flow they're mid-way through — with the logo
+  // centered instead of pinned left now that there's nothing to
+  // balance it against on the right. ThemeToggle stays, just moved to
+  // float in the corner (position: absolute) so it doesn't fight the
+  // centered logo for layout space. Scoped by pathname, not a prop,
+  // since this layout is shared by every /billing/* page and only this
+  // one route asked for the stripped-down treatment.
+  const pathname = usePathname();
+  const isCheckoutStep = pathname === "/billing/addons-select";
+
   return (
     <div className={`${anton.variable} ${inter.variable} ${styles.root}`}>
-      <header className={styles.header} style={{ justifyContent: "space-between" }}>
+      <header
+        className={styles.header}
+        style={{ position: "relative", justifyContent: isCheckoutStep ? "center" : "space-between" }}
+      >
         <Link href="/billing" style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
           <img src="/logo.png" alt="Tara Simon Studios" className={styles.logo} />
           <span className={styles.brand}>Tara Simon Studios</span>
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* Points at the Kajabi site, not /student/dashboard — this
-              header is shared by every /billing page, including the
-              logged-out pricing page, where there's no session to send
-              anyone to a dashboard with. */}
-          <a href={KAJABI_SITE_URL} className={styles.linkBtn}>
-            ← Back to Studio
-          </a>
-          <ThemeToggle />
-        </div>
+        {isCheckoutStep ? (
+          <div style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)" }}>
+            <ThemeToggle />
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            {/* Points at the Kajabi site, not /student/dashboard — this
+                header is shared by every /billing page, including the
+                logged-out pricing page, where there's no session to send
+                anyone to a dashboard with. */}
+            <a href={KAJABI_SITE_URL} className={styles.linkBtn}>
+              ← Back to Studio
+            </a>
+            <ThemeToggle />
+          </div>
+        )}
       </header>
       {children}
     </div>
