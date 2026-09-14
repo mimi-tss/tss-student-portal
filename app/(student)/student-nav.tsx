@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import TimeZoneNavControl from "@/components/timezone-nav-control";
 import styles from "./student.module.css";
 
 const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
@@ -16,9 +15,12 @@ const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
 // _blank without re-reading this.
 
 // Below 640px (student.module.css's .navToggle/.navLinks breakpoint) the
-// external links + Scheduler + timezone control collapse into a dropdown
-// instead of wrapping onto extra header rows — "Coaching Studio" stays
-// visible outside it since it's the home link, not an external one.
+// external links + Scheduler collapse into a dropdown instead of
+// wrapping onto extra header rows — "Coaching Studio" stays visible
+// outside it since it's the home link, not an external one. The
+// timezone control used to live here too; it's now inside the avatar
+// menu (components/profile-menu.tsx) instead, same declutter pass that
+// moved Billing there.
 export default function StudentNav() {
   const [open, setOpen] = useState(false);
 
@@ -42,7 +44,6 @@ export default function StudentNav() {
         <Link href="/student/book" className={styles.navLink}>
           Scheduler
         </Link>
-        <TimeZoneNavControl />
       </div>
 
       <button
@@ -78,9 +79,6 @@ export default function StudentNav() {
           <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
             Scheduler
           </Link>
-          <div className={styles.navDropdownTz}>
-            <TimeZoneNavControl />
-          </div>
         </div>
       )}
     </nav>

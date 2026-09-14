@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useTimeZone } from "./timezone-context";
+import { timezoneAbbreviation } from "@/lib/timezone";
+import TimeZoneNavControl from "./timezone-nav-control";
 import styles from "./profile-menu.module.css";
 
 // Consolidates the avatar into an actual menu — "Fix stuck screen" and
@@ -16,6 +19,7 @@ export default function ProfileMenu({ initials }: { initials: string }) {
   const [open, setOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const { timeZone } = useTimeZone();
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +46,13 @@ export default function ProfileMenu({ initials }: { initials: string }) {
 
   return (
     <div className={styles.root} ref={rootRef}>
+      {/* Passive confirmation of the active display timezone — the
+          actual selector now lives inside the menu below, but this stays
+          always-visible so it's still obvious at a glance which zone
+          session times are shown in, without opening anything. */}
+      <span className={styles.tzBadge} title={`Viewing times in ${timezoneAbbreviation(timeZone)}`}>
+        {timezoneAbbreviation(timeZone)}
+      </span>
       <button
         type="button"
         className={styles.avatarButton}
@@ -55,6 +66,10 @@ export default function ProfileMenu({ initials }: { initials: string }) {
 
       {open && (
         <div className={styles.menu} role="menu">
+          <div className={styles.menuTz}>
+            <TimeZoneNavControl />
+          </div>
+          <div className={styles.menuDivider} />
           <a
             href="/billing/account#account"
             target="_blank"

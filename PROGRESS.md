@@ -3,6 +3,31 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Timezone control moved into the avatar menu too; top-nav Billing link removed (2026-09-14)
+
+Follow-up to the avatar-menu declutter — you asked to also remove the
+standalone Billing link from the top nav (now redundant with the
+avatar menu's own Billing entry) and move the timezone selector into
+the same menu. Both done.
+
+[student-nav.tsx](<app/(student)/student-nav.tsx>): removed the
+top-nav Billing link (desktop row and the mobile hamburger dropdown)
+and the timezone control from both places.
+
+[profile-menu.tsx](components/profile-menu.tsx): the timezone selector
+now lives at the top of the avatar dropdown, above Account/Billing/Add
+Ons. Kept one thing back per your own call on the tradeoff — a small
+passive "MT"-style badge sits next to the avatar at all times, so which
+zone session times are shown in is still visible at a glance without
+opening the menu; only the actual selector moved behind the click.
+
+Verified structurally in the Browser pane the same way as the earlier
+avatar-menu change (throwaway unauthenticated test route, removed
+right after) — confirmed the badge shows the right abbreviation and the
+menu opens with the timezone `<select>` populated and working, ahead of
+Account/Billing/Add Ons and the Fix-stuck-screen/Refresh actions.
+`npx tsc --noEmit -p .` and `next build` both clean. No migration.
+
 ## Regression from the Remove-recurring-schedule fix: couldn't re-add the same slot (2026-09-14)
 
 Direct fallout from the 2026-09-10 fix (Remove now flips

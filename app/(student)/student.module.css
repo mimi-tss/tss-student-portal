@@ -124,11 +124,6 @@
   .navDropdownLink:hover {
     background: var(--surface-2);
   }
-  .navDropdownTz {
-    padding: 8px 10px 2px;
-    border-top: 1px solid var(--border);
-    margin-top: 4px;
-  }
 }
 
 .wrap {
