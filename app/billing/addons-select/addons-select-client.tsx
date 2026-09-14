@@ -112,7 +112,18 @@ export default function AddonsSelectClient() {
       {error && <p className={styles.errorText}>{error}</p>}
 
       {addons && addons.length > 0 && (
-        <div className={styles.addonGrid}>
+        // This page always shows exactly SHOWN_ADDON_IDS.length cards (2
+        // today), so the shared .addonGrid's repeat(3, 1fr) — built for
+        // the authenticated add-ons page, which can show up to 5 — left
+        // the pair anchored to the left with empty space on the right.
+        // justify-content: center on a grid centers its tracks as a
+        // block when they don't fill the container, which repeat(3,1fr)
+        // never triggers on its own — overridden here rather than in
+        // the shared class so the other page's layout is untouched.
+        <div
+          className={styles.addonGrid}
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 320px))", justifyContent: "center" }}
+        >
           {addons.map((addon) => {
             const isSelected = selected.has(addon.id);
             return (
