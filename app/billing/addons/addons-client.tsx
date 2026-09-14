@@ -24,29 +24,9 @@ interface RecurringAddonRow extends AddonRowBase {
 interface OneTimeAddonRow extends AddonRowBase {
   kind: "one_time";
   canPurchase: boolean;
-  requiresGroupLessonSpot: boolean;
 }
 
 type AddonRow = RecurringAddonRow | OneTimeAddonRow;
-
-interface DropInSpot {
-  id: string;
-  topic: string | null;
-  scheduledAt: string;
-  durationMinutes: number;
-  coachName: string;
-  spotsLeft: number | null;
-}
-
-function formatSpotDate(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 // The one place an add-on actually gets added/removed/bought — its own
 // page (not a section of /billing/account) specifically so the studio
@@ -64,19 +44,13 @@ function formatSpotDate(iso: string) {
 // "recurring" is Add/Remove, toggling a subscription item. "one_time" is
 // Buy — a straight off-session charge, repeatable by design, with an
 // inline "Confirm — $X" step first since there's no undo on a completed
-// charge the way removing a subscription item has. Drop-In additionally
-// needs a specific group-lesson spot picked first (real capacity, not
-// just a price) — see /api/billing/addons/drop-in-spots.
+// charge the way removing a subscription item has.
 export default function AddonsClient() {
   const [addons, setAddons] = useState<AddonRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [spotPickerFor, setSpotPickerFor] = useState<string | null>(null);
-  const [spots, setSpots] = useState<DropInSpot[] | null>(null);
-  const [spotsLoading, setSpotsLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -115,13 +89,13 @@ export default function AddonsClient() {
     await load();
   }
 
-  async function purchase(addonId: string, groupLessonId?: string) {
+  async function purchase(addonId: string) {
     setPendingId(addonId);
     setError(null);
     const res = await fetch("/api/billing/addons/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addonId, groupLessonId }),
+      body: JSON.stringify({ addonId }),
     });
     const data = await res.json().catch(() => null);
     setPendingId(null);
@@ -130,25 +104,7 @@ export default function AddonsClient() {
       return;
     }
     setConfirmingId(null);
-    setSpotPickerFor(null);
-    setSpots(null);
     await load();
-  }
-
-  async function openSpotPicker(addonId: string) {
-    setSpotPickerFor(addonId);
-    setSpots(null);
-    setSpotsLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/billing/addons/drop-in-spots");
-      const data = await res.json().catch(() => null);
-      if (res.ok) setSpots(data?.spots ?? []);
-      else setError(data?.error ?? "Couldn't load open spots.");
-    } catch {
-      setError("Couldn't load open spots.");
-    }
-    setSpotsLoading(false);
   }
 
   if (loading) {
@@ -227,7 +183,6 @@ export default function AddonsClient() {
 
           // one_time
           const isConfirming = confirmingId === addon.id;
-          const isPicking = spotPickerFor === addon.id;
 
           return (
             <div key={addon.id} className={styles.tierCard} style={{ textAlign: "center", alignItems: "center" }}>
@@ -238,49 +193,8 @@ export default function AddonsClient() {
                 </p>
               )}
 
-              {isPicking && (
-                <div style={{ width: "100%", textAlign: "left" }}>
-                  {spotsLoading && (
-                    <p className={styles.helpText} style={{ margin: 0 }}>
-                      Loading open classes…
-                    </p>
-                  )}
-                  {!spotsLoading && spots?.length === 0 && (
-                    <p className={styles.helpText} style={{ margin: 0 }}>
-                      No open spots right now — check back soon.
-                    </p>
-                  )}
-                  {!spotsLoading &&
-                    spots?.map((spot) => (
-                      <div key={spot.id} className={styles.statRow}>
-                        <span className={styles.statLabel}>
-                          {spot.topic || "Group class"} — {formatSpotDate(spot.scheduledAt)}
-                          {spot.spotsLeft != null && ` (${spot.spotsLeft} left)`}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.cta}
-                          disabled={pendingId === addon.id}
-                          onClick={() => purchase(addon.id, spot.id)}
-                        >
-                          {pendingId === addon.id ? "Charging…" : "Buy this spot"}
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
-
               <div style={{ marginTop: "auto" }}>
-                {addon.requiresGroupLessonSpot ? (
-                  <button
-                    type="button"
-                    className={styles.cta}
-                    disabled={!addon.canPurchase || pendingId === addon.id}
-                    onClick={() => (isPicking ? setSpotPickerFor(null) : openSpotPicker(addon.id))}
-                  >
-                    {!addon.canPurchase ? "Coming soon" : isPicking ? "Close" : "Choose a spot"}
-                  </button>
-                ) : isConfirming ? (
+                {isConfirming ? (
                   <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                     <button type="button" className={styles.linkBtn} disabled={pendingId === addon.id} onClick={() => setConfirmingId(null)}>
                       Never mind

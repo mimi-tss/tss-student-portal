@@ -18,11 +18,6 @@ export interface AddonDef {
   // blanket feature — most add-ons charge one flat rate regardless of
   // which of their tiers is buying.
   priceEnvVarByTier?: Partial<Record<Tier, string>>;
-  // Drop-In needs a specific scheduled group-lesson spot picked (capacity-
-  // capped) before it can be purchased — flagged so the UI/route branch to
-  // that flow instead of a plain "Buy" button. See app/api/billing/addons/
-  // purchase/route.ts's own header comment.
-  requiresGroupLessonSpot?: boolean;
 }
 
 // "Any tier" per the studio, means Suite/Pro/Elite — Lite doesn't get
@@ -104,13 +99,18 @@ export const ADDON_CATALOG: AddonDef[] = [
     priceEnvVar: "STRIPE_PRICE_ADDON_SINGLE_LESSON_60MIN_PRO",
   },
   {
-    id: "drop_in_group_lesson",
+    // Was a single $40 Drop-In (pick one spot, pay, attend) — replaced
+    // per the studio: they don't want single-session, no-commitment
+    // attendees anymore. A flat purchase like every other pack — no spot
+    // picked at buy time, no group-lesson registration wired to it;
+    // scheduling happens the same manual way as the other lesson packs
+    // (admin books it once the Slack purchase ping lands).
+    id: "four_pack_group_class",
     tiers: ANY_PAID_TIER,
     kind: "one_time",
-    label: "Drop-In Group Lesson",
-    description: "Limited to 6 students per spot",
-    priceEnvVar: "STRIPE_PRICE_ADDON_DROP_IN_GROUP",
-    requiresGroupLessonSpot: true,
+    label: "4-Pack Group Class Add-On",
+    description: "4 group classes, schedule anytime within a year",
+    priceEnvVar: "STRIPE_PRICE_ADDON_FOUR_PACK_GROUP_CLASS",
   },
   {
     id: "spotlight_recital",

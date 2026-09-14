@@ -8,23 +8,15 @@ import { findAddon, resolveAddonPriceId, applyCouponToAmount } from "@/lib/billi
 import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
 import { resolveTier, formatPrice } from "@/lib/stripe/tiers";
-import { registerStudentInGroupLesson, notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
 
 // One-time add-ons (lib/billing/addons.ts, kind: "one_time") — a straight
 // off-session charge against the student's card on file, no ongoing
 // subscription state, repeatable by design (e.g. Spotlight, bought fresh
 // for every recital). This is the first one-time (non-subscription)
 // Stripe charge anywhere in this codebase — see that file's own header
-// comment; everything else here is subscriptions.
-//
-// Drop-In additionally claims a real capacity-checked spot in the
-// group-lesson system — registerStudentInGroupLesson is the exact same
-// function admin registration already goes through (lib/group-lessons.ts),
-// used here with the admin client for the same reason redeem-credit's
-// route does (a student has no RLS write access to arbitrary
-// group_lesson_registrations rows, only admin does). The spot is claimed
-// FIRST, then charged: a failed charge releases the spot again rather
-// than ever billing a student who didn't end up with a confirmed spot.
+// comment; everything else here is subscriptions. Scheduling/fulfillment
+// for a purchased pack (which lessons, when) happens manually — admin
+// sees the Slack ping below and books it, same as every other pack.
 function resolvePaymentMethodId(subscription: Stripe.Subscription): string | null {
   const subPm = subscription.default_payment_method;
   if (subPm) return typeof subPm === "string" ? subPm : subPm.id;
@@ -37,7 +29,7 @@ function resolvePaymentMethodId(subscription: Stripe.Subscription): string | nul
 }
 
 export async function POST(req: NextRequest) {
-  const { addonId, groupLessonId, couponCode } = await req.json();
+  const { addonId, couponCode } = await req.json();
 
   if (typeof addonId !== "string" || !addonId) {
     return NextResponse.json({ error: "An add-on is required" }, { status: 400 });
@@ -47,9 +39,6 @@ export async function POST(req: NextRequest) {
   if (!addon) return NextResponse.json({ error: "Unknown add-on" }, { status: 400 });
   if (addon.kind !== "one_time") {
     return NextResponse.json({ error: "This add-on is toggled, not purchased — see /api/billing/addons/toggle." }, { status: 400 });
-  }
-  if (addon.requiresGroupLessonSpot && typeof groupLessonId !== "string") {
-    return NextResponse.json({ error: "Choose a group lesson spot first." }, { status: 400 });
   }
 
   const billingStudent = await resolveBillingStudent();
@@ -100,18 +89,6 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  if (addon.requiresGroupLessonSpot) {
-    try {
-      await registerStudentInGroupLesson(admin, {
-        groupLessonId: groupLessonId as string,
-        studentId: billingStudent.studentId,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Couldn't claim that spot.";
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-  }
-
   // A 100%-off coupon can legitimately zero out the charge — Stripe
   // won't create a $0 PaymentIntent (and has its own currency minimums
   // below that), so a fully-covered purchase skips the charge entirely
@@ -139,19 +116,11 @@ export async function POST(req: NextRequest) {
           addon_id: addon.id,
           student_id: billingStudent.studentId,
           ...(resolvedCoupon
-          ? { promotion_code: resolvedCoupon.promotionCode.id, coupon: resolvedCoupon.coupon.id }
-          : {}),
+            ? { promotion_code: resolvedCoupon.promotionCode.id, coupon: resolvedCoupon.coupon.id }
+            : {}),
         },
       });
     } catch (err) {
-      if (addon.requiresGroupLessonSpot) {
-        const { error: releaseError } = await admin
-          .from("group_lesson_registrations")
-          .delete()
-          .eq("group_lesson_id", groupLessonId as string)
-          .eq("student_id", billingStudent.studentId);
-        if (releaseError) console.error("Failed to release a group lesson spot after a failed charge", releaseError.message);
-      }
       console.error(`POST /api/billing/addons/purchase charge failed for ${addon.id}`, err);
       const message =
         err instanceof Stripe.errors.StripeCardError
@@ -163,23 +132,8 @@ export async function POST(req: NextRequest) {
 
   // A stable reference either way — the real PaymentIntent id, or a
   // synthetic one for a fully-comped purchase — so the dedup key below
-  // and the group-lesson audit trail both always have something to key
-  // off, not just when a real charge happened.
+  // always has something to key off, not just when a real charge happened.
   const paymentReference = paymentIntent?.id ?? `comped_${addon.id}_${billingStudent.studentId}_${Date.now()}`;
-
-  if (addon.requiresGroupLessonSpot) {
-    await admin
-      .from("group_lesson_registrations")
-      .update({ stripe_reference: paymentReference })
-      .eq("group_lesson_id", groupLessonId as string)
-      .eq("student_id", billingStudent.studentId);
-
-    notifyCoachOfGroupLessonSignup(admin, {
-      groupLessonId: groupLessonId as string,
-      studentId: billingStudent.studentId,
-      studentName: billingStudent.name,
-    }).catch((err) => console.error(`Failed to notify coach of drop-in signup for lesson ${groupLessonId}`, err));
-  }
 
   const supabase = await createClient();
   await supabase.from("student_requests").insert({

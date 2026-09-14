@@ -20,7 +20,7 @@ interface AddonRow {
 // that link directly). This just folds whatever's currently ACTIVE into
 // the account page's billing info, plus a "Manage" link over to the real
 // page. Only "recurring" add-ons have an ongoing active state to show —
-// "one_time" purchases (4-Pack, Drop-In, Spotlight, etc.) are
+// "one_time" purchases (4-Pack, Spotlight, etc.) are
 // deliberately not tracked anywhere beyond a Slack ping (confirmed with
 // the user), so there's nothing to list here for those; they only ever
 // show up as a line item on the student's real Stripe billing history.

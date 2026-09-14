@@ -71,7 +71,6 @@ export async function GET() {
           return {
             ...base,
             canPurchase: !!currentPriceId,
-            requiresGroupLessonSpot: !!def.requiresGroupLessonSpot,
           };
         }
 
