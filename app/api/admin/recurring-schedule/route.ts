@@ -275,6 +275,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Adding a "new" slot (no scheduleId) at a day/time this student had
+  // before and had removed: the DELETE route flips a removed schedule's
+  // `active` to false rather than actually deleting the row (FK reasons
+  // — see that route's own comment), so the row is still there, just
+  // hidden from the UI. `recurring_schedules_student_day_time_key`
+  // (migration 0076) is a plain unique constraint on (student_id,
+  // day_of_week, start_time), not scoped to active rows, so a plain
+  // INSERT here 23505s against that dead row — a real dead end for the
+  // admin, since the UI only ever offers "add new," with no way to see
+  // or reach the inactive row to undo that. Caught live: Victoria's
+  // Friday 7:30pm slot, removed earlier, refused to come back. Treat
+  // this exactly like editing that row instead of inserting a fresh
+  // one — same effect a real admin re-add should have.
+  if (!existingSchedule) {
+    const { data: deadSchedule } = await supabase
+      .from("recurring_schedules")
+      .select("id")
+      .eq("student_id", studentId)
+      .eq("day_of_week", dayOfWeek)
+      .eq("start_time", startTime)
+      .eq("active", false)
+      .maybeSingle();
+    if (deadSchedule) {
+      existingSchedule = deadSchedule;
+    }
+  }
+
   const scheduleRow = {
     student_id: studentId,
     coach_id: effectiveCoachId,
