@@ -3,6 +3,40 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Kajabi Branded App embed: allowed app.kajabi.com to iframe the portal (2026-09-14)
+
+Direct continuation of the Branded App plan flagged back on 2026-08-26
+("not yet tested — flagging real uncertainty") — you started actually
+building the Custom Screen's Embed Code widget today. First real
+attempt showed "portal.tarasimonstudios.com refused to connect" in
+Kajabi's own screen-builder preview.
+
+Root cause: our own CSP. [next.config.mjs](next.config.mjs)'s
+`frame-ancestors` only ever allowed `'self'` and the studio's own
+Kajabi site (`NEXT_PUBLIC_KAJABI_SITE_URL`) to iframe this app —
+`app.kajabi.com` (Kajabi's own admin/builder domain, a different origin
+entirely from the studio's site) was never on that list, so our server
+correctly refused the connection, exactly as that header's own comment
+describes it should. Added `https://app.kajabi.com` to the allowlist.
+
+Verified directly: hit a real local `next start` server and confirmed
+the response header now reads
+`Content-Security-Policy: frame-ancestors 'self' https://app.kajabi.com`
+(plus the Kajabi site URL, once set in production). `npx tsc --noEmit -p .`
+and `next build` both clean.
+
+**Genuinely unconfirmed, flagging rather than assuming:** whether the
+REAL native Branded App (on an actual phone, not just this admin-side
+builder preview) loads the Embed Code widget through this same
+`app.kajabi.com` origin, a different one, or bypasses CSP enforcement
+entirely (native WebViews don't always honor it the way a browser
+does). This fix unblocks the builder's own preview for sure; the real
+end-to-end test — does login actually work and stick inside this
+embed, same open question flagged back in August about native WebView
+cookie/session behavior — still needs a real device. If the live app
+still shows a blank/refused iframe after this deploys, that points at
+a different origin needing to be added here instead.
+
 ## Timezone control moved into the avatar menu too; top-nav Billing link removed (2026-09-14)
 
 Follow-up to the avatar-menu declutter — you asked to also remove the
