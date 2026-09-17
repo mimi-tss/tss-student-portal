@@ -31,7 +31,15 @@ export async function GET() {
     });
 
     const planItem = subscription.items.data[0];
-    const tier = resolveTier(subscription, planItem?.price);
+    // Falls back to our own students.tier mirror when live Stripe
+    // resolution (Price metadata, then subscription metadata) comes up
+    // empty — set directly from the Checkout Session at signup, so it's
+    // reliable even when a student's specific Price/Subscription can't
+    // carry the usual metadata (see BillingStudent's own comment on this,
+    // lib/billing/student-stripe-link.ts). Without this, an account
+    // hitting that gap saw an empty "no add-ons available" page instead
+    // of their real catalog.
+    const tier = resolveTier(subscription, planItem?.price) ?? billingStudent.tier;
     const catalog = addonsForTier(tier);
     const isOwnAccount = billingStudent.stripeAccount === "own";
 

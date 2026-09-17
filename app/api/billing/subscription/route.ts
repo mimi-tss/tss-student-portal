@@ -92,7 +92,11 @@ export async function GET() {
       // of the plain instant price-swap an "own" student gets.
       stripeAccount: billingStudent.stripeAccount,
       planName,
-      tier: resolveTier(subscription, price),
+      // Falls back to our own students.tier mirror when live Stripe
+      // resolution can't find it — see GET /api/billing/addons's own
+      // comment on why (this drives the account page's own Plan display
+      // and the Change Plan ribbon, same gap that page can hit).
+      tier: resolveTier(subscription, price) ?? billingStudent.tier,
       status: deriveDisplayStatus(subscription),
       amount: price?.unit_amount ?? null,
       currency: price?.currency ?? null,

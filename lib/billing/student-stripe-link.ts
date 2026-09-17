@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findStripeCustomerAcrossAccounts } from "@/lib/stripe/accounts";
-import type { StripeAccount } from "@/types/database";
+import type { StripeAccount, Tier } from "@/types/database";
 
 export interface BillingStudent {
   studentId: string;
@@ -10,6 +10,17 @@ export interface BillingStudent {
   stripeAccount: StripeAccount | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  // Our own mirror, set directly from the Checkout Session's metadata at
+  // signup (app/api/webhooks/stripe/route.ts's checkout.session.completed
+  // handler) — independent of whatever the live Stripe Price/Subscription
+  // metadata says. Callers that need "what tier is this student really
+  // on" for something that can't tolerate a live-Stripe resolution gap
+  // (e.g. add-on eligibility) should fall back to this when
+  // resolveTier(subscription, price) comes back null, rather than
+  // showing an empty/broken page — see lib/stripe/tiers.ts's own header
+  // comment on why live resolution can fail even after the subscription-
+  // metadata fallback.
+  tier: Tier;
 }
 
 // Resolves the logged-in billing-site student and, if they've never been
@@ -34,7 +45,7 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, email, name, stripe_customer_id, stripe_subscription_id, stripe_account")
+    .select("id, email, name, tier, stripe_customer_id, stripe_subscription_id, stripe_account")
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!student) return null;
@@ -44,6 +55,7 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
       studentId: student.id,
       email: student.email,
       name: student.name,
+      tier: student.tier as Tier,
       stripeAccount: student.stripe_account as StripeAccount,
       stripeCustomerId: student.stripe_customer_id,
       stripeSubscriptionId: student.stripe_subscription_id,
@@ -56,6 +68,7 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
       studentId: student.id,
       email: student.email,
       name: student.name,
+      tier: student.tier as Tier,
       stripeAccount: null,
       stripeCustomerId: null,
       stripeSubscriptionId: null,
@@ -76,6 +89,7 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
     studentId: student.id,
     email: student.email,
     name: student.name,
+    tier: student.tier as Tier,
     stripeAccount: found.account,
     stripeCustomerId: found.customerId,
     stripeSubscriptionId: found.subscriptionId,

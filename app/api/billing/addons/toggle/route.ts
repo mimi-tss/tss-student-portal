@@ -49,7 +49,10 @@ export async function POST(req: NextRequest) {
     expand: ["items.data.price"],
   });
 
-  const tier = resolveTier(subscription, subscription.items.data[0]?.price);
+  // Falls back to our own students.tier mirror when live Stripe
+  // resolution can't find it — see GET /api/billing/addons's own comment
+  // on why.
+  const tier = resolveTier(subscription, subscription.items.data[0]?.price) ?? billingStudent.tier;
   if (!tier || !addon.tiers.includes(tier)) {
     return NextResponse.json({ error: `${addon.label} isn't available on your current plan.` }, { status: 400 });
   }
