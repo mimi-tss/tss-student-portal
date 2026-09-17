@@ -66,6 +66,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // A student's very first schedule doubles as setting their overall
+  // assigned coach — confirmed live this was never happening: this
+  // route only ever USED assigned_coach_id as a fallback default, never
+  // wrote it, so a student who arrived with none (every real Stripe/
+  // webhook signup — manual provisioning is the only path that ever
+  // prompts for a coach at creation) had no way to ever get one set,
+  // even after "starting" real weekly sessions with a real coach picked
+  // right here. Deliberately only when currently null — a student who
+  // already has one keeps it even if THIS particular schedule uses a
+  // different coach (multiple schedules with different coaches is a
+  // real, supported case, see the comment above).
+  if (!student.assigned_coach_id) {
+    await supabase.from("students").update({ assigned_coach_id: effectiveCoachId }).eq("id", studentId);
+  }
+
   // Backfill for students who predate billing_anniversary_date being set
   // automatically (webhook/provisioning) — without it, the 4-per-cycle
   // cap in materializeRecurringSessions has nothing to anchor to and

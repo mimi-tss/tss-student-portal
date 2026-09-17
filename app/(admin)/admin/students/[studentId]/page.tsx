@@ -18,6 +18,7 @@ import AdminUpcomingSessions from "./admin-upcoming-sessions";
 import ReassignSessionCoach from "./reassign-session-coach";
 import StudentHeaderActions from "./student-header-actions";
 import SubscriptionLifecycleClient from "./subscription-lifecycle-client";
+import GrantTrialClient from "./grant-trial-client";
 import StaffNotesClient from "./staff-notes-client";
 import StudentAttentionItems from "./student-attention-items";
 import AddCreditClient from "../../dashboard/add-credit-client";
@@ -94,6 +95,7 @@ export default async function AdminStudentPage({
     { data: firstSessionWithCoach },
     { data: cancelRequestRow },
     { data: groupLessonCredits },
+    { data: unusedTrial },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -178,6 +180,13 @@ export default async function AdminStudentPage({
       .eq("used", false)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("entitlements")
+      .select("id")
+      .eq("student_id", student.id)
+      .eq("perk_type", "trial_lesson")
+      .eq("used", false)
+      .maybeSingle(),
   ]);
 
   const [exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
@@ -379,7 +388,6 @@ export default async function AdminStudentPage({
           <SubscriptionLifecycleClient
             studentId={student.id}
             subscriptionStatus={student.subscription_status}
-            hasCoach={!!student.assigned_coach_id}
             hasRecurringSchedule={(recurringSchedules?.length ?? 0) > 0}
             defaultCoachId={student.assigned_coach_id}
             coachTimeZone={coach?.timezone ?? null}
@@ -390,6 +398,11 @@ export default async function AdminStudentPage({
             cancelRequest={cancelRequest}
             computedLastSession={lastSessionRow?.scheduled_at?.slice(0, 10) ?? null}
           />
+          {!unusedTrial && (
+            <div style={{ marginTop: 10 }}>
+              <GrantTrialClient studentId={student.id} coaches={coaches ?? []} />
+            </div>
+          )}
         </div>
 
         <div className={styles.panel} style={{ marginBottom: 0 }}>

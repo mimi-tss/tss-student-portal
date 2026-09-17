@@ -62,6 +62,10 @@ export interface ProvisionStudentInput {
   startTime?: string;
   startDate?: string;
   creditExpiresAt?: string;
+  // Record-only cadence for a manual/ambassador student (migration
+  // 0107) — this whole path never touches Stripe, so there's no real
+  // interval to read back; purely what admin says it notionally is.
+  billingInterval?: "monthly" | "3month" | "6month" | "yearly";
 }
 
 export type ProvisionStudentResult =
@@ -160,6 +164,13 @@ export async function provisionStudent(
       payment_status: "ok",
       session_duration_minutes: durationMinutes,
       billing_anniversary_date: input.billingAnniversaryDate || new Date().toISOString().slice(0, 10),
+      // Only included when actually set (migration 0107) — omitting the
+      // key entirely, not just sending null, so a plain add with no
+      // interval picked never references this column at all. Matters
+      // for deploy ordering: this code can go out before the migration
+      // runs without breaking every other student add in the meantime,
+      // only this one new optional field until it's applied.
+      ...(input.billingInterval ? { billing_interval: input.billingInterval } : {}),
       ambassador: !!ambassador,
       birth_date: input.birthDate || null,
       student_since_override: input.studentSinceOverride || null,

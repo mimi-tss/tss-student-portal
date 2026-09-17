@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DAY_NAMES } from "@/lib/scheduling/recurring";
+import { BILLING_INTERVALS, INTERVAL_LABEL, type BillingInterval } from "@/lib/stripe/tiers";
 import styles from "../../admin.module.css";
 
 interface Coach {
@@ -12,6 +13,15 @@ interface Coach {
 }
 
 type LessonType = "none" | "weekly" | "biweekly" | "4pack";
+// "record" — today's existing behavior, a comped/manual student, no
+// Stripe involved at all, with an optional interval kept purely as a
+// note on the row (billing_interval, migration 0107). "stripe" — admin
+// is setting this student up with a REAL subscription (e.g. a phone or
+// in-person sale that didn't go through the public pricing page):
+// generates a real Stripe Checkout Session instead of inserting a
+// student row directly — the existing webhook provisions the row itself
+// once the customer actually pays, exactly like a self-serve signup.
+type BillingMode = "record" | "stripe";
 
 // "Today" as a plain YYYY-MM-DD in the browser's own zone — good enough
 // for the schedule's default start date and the 4-pack expiry's min
@@ -74,6 +84,10 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   const [guardianRelationship, setGuardianRelationship] = useState("");
   const [guardianPhone, setGuardianPhone] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
+  const [billingMode, setBillingMode] = useState<BillingMode>("record");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval | "">("");
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -84,6 +98,33 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg(null);
+    setCheckoutUrl(null);
+
+    if (billingMode === "stripe") {
+      if (!billingInterval) {
+        setErrorMsg("Pick a billing interval to generate a checkout link.");
+        return;
+      }
+      setSaving(true);
+      const res = await fetch("/api/admin/create-checkout-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, interval: billingInterval, email: email.trim() || undefined }),
+      });
+      setSaving(false);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMsg(body.error ?? "Could not generate a checkout link.");
+        return;
+      }
+      // Deliberately doesn't reset/close the form or call router.refresh()
+      // — unlike the "record" path below, no student row exists yet.
+      // It's created by the webhook once the customer actually pays;
+      // this link is what admin sends them (or opens on a call to enter
+      // payment on their behalf) to make that happen.
+      setCheckoutUrl(body.url);
+      return;
+    }
 
     if (needsSchedule && !coachId) {
       setErrorMsg("Pick a coach to set a weekly/biweekly schedule.");
@@ -128,6 +169,7 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
         guardianRelationship: guardianRelationship.trim() || undefined,
         guardianPhone: guardianPhone.trim() || undefined,
         guardianEmail: guardianEmail.trim() || undefined,
+        billingInterval: billingInterval || undefined,
       }),
     });
 
@@ -156,6 +198,8 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       setGuardianRelationship("");
       setGuardianPhone("");
       setGuardianEmail("");
+      setBillingMode("record");
+      setBillingInterval("");
       setOpen(false);
       router.refresh();
     } else {
@@ -205,76 +249,168 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
             <option value="elite">Elite</option>
           </select>
         </div>
+        {billingMode === "record" && (
+          <>
+            <div className={styles.field}>
+              <label>Session length</label>
+              <select
+                value={sessionDurationMinutes}
+                onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
+                className={styles.select}
+              >
+                <option value={30}>30 min</option>
+                <option value={60}>60 min</option>
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label>Coach{needsSchedule ? "" : " (optional)"}</label>
+              <select value={coachId} onChange={(e) => setCoachId(e.target.value)} className={styles.select}>
+                <option value="">None yet</option>
+                {coaches.map((coach) => (
+                  <option key={coach.id} value={coach.id}>
+                    {coach.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label>Lesson type</label>
+              <select
+                value={lessonType}
+                onChange={(e) => setLessonType(e.target.value as LessonType)}
+                className={styles.select}
+              >
+                <option value="none">Not set yet</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="4pack">4-pack</option>
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={ambassador}
+                  onChange={(e) => setAmbassador(e.target.checked)}
+                />
+                Ambassador
+              </label>
+            </div>
+            <div className={styles.field}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={grantTrial}
+                  onChange={(e) => setGrantTrial(e.target.checked)}
+                />
+                Grant a free trial lesson
+              </label>
+            </div>
+            {grantTrial && (
+              <div className={styles.field}>
+                <label>Trial with{trialCoachId ? "" : " (optional)"}</label>
+                <select
+                  value={trialCoachId}
+                  onChange={(e) => setTrialCoachId(e.target.value)}
+                  className={styles.select}
+                >
+                  <option value="">Any coach</option>
+                  {coaches.map((coach) => (
+                    <option key={coach.id} value={coach.id}>
+                      {coach.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <h3 style={{ margin: "16px 0 0", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Billing
+      </h3>
+      <div className={styles.rowForm} style={{ marginTop: 10 }}>
         <div className={styles.field}>
-          <label>Session length</label>
-          <select
-            value={sessionDurationMinutes}
-            onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
-            className={styles.select}
-          >
-            <option value={30}>30 min</option>
-            <option value={60}>60 min</option>
-          </select>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 16 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="radio"
+                name="billingMode"
+                checked={billingMode === "record"}
+                onChange={() => {
+                  setBillingMode("record");
+                  setCheckoutUrl(null);
+                }}
+              />
+              No billing (comped / manual)
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="radio"
+                name="billingMode"
+                checked={billingMode === "stripe"}
+                onChange={() => {
+                  setBillingMode("stripe");
+                  setCheckoutUrl(null);
+                }}
+              />
+              Real Stripe subscription
+            </span>
+          </label>
         </div>
         <div className={styles.field}>
-          <label>Coach{needsSchedule ? "" : " (optional)"}</label>
-          <select value={coachId} onChange={(e) => setCoachId(e.target.value)} className={styles.select}>
-            <option value="">None yet</option>
-            {coaches.map((coach) => (
-              <option key={coach.id} value={coach.id}>
-                {coach.name}
+          <label>
+            {billingMode === "stripe" ? "Interval" : "Interval (record only, optional)"}
+          </label>
+          <select
+            value={billingInterval}
+            onChange={(e) => setBillingInterval(e.target.value as BillingInterval | "")}
+            className={styles.select}
+          >
+            <option value="">{billingMode === "stripe" ? "Select an interval" : "Not set"}</option>
+            {BILLING_INTERVALS.map((i) => (
+              <option key={i} value={i}>
+                {INTERVAL_LABEL[i]}
               </option>
             ))}
           </select>
         </div>
-        <div className={styles.field}>
-          <label>Lesson type</label>
-          <select
-            value={lessonType}
-            onChange={(e) => setLessonType(e.target.value as LessonType)}
-            className={styles.select}
-          >
-            <option value="none">Not set yet</option>
-            <option value="weekly">Weekly</option>
-            <option value="biweekly">Biweekly</option>
-            <option value="4pack">4-pack</option>
-          </select>
-        </div>
-        <div className={styles.field}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={ambassador}
-              onChange={(e) => setAmbassador(e.target.checked)}
-            />
-            Ambassador
-          </label>
-        </div>
-        <div className={styles.field}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={grantTrial}
-              onChange={(e) => setGrantTrial(e.target.checked)}
-            />
-            Grant a free trial lesson
-          </label>
-        </div>
-        {grantTrial && (
-          <div className={styles.field}>
-            <label>Trial with{trialCoachId ? "" : " (optional)"}</label>
-            <select value={trialCoachId} onChange={(e) => setTrialCoachId(e.target.value)} className={styles.select}>
-              <option value="">Any coach</option>
-              {coaches.map((coach) => (
-                <option key={coach.id} value={coach.id}>
-                  {coach.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
+      {billingMode === "stripe" && (
+        <p className={styles.mutedText} style={{ marginTop: 6, fontSize: 12 }}>
+          Generates a real Stripe Checkout link for this tier/interval instead of adding the student
+          directly — send it to them, or open it yourself to enter payment on their behalf. The student
+          row gets created automatically once they actually pay, same as a self-serve signup.
+        </p>
+      )}
+      {checkoutUrl && (
+        <div className={styles.panel} style={{ background: "var(--surface-2)", marginTop: 10, padding: 12 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13 }}>
+            Checkout link ready — send it to the student, or open it to complete payment on their behalf.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            <input readOnly value={checkoutUrl} className={styles.input} style={{ flex: "1 1 280px" }} />
+            <button
+              type="button"
+              className={styles.linkBtnSmall}
+              onClick={async () => {
+                await navigator.clipboard.writeText(checkoutUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? "Copied!" : "Copy link"}
+            </button>
+            <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className={styles.linkBtnSmall}>
+              Open
+            </a>
+          </div>
+        </div>
+      )}
 
+      {billingMode === "record" && (
+        <>
       {needsSchedule && (
         <div className={styles.rowForm} style={{ marginTop: 10 }}>
           <div className={styles.field}>
@@ -414,9 +550,17 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
           />
         </div>
       </div>
+        </>
+      )}
 
       <button type="submit" disabled={saving} className={styles.cta} style={{ marginTop: 12 }}>
-        {saving ? "Adding…" : "Add"}
+        {billingMode === "stripe"
+          ? saving
+            ? "Generating…"
+            : "Generate checkout link"
+          : saving
+            ? "Adding…"
+            : "Add"}
       </button>
       {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
     </form>

@@ -54,6 +54,14 @@ export async function createRecurringSchedule(
     return { success: false, error: "assign a coach before setting a recurring schedule" };
   }
 
+  // Same first-schedule-sets-the-overall-coach backfill as the
+  // single-add route (app/api/admin/recurring-schedule) — only when
+  // currently null, so an existing assignment is never silently
+  // overwritten by a different per-schedule coach.
+  if (!student.assigned_coach_id) {
+    await supabase.from("students").update({ assigned_coach_id: effectiveCoachId }).eq("id", studentId);
+  }
+
   if (!student.billing_anniversary_date) {
     await supabase
       .from("students")

@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     guardianRelationship,
     guardianPhone,
     guardianEmail,
+    billingInterval,
   } = await req.json();
 
   if (!email || !name || !tier) {
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     guardianRelationship,
     guardianPhone,
     guardianEmail,
+    billingInterval,
   });
 
   if (!result.success) {

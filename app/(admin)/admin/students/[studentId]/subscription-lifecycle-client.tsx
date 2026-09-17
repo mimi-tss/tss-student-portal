@@ -23,7 +23,6 @@ type Panel = null | "start" | "pause" | "stop";
 export default function SubscriptionLifecycleClient({
   studentId,
   subscriptionStatus,
-  hasCoach,
   hasRecurringSchedule,
   defaultCoachId,
   coachTimeZone,
@@ -36,7 +35,6 @@ export default function SubscriptionLifecycleClient({
 }: {
   studentId: string;
   subscriptionStatus: string;
-  hasCoach: boolean;
   hasRecurringSchedule: boolean;
   defaultCoachId: string | null;
   coachTimeZone: string | null;
@@ -83,7 +81,20 @@ export default function SubscriptionLifecycleClient({
   // accepted it.
   const [cadence, setCadence] = useState<"weekly" | "biweekly">("weekly");
 
-  const canStart = subscriptionStatus === "active" && hasCoach && !hasRecurringSchedule;
+  // Deliberately NOT requiring hasCoach — the Start panel below has its
+  // own coach picker (coachId, defaulting to defaultCoachId, which is
+  // "" for a student who's never had one). Confirmed live this was a
+  // real dead end for any student who arrives with no assigned coach at
+  // all (every real Stripe/webhook signup — the manual-provisioning
+  // form is the only path that ever prompts for one at creation): the
+  // button that's supposed to be the one place to set a first coach was
+  // disabled specifically because no coach was set yet, with genuinely
+  // no other control anywhere on this page to break the loop
+  // (recurring-schedule-client.tsx's own early-return, further down,
+  // says exactly the same thing — "assign a coach" — with nothing
+  // actionable either, by design: this Start button is meant to be the
+  // one real entry point).
+  const canStart = subscriptionStatus === "active" && !hasRecurringSchedule;
 
   async function handleStart() {
     setSaving(true);
@@ -283,13 +294,11 @@ export default function SubscriptionLifecycleClient({
           onClick={() => toggle("start")}
           disabled={!canStart}
           title={
-            !hasCoach
-              ? "Assign a coach first"
-              : hasRecurringSchedule
-                ? "Weekly sessions already started"
-                : subscriptionStatus !== "active"
-                  ? "Subscription isn't active"
-                  : undefined
+            hasRecurringSchedule
+              ? "Weekly sessions already started"
+              : subscriptionStatus !== "active"
+                ? "Subscription isn't active"
+                : undefined
           }
           className={`${styles.lifecycleBtn} ${panel === "start" ? styles.lifecycleBtnActive : ""}`}
         >

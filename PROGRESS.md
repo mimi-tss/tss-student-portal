@@ -3,6 +3,92 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Anna Marie Datsun: not missing, misnamed — plus two real dead-ends this surfaced, plus real Stripe subscriptions from the manual-add form (2026-09-17)
+
+You couldn't add "Anna Marie Datsun" (duplicate-email error) and
+couldn't find her searching the student list. Checked production
+directly: she wasn't missing — her real annual Suite purchase had
+already gone through the actual Stripe signup path and auto-created a
+student row, just under **"Robert W Downing"** (almost certainly the
+checkout's billing/cardholder name, not her own). That's why the
+manual-add form rejected the duplicate email and why searching "Anna"
+found nothing. You renamed the existing row directly — resolved, no
+code fix needed for that part.
+
+**Two real dead-ends that renaming her surfaced immediately after:**
+couldn't assign a coach, couldn't grant a trial lesson. Both genuine
+bugs, not just missing features:
+
+1. **Coach assignment was a closed loop for any student who arrives
+   with none.** [SubscriptionLifecycleClient](<app/(admin)/admin/students/[studentId]/subscription-lifecycle-client.tsx>)'s
+   "Start" button — the one documented entry point for a student's
+   first weekly schedule — was disabled with "Assign a coach first"
+   whenever `assigned_coach_id` was null, even though the Start panel
+   it opens has its own coach picker built in. [RecurringScheduleClient](<app/(admin)/admin/students/[studentId]/recurring-schedule-client.tsx>)
+   backed that up with its own dead-end message and no form at all.
+   Real 1:1 sessions never got picked up as an entry point since
+   they're an unrelated table — every student who's ever gone through
+   the actual Stripe signup path (no coach picker anywhere in that
+   flow, unlike manual provisioning) had genuinely no way to ever get
+   a first coach assigned. Fixed: `canStart` no longer requires
+   `hasCoach` — the panel's own picker was always sufficient. Also
+   fixed the other half of this: [/api/admin/recurring-schedule](app/api/admin/recurring-schedule/route.ts)
+   (and its CSV-import twin, [createRecurringSchedule](lib/admin/create-recurring-schedule.ts))
+   never actually wrote the picked coach back to `students.assigned_coach_id`
+   at all — only ever read it as a fallback default — so even bypassing
+   the disabled button wouldn't have actually fixed the student's
+   overall assignment. Now backfills it, but only when currently null,
+   so a student with an existing assignment who gets a second schedule
+   with a different coach keeps their original one (a real, intentional
+   case per this route's own comments).
+2. **No way to grant a trial lesson to an existing student, anywhere.**
+   The only place this was ever possible was the "Add ambassador /
+   manual student" form's own checkbox, at creation time only — which a
+   real Stripe signup never passes through. New
+   [grant-trial-client.tsx](<app/(admin)/admin/students/[studentId]/grant-trial-client.tsx>) /
+   [/api/admin/grant-trial-lesson](app/api/admin/grant-trial-lesson/route.ts),
+   shown on the student page only when no unused trial entitlement
+   already exists. Caught a real RLS gap while building this:
+   `entitlements` has no INSERT policy for any role at all — checked
+   the actual policy history before trusting it — so this had to go
+   through the service-role client, same as `provisionStudent`'s own
+   insert always has, not the regular session client the route's own
+   auth check uses.
+
+**Also asked for, separately: the manual-add form should be able to
+set up real Stripe billing, not just comped/manual access** — confirmed
+you want BOTH a record-only interval tag for genuinely comped students
+AND the ability to generate a real subscription (e.g. a phone/in-person
+sale). New [lib/stripe/checkout.ts](lib/stripe/checkout.ts) extracts
+the Checkout Session builder the public pricing page's own route
+already had, shared with new admin-only
+[/api/admin/create-checkout-link](app/api/admin/create-checkout-link/route.ts) —
+deliberately doesn't insert a `students` row itself; the existing
+Stripe webhook provisions it automatically once the customer actually
+pays, exactly like Anna's own real signup already proved works. The
+"Add ambassador / manual student" form
+([provision-student-client.tsx](<app/(admin)/admin/dashboard/provision-student-client.tsx>))
+now has a Billing section: "No billing" (today's behavior, plus a new
+optional record-only interval field) vs. "Real Stripe subscription"
+(tier + interval, generates a link to copy/send/open instead of adding
+the student directly). New `students.billing_interval` column
+(migration 0107) backs the record-only case.
+
+**⚠️ Deploy-order note, not just a migration reminder:** the new
+`billing_interval` column is only ever referenced in the insert when
+an admin actually picks one — deliberately built this way (conditional
+key, not `billing_interval: value ?? null` unconditionally) specifically
+so this code can ship BEFORE the migration runs without breaking the
+existing plain "Add student" flow for everyone else in the meantime.
+Confirmed live the column doesn't exist yet. Only the new optional
+interval field (and nothing else) is blocked until it's applied.
+
+`npx tsc --noEmit -p .` and `next build` both clean across every file
+touched. None of this live-clicked (no login here) — the coach-
+assignment and grant-trial fixes in particular are worth a real
+click-through on Anna's own account once this deploys, since that's
+exactly the case that surfaced both bugs.
+
 ## Kajabi Branded App embed: allowed app.kajabi.com to iframe the portal (2026-09-14)
 
 Direct continuation of the Branded App plan flagged back on 2026-08-26
@@ -8365,6 +8451,13 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**Migration 0107 needs to run** (2026-09-17) —
+[0107_students_billing_interval.sql](supabase/migrations/0107_students_billing_interval.sql).
+Adds `students.billing_interval` (record-only, nullable). Built so
+nothing else breaks in the meantime (see that entry above) — but until
+this runs, picking an interval on the manual-add form's new "No
+billing" path will fail. Please confirm once applied.
 
 **Migration 0104 needs to run** (2026-09-11) —
 [0104_admin_view_all_profiles.sql](supabase/migrations/0104_admin_view_all_profiles.sql).
