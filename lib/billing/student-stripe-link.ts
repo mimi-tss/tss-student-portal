@@ -24,12 +24,23 @@ export interface BillingStudent {
 }
 
 // Resolves the logged-in billing-site student and, if they've never been
-// linked to a Stripe account yet, does the lazy link-on-first-view: a
-// pre-migration Opus customer visiting for the first time has no
-// stripe_customer_id in our DB at all, so this looks them up by email —
-// Opus first, then the current account — and persists the result. Every
-// /api/billing/* route that needs "who is this and which Stripe account
-// are they in" should go through this rather than re-deriving it.
+// linked to a Stripe account yet (or were only PARTIALLY linked — see
+// below), does the lazy link-on-first-view: a pre-migration Opus
+// customer visiting for the first time has no stripe_customer_id in our
+// DB at all, so this looks them up by email — Opus first, then the
+// current account — and persists the result. Every /api/billing/* route
+// that needs "who is this and which Stripe account are they in" should
+// go through this rather than re-deriving it.
+//
+// Confirmed live: a real student had stripe_customer_id and
+// stripe_account set but stripe_subscription_id null — the old check
+// here (`customer_id && account`) treated that as "already linked" and
+// never re-ran discovery, so every billing page that needs a
+// subscription (add-ons, /billing/account) saw stripeSubscriptionId as
+// null forever and rendered as if nothing was linked at all, with no
+// self-healing path. Requiring all three now means a partial link like
+// that keeps retrying the real lookup on every visit until it resolves,
+// instead of getting stuck the moment any one field is set.
 //
 // `students` has no self-UPDATE RLS policy (only admin does — confirmed
 // via supabase/migrations/0005_trial_lesson_and_coach_admin.sql /
@@ -50,7 +61,7 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
     .maybeSingle();
   if (!student) return null;
 
-  if (student.stripe_customer_id && student.stripe_account) {
+  if (student.stripe_customer_id && student.stripe_account && student.stripe_subscription_id) {
     return {
       studentId: student.id,
       email: student.email,
