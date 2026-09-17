@@ -8452,18 +8452,19 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**Migration 0107 needs to run** (2026-09-17) —
-[0107_students_billing_interval.sql](supabase/migrations/0107_students_billing_interval.sql).
-Adds `students.billing_interval` (record-only, nullable). Built so
-nothing else breaks in the meantime (see that entry above) — but until
-this runs, picking an interval on the manual-add form's new "No
-billing" path will fail. Please confirm once applied.
+**Migrations 0104 and 0107 confirmed applied** (2026-09-17) — user
+replied "successful"; verified directly against the real Supabase
+project rather than assumed, both present:
+- **0107** — `students.billing_interval` column exists (a plain read
+  against it succeeds). The manual-add form's "No billing" interval
+  field should now save correctly.
+- **0104** — the admin-wide `profiles` SELECT policy is live — verified
+  via a real diagnostic admin session (minted a magic link, redeemed it
+  server-side, read a DIFFERENT user's profile row as that admin; only
+  possible with this policy in place). The Activity Log's "Logins &
+  joins" view should now show real names instead of "Unknown."
 
-**Migration 0104 needs to run** (2026-09-11) —
-[0104_admin_view_all_profiles.sql](supabase/migrations/0104_admin_view_all_profiles.sql).
-Adds the missing admin-wide SELECT policy on `profiles` — without it,
-the Activity Log's "Logins & joins" view will keep showing "Unknown"
-for every real login/join-click. Please confirm once applied.
+All closed — nothing outstanding from this batch.
 
 **Migration 0103 confirmed applied** (2026-09-10) — user replied
 "successful migration"; verified directly against the real Supabase
