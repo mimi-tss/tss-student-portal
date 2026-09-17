@@ -24,6 +24,7 @@ import StudentAttentionItems from "./student-attention-items";
 import AddCreditClient from "../../dashboard/add-credit-client";
 import SessionCreditsList from "./session-credits-list";
 import GroupLessonCreditsList from "./group-lesson-credits-list";
+import AddGroupLessonCreditClient from "./add-group-lesson-credit-client";
 import styles from "../../../admin.module.css";
 
 const TIER_LABEL: Record<string, string> = { lite: "Lite", suite: "Suite", pro: "Pro", elite: "Elite" };
@@ -96,6 +97,7 @@ export default async function AdminStudentPage({
     { data: cancelRequestRow },
     { data: groupLessonCredits },
     { data: unusedTrial },
+    { data: recurringGroupLessonTopics },
   ] = await Promise.all([
     student.assigned_coach_id
       ? supabase
@@ -187,7 +189,16 @@ export default async function AdminStudentPage({
       .eq("perk_type", "trial_lesson")
       .eq("used", false)
       .maybeSingle(),
+    // Suggestion list for AddGroupLessonCreditClient's topic field, not a
+    // locked dropdown — group_lessons.topic is free text with no enum, so
+    // this just steers admin toward a real, currently-running class
+    // instead of typo'ing one a credit can never actually redeem against.
+    supabase.from("recurring_group_lessons").select("topic").eq("active", true),
   ]);
+
+  const groupLessonTopics = [
+    ...new Set((recurringGroupLessonTopics ?? []).map((r) => r.topic).filter((t): t is string => !!t)),
+  ].sort();
 
   const [exerciseCatalog, assignedExercises, upcomingGroupLessons, cancelRequestExtras] = await Promise.all([
     supabase.from("exercises").select("id, title").eq("active", true).order("title"),
@@ -512,7 +523,10 @@ export default async function AdminStudentPage({
       </div>
 
       <div className={styles.panel}>
-        <h2>Group class credits</h2>
+        <div className={styles.pageHeadRow} style={{ marginBottom: 4 }}>
+          <h2 style={{ margin: 0 }}>Group class credits</h2>
+          <AddGroupLessonCreditClient studentId={student.id} topics={groupLessonTopics} />
+        </div>
         <GroupLessonCreditsList credits={groupLessonCredits ?? []} />
       </div>
 
