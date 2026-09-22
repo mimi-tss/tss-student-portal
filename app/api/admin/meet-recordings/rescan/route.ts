@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
 import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
-import { listQualifyingMeetingSubfolders } from "@/lib/google/drive";
+import { listQualifyingMeetingSubfolders, getDriveClient } from "@/lib/google/drive";
 
 // The slow scan + auto-match pass, split out of the main GET route
 // (see that route's own comment) so a manual "check now" doesn't block
@@ -46,11 +46,38 @@ export async function POST(req: NextRequest) {
   // to have) or something else. Safe/read-only — remove once resolved.
   let debugSubfolders: { id: string; name: string }[] = [];
   let debugError: string | null = null;
+  let debugWhoAmI: string | null = null;
+  let debugWhoAmIError: string | null = null;
+  let debugOldFolderCount: number | null = null;
+  let debugOldFolderError: string | null = null;
   try {
     const cutoff = new Date(Date.now() - (lookbackDays ?? 3) * 24 * 60 * 60 * 1000).toISOString();
     debugSubfolders = await listQualifyingMeetingSubfolders(cutoff);
   } catch (err) {
     debugError = err instanceof Error ? err.message : String(err);
+  }
+  try {
+    const drive = getDriveClient();
+    const about = await drive.about.get({ fields: "user" });
+    debugWhoAmI = about.data.user?.emailAddress ?? null;
+  } catch (err) {
+    debugWhoAmIError = err instanceof Error ? err.message : String(err);
+  }
+  try {
+    const drive = getDriveClient();
+    // Sanity check against the OLD (pre-2026-09-10) inbox folder id —
+    // this used to work reliably for months, so if THIS also comes
+    // back empty/erroring, the problem is broader than just the new
+    // folder (a credentials/identity issue generally), not specific to
+    // the new location.
+    const res = await drive.files.list({
+      q: `'1TU_dSfCkJvzcUswFHb-MDQ5c8VMA3ZUd' in parents and trashed = false`,
+      pageSize: 5,
+      fields: "files(id, name)",
+    });
+    debugOldFolderCount = (res.data.files ?? []).length;
+  } catch (err) {
+    debugOldFolderError = err instanceof Error ? err.message : String(err);
   }
 
   const { inserted } = await scanForNewRecordings(admin, lookbackDays);
@@ -60,6 +87,14 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     inserted,
     autoMatched: nameMatched + dayMatched,
-    debug: { subfolderCount: debugSubfolders.length, subfolderNames: debugSubfolders.slice(0, 5).map((f) => f.name), error: debugError },
+    debug: {
+      subfolderCount: debugSubfolders.length,
+      subfolderNames: debugSubfolders.slice(0, 5).map((f) => f.name),
+      error: debugError,
+      whoAmI: debugWhoAmI,
+      whoAmIError: debugWhoAmIError,
+      oldFolderCount: debugOldFolderCount,
+      oldFolderError: debugOldFolderError,
+    },
   });
 }

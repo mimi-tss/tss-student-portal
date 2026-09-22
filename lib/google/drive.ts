@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { getGoogleAuth, DRIVE_SCOPES } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function getDriveClient() {
+export function getDriveClient() {
   return google.drive({ version: "v3", auth: getGoogleAuth(DRIVE_SCOPES) });
 }
 
