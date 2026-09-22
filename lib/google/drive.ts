@@ -421,10 +421,10 @@ const RECORDING_SCAN_LOOKBACK_DAYS = 3;
 // per-FILE createdTime filter inside each one (below) is what actually
 // bounds how much of a recurring folder's long history gets re-walked
 // every run.
-async function listQualifyingMeetingSubfolders(
-  drive: ReturnType<typeof getDriveClient>,
+export async function listQualifyingMeetingSubfolders(
   cutoffIso: string,
 ): Promise<{ id: string; name: string }[]> {
+  const drive = getDriveClient();
   const res = await drive.files.list({
     q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and (createdTime > '${cutoffIso}' or name contains '(recurring)')`,
     pageSize: 100,
@@ -456,7 +456,7 @@ export async function listMeetRecordingsInbox(
   const drive = getDriveClient();
   const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const subfolders = await listQualifyingMeetingSubfolders(drive, cutoff);
+  const subfolders = await listQualifyingMeetingSubfolders(cutoff);
   if (!subfolders.length) return [];
 
   const perFolder = await Promise.all(

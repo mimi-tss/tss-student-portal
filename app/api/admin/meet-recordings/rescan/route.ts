@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
 import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
+import { listQualifyingMeetingSubfolders } from "@/lib/google/drive";
 
 // The slow scan + auto-match pass, split out of the main GET route
 // (see that route's own comment) so a manual "check now" doesn't block
@@ -34,9 +35,31 @@ export async function POST(req: NextRequest) {
   const lookbackDays = typeof days === "number" && days > 0 ? days : undefined;
 
   const admin = createAdminClient();
+
+  // Temporary diagnostic: the 2026-09-22 backfill returned inserted:0
+  // in production despite a real 124-recording backlog confirmed
+  // directly against Drive from a local script using the same code
+  // path — surfacing what production's OWN Drive query actually sees
+  // (subfolder count/names) narrows whether this is a credentials
+  // difference (Vercel's Google service-account env vars vs local
+  // .env.local, the same category of drift CRON_SECRET just turned out
+  // to have) or something else. Safe/read-only — remove once resolved.
+  let debugSubfolders: { id: string; name: string }[] = [];
+  let debugError: string | null = null;
+  try {
+    const cutoff = new Date(Date.now() - (lookbackDays ?? 3) * 24 * 60 * 60 * 1000).toISOString();
+    debugSubfolders = await listQualifyingMeetingSubfolders(cutoff);
+  } catch (err) {
+    debugError = err instanceof Error ? err.message : String(err);
+  }
+
   const { inserted } = await scanForNewRecordings(admin, lookbackDays);
   const { matched: nameMatched } = await runNameMatching(admin);
   const { autoMatched: dayMatched } = await runDayMatching(admin);
 
-  return NextResponse.json({ inserted, autoMatched: nameMatched + dayMatched });
+  return NextResponse.json({
+    inserted,
+    autoMatched: nameMatched + dayMatched,
+    debug: { subfolderCount: debugSubfolders.length, subfolderNames: debugSubfolders.slice(0, 5).map((f) => f.name), error: debugError },
+  });
 }
