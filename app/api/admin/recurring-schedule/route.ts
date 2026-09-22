@@ -5,6 +5,11 @@ import {
   slotFitsWorkingHours,
   nextWeeklySlotInstant,
 } from "@/lib/scheduling/recurring";
+import { notifyCoachRecurringScheduleEvent } from "@/lib/notifications/session-events";
+
+function unwrapJoin<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
 // Admin sets a student's recurring weekly lesson slot(s) (spec sections
 // 4/5) — the only way a student's regular sessions get scheduled;
@@ -45,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, assigned_coach_id, billing_anniversary_date")
+    .select("id, name, assigned_coach_id, billing_anniversary_date")
     .eq("id", studentId)
     .maybeSingle();
 
@@ -97,7 +102,7 @@ export async function POST(req: NextRequest) {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("working_hours, timezone")
+    .select("working_hours, timezone, slack_webhook_url")
     .eq("id", effectiveCoachId)
     .single();
 
@@ -354,6 +359,18 @@ export async function POST(req: NextRequest) {
 
   const result = await materializeRecurringSessions(supabase, { scheduleId: schedule.id });
 
+  await notifyCoachRecurringScheduleEvent({
+    coachId: effectiveCoachId,
+    coachSlackWebhookUrl: coach?.slack_webhook_url ?? null,
+    coachTimezone: coach?.timezone ?? "America/New_York",
+    studentName: student.name,
+    dayOfWeek,
+    startTime,
+    startDate: effectiveStartDate,
+    kind: "recurring_schedule_changed",
+    scheduleId: schedule.id,
+  });
+
   // Surface the coach-availability signal rather than letting it hide
   // inside a bare success response — materializeRecurringSessions
   // silently skips any instant the coach is already busy at (its own
@@ -379,13 +396,23 @@ export async function DELETE(req: NextRequest) {
 
   const { data: schedule } = await supabase
     .from("recurring_schedules")
-    .select("id")
+    .select(
+      "id, day_of_week, start_time, coach_id, students(name), coaches(timezone, slack_webhook_url)",
+    )
     .eq("id", scheduleId)
     .maybeSingle();
 
   if (!schedule) {
     return NextResponse.json({ error: "no recurring schedule found" }, { status: 404 });
   }
+
+  const scheduleStudent = unwrapJoin(schedule.students as unknown as { name: string } | { name: string }[] | null);
+  const scheduleCoach = unwrapJoin(
+    schedule.coaches as unknown as
+      | { timezone: string; slack_webhook_url: string | null }
+      | { timezone: string; slack_webhook_url: string | null }[]
+      | null,
+  );
 
   const { error: deleteSessionsError } = await supabase
     .from("sessions")
@@ -416,6 +443,20 @@ export async function DELETE(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (scheduleStudent && scheduleCoach) {
+    await notifyCoachRecurringScheduleEvent({
+      coachId: schedule.coach_id,
+      coachSlackWebhookUrl: scheduleCoach.slack_webhook_url,
+      coachTimezone: scheduleCoach.timezone,
+      studentName: scheduleStudent.name,
+      dayOfWeek: schedule.day_of_week,
+      startTime: schedule.start_time,
+      startDate: "", // unused for the "removed" text
+      kind: "recurring_schedule_removed",
+      scheduleId: schedule.id,
+    });
   }
 
   return NextResponse.json({ success: true });
