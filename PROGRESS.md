@@ -3,6 +3,57 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings pipeline has been dead for 12 days — not a matching bug (2026-09-22)
+
+You asked to fix "unmatched recordings... lots of students missing
+recordings and we are not notified." Investigated against real
+production/Drive data before writing anything, and the actual picture
+is worse than a matching bug, in a way that needs your attention on
+the Google side, not just code:
+
+**The scan/match code itself is fine.** Of all 113 recordings this app
+has ever received, 76 matched and 37 were dismissed — 0 sitting
+unmatched right now. It's not failing to match what it gets.
+
+**The real problem: nothing has landed in the shared Meet-recordings
+Drive folder since 2026-09-10, 20:01 UTC.** Checked the folder
+directly via the Drive API, not just this app's own table — a full
+12-day blackout, across every coach (Celine, Nikki, Ivan, Tara), not
+one coach's setting. In that same window, 139 real sessions have
+generated `recording_missing` flags with nothing to attach. Ruled out
+Drive storage quota (20TB limit, 40% used, plenty of room) — whatever
+broke is upstream of Drive itself: most likely each coach's own Meet
+recording setting, or however recordings get from each coach's
+personal Gmail account (their `coaches.email` are personal Gmail
+addresses, not `@tarasimonstudios.com` — domain-wide delegation can't
+inspect those directly, which is where my own investigation hit its
+limit). **This needs a human check**: open Meet as Celine (or any
+coach) and confirm recording still auto-starts / has permission to
+save to the expected destination.
+
+**Separately, confirmed why nothing reached you about any of this:
+`SLACK_WEBHOOK_URL` isn't set at all** (checked `.env.local` — unset).
+That's the shared staff-alert channel `notifyStaff` posts to; every
+staff Slack alert this app has ever tried to send, including the
+existing "recording needs manual review" one, has silently no-op'd
+this whole time (`notifySlack` returns early with no error, no log, no
+trace, when the URL is unset — see [lib/slack/notify.ts](lib/slack/notify.ts)).
+This was flagged once, weeks ago (2026-08-28 entry, way above), never
+circled back to. **Action needed: set `SLACK_WEBHOOK_URL` in Vercel.**
+
+**Even with that set, the existing alert still couldn't have caught
+THIS failure**, since it only ever fires per stale *unmatched*
+recording — with 0 unmatched during a total blackout, it has nothing
+to alert on. New check in [scan-recordings](app/api/cron/scan-recordings/route.ts):
+if no recording (any status) has landed in over 24h while real
+sessions in that window are generating `recording_missing` items,
+fire one staff alert — "the pipeline itself looks dead," a different
+signal from "this one file failed to match."
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-verified
+against a real Slack webhook — no login here, and the env var still
+isn't set regardless. No migration.
+
 ## Coach never got a Slack ping when their recurring weekly schedule changed (2026-09-22)
 
 You flagged it plainly: "coach is not notified on slack when recurring
@@ -8474,6 +8525,24 @@ the login page — recolored to the app's `--gold` purple token. See
 [public/logo.png](public/logo.png).
 
 ## ⚠️ Action needed from you
+
+**New, urgent (2026-09-22)** — two things from the recordings-pipeline
+investigation above, neither fixable from inside this codebase:
+1. **Set `SLACK_WEBHOOK_URL` in Vercel.** Confirmed unset — every staff
+   Slack alert this app has ever tried to send has been a silent
+   no-op. No dependency on anything else; safe to do any time.
+2. **Check why Google Meet stopped saving recordings for every coach
+   on 2026-09-10.** Confirmed via the Drive API directly — the shared
+   recordings inbox folder has received zero files in 12 days, not a
+   quota issue (20TB limit, 40% used). Likely each coach's own Meet
+   recording permission/setting — their linked accounts are personal
+   Gmail (`coaches.email`), not `@tarasimonstudios.com`, so this app's
+   service account can't inspect their Drive/Meet settings directly to
+   diagnose further. Probably means 139 real sessions' worth of
+   recordings never got made at all, not just unsynced — worth
+   confirming with each coach whether they still have a local/Meet-side
+   copy of anything from this window before it's gone for good, if it
+   isn't already.
 
 **Migrations 0104 and 0107 confirmed applied** (2026-09-17) — user
 replied "successful"; verified directly against the real Supabase
