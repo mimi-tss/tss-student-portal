@@ -151,6 +151,17 @@ export async function attachRecordingToStudent(
     return { success: false, error: "that student has no Drive folder set up yet" };
   }
 
+  // Check for a shortcut that already exists first — the 2026-09-10
+  // Drive restructure (see MEET_RECORDINGS_INBOX_FOLDER_ID's own
+  // comment) left admin manually pasting shortcuts into several
+  // students' folders directly, bypassing this app entirely while the
+  // scan was blind to the new location. The backfill that fixed the
+  // scan will now discover those exact same recordings as "new" (this
+  // app never had a row for them) and try to match them — without this
+  // check, a real or auto match would create a SECOND shortcut to the
+  // same file, and re-notify a student who likely already knows.
+  const alreadyLinked = await findShortcutTargeting(student.drive_folder_id, recording.drive_file_id);
+
   // A shortcut, not a copy or a reparent — confirmed live that a plain
   // reparent (addParents/removeParents) fails outright ("insufficient
   // permissions"), since the inbox lives in the admin account's own My
@@ -166,10 +177,12 @@ export async function attachRecordingToStudent(
   // already uses. Wrapped in try/catch — was unguarded before,
   // producing an opaque uncaught-exception 500 with no error text
   // anywhere on any failure.
-  try {
-    await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? `couldn't link the file: ${err.message}` : "couldn't link the file" };
+  if (!alreadyLinked) {
+    try {
+      await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? `couldn't link the file: ${err.message}` : "couldn't link the file" };
+    }
   }
 
   const { error } = await admin
@@ -203,19 +216,25 @@ export async function attachRecordingToStudent(
     });
   }
 
-  await notifyStudent(admin, {
-    studentId,
-    email: student.email,
-    phone: student.phone,
-    group: "alerts",
-    kind: "recording_ready",
-    dedupKey: `student:${studentId}:recording_ready:${recordingId}`,
-    title: "Your recording is ready",
-    body: "Your session recording has been added to your shared folder.",
-    linkUrl: "/student/dashboard",
-    ghlData: { recordingId },
-    channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
-  });
+  // A shortcut already sitting there means the student's folder was
+  // manually set up before this match ever ran — they've most likely
+  // already seen it, so "your recording is ready" would be stale news,
+  // not a genuine new signal.
+  if (!alreadyLinked) {
+    await notifyStudent(admin, {
+      studentId,
+      email: student.email,
+      phone: student.phone,
+      group: "alerts",
+      kind: "recording_ready",
+      dedupKey: `student:${studentId}:recording_ready:${recordingId}`,
+      title: "Your recording is ready",
+      body: "Your session recording has been added to your shared folder.",
+      linkUrl: "/student/dashboard",
+      ghlData: { recordingId },
+      channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+    });
+  }
 
   return { success: true };
 }
@@ -286,26 +305,33 @@ export async function attachRecordingToGroupLesson(
       continue;
     }
 
-    try {
-      await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
-    } catch (err) {
-      skipped.push(`${student.name} (${err instanceof Error ? err.message : "couldn't link the file"})`);
-      continue;
-    }
+    // Same dedup reasoning as attachRecordingToStudent's own comment —
+    // skip re-creating a shortcut (and re-notifying) a student who
+    // already has one, e.g. from a manual paste during the window this
+    // app couldn't see the recording at all.
+    const alreadyLinked = await findShortcutTargeting(student.drive_folder_id, recording.drive_file_id);
+    if (!alreadyLinked) {
+      try {
+        await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
+      } catch (err) {
+        skipped.push(`${student.name} (${err instanceof Error ? err.message : "couldn't link the file"})`);
+        continue;
+      }
 
-    await notifyStudent(admin, {
-      studentId: student.id,
-      email: student.email,
-      phone: student.phone,
-      group: "alerts",
-      kind: "recording_ready",
-      dedupKey: `student:${student.id}:recording_ready:${recordingId}`,
-      title: "Your recording is ready",
-      body: "Your group class recording has been added to your shared folder.",
-      linkUrl: "/student/dashboard",
-      ghlData: { recordingId },
-      channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
-    });
+      await notifyStudent(admin, {
+        studentId: student.id,
+        email: student.email,
+        phone: student.phone,
+        group: "alerts",
+        kind: "recording_ready",
+        dedupKey: `student:${student.id}:recording_ready:${recordingId}`,
+        title: "Your recording is ready",
+        body: "Your group class recording has been added to your shared folder.",
+        linkUrl: "/student/dashboard",
+        ghlData: { recordingId },
+        channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+      });
+    }
     notified++;
   }
 
