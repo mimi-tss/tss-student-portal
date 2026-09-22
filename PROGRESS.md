@@ -3,6 +3,59 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Found it: Google restructured the Meet-recordings Drive folder (2026-09-22)
+
+Direct follow-up to the entry right below this one. You found the new
+location yourself — https://drive.google.com/drive/folders/1Pw6ESQMVx97jsWnoNVj6a_EhI7JnDKT4
+("Google Meet") — and confirmed against it directly: it's not just a
+new address, the whole shape changed. The old folder held every
+recording as a flat sibling file; this one groups each MEETING into
+its own subfolder (a dated one-off for a single occurrence, or a
+persistent "<room name> (recurring)" folder for a coach's own standing
+room), with that meeting's recording/notes/transcript nested one level
+inside. That's the actual reason for the 12-day blackout — nothing was
+ever lost, the app was just watching an address Google stopped
+delivering to. Verified directly: 34 qualifying subfolders, **124 real
+video/mp4 recordings** sitting there right now across every coach,
+completely invisible to this app until today.
+
+[lib/google/drive.ts](lib/google/drive.ts) now points
+`MEET_RECORDINGS_INBOX_FOLDER_ID` at the new folder and does a
+two-level scan (qualifying subfolders, then each one's own recording
+file(s) — a dropped/rejoined call can now produce "Recording",
+"Recording 2", etc., all real). `findGeminiNotesForRecording` now
+searches the recording's own parent subfolder instead of the old flat
+root — actually more reliable than before, since the notes doc is
+guaranteed to be a sibling now, not something to search a
+4000+-file history for. Also added an optional `?days=` override
+(still `CRON_SECRET`-gated) on the scan-recordings cron route for a
+one-time historical catch-up, since the ordinary 3-day rolling window
+can't reach back to Sep 10 on its own — kept the default tight for
+steady state, since Google never prunes a recurring folder and the
+per-file cutoff is the only thing bounding a re-scan of one long-term.
+
+Also, per direct request ("notify in needs review, no need for
+slack"): swapped the Slack-based pipeline-stale alert from the entry
+below for a Needs Review item instead — new migration 0108
+(`recording_pipeline_stale`, system-wide, no student/coach to scope it
+to), same security-definer upsert pattern every other condition-driven
+kind already uses. Checked on every Needs Review load now, not just
+every 2h via cron.
+
+**Known follow-on, not fixed today:** day-matching still assumes
+exactly one unmatched recording per coach/day before auto-matching a
+1:1 session — a session that produced multiple segments now shows as
+several recordings that day, which correctly declines to guess rather
+than matching wrong, but does mean more manual-queue volume than
+before. Also: the new one-off meeting folders for things like a trial
+vocal assessment ("Alexandra / Tara Simon Studios...") don't embed a
+coach's meet-code or first name the way the old flat filenames did, so
+`identifyCoach` can't resolve those automatically — they'll always
+need a manual match, same as before this whole incident, just now
+actually visible instead of invisible.
+
+`npx tsc --noEmit -p .` and `next build` both clean.
+
 ## Recordings pipeline has been dead for 12 days — not a matching bug (2026-09-22)
 
 You asked to fix "unmatched recordings... lots of students missing
@@ -8526,23 +8579,37 @@ the login page — recolored to the app's `--gold` purple token. See
 
 ## ⚠️ Action needed from you
 
-**New, urgent (2026-09-22)** — two things from the recordings-pipeline
-investigation above, neither fixable from inside this codebase:
-1. **Set `SLACK_WEBHOOK_URL` in Vercel.** Confirmed unset — every staff
-   Slack alert this app has ever tried to send has been a silent
-   no-op. No dependency on anything else; safe to do any time.
-2. **Check why Google Meet stopped saving recordings for every coach
-   on 2026-09-10.** Confirmed via the Drive API directly — the shared
-   recordings inbox folder has received zero files in 12 days, not a
-   quota issue (20TB limit, 40% used). Likely each coach's own Meet
-   recording permission/setting — their linked accounts are personal
-   Gmail (`coaches.email`), not `@tarasimonstudios.com`, so this app's
-   service account can't inspect their Drive/Meet settings directly to
-   diagnose further. Probably means 139 real sessions' worth of
-   recordings never got made at all, not just unsynced — worth
-   confirming with each coach whether they still have a local/Meet-side
-   copy of anything from this window before it's gone for good, if it
-   isn't already.
+**Recordings pipeline: resolved, not a Google Meet outage after all**
+(2026-09-22) — you found it yourself: Google didn't stop recording,
+it restructured the Drive folder (see the entry above this section).
+Code now points at the new location and understands its per-meeting-
+subfolder shape; the earlier "check why Meet stopped recording" item
+below is superseded by this, nothing further needed there.
+
+**New — migration 0108 needs to run** before `recording_pipeline_stale`
+(the new Needs-Review-only alert replacing the earlier Slack one) can
+actually insert anything — the table/index/RPC it needs don't exist
+until this applies:
+[0108_recording_pipeline_stale_attention_item.sql](supabase/migrations/0108_recording_pipeline_stale_attention_item.sql).
+Please confirm once applied. Not urgent — nothing breaks without it,
+that specific alert just can't fire yet (everything else shipped
+today works regardless).
+
+**Not action-needed-from-you, just flagging so it's not a surprise**:
+once 0108 is applied, plan is to run the scan-recordings cron route
+once with `?days=14` (a manual-only backfill parameter, still
+`CRON_SECRET`-gated) to pull in the real Sep 10–22 backlog — the
+ordinary 3-day window can't reach back that far on its own. I'll do
+that myself with the existing `CRON_SECRET`, no action needed from you
+for that part.
+
+Separately, still true and still worth doing whenever convenient:
+**`SLACK_WEBHOOK_URL` is unset in Vercel** — every OTHER staff Slack
+alert this app has ever tried to send (`cron_stale`,
+`recording_match_fail`) has been a silent no-op this whole time. Not
+urgent for recordings specifically anymore (that alert moved to Needs
+Review), but still worth setting for the ones that are staying on
+Slack.
 
 **Migrations 0104 and 0107 confirmed applied** (2026-09-17) — user
 replied "successful"; verified directly against the real Supabase
