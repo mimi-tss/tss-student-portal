@@ -3,6 +3,27 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Backfill dedup: don't double-link a recording already shared manually (2026-09-22)
+
+You flagged it before running the new "Backfill last 14 days" button:
+some students already had their recording's shortcut added manually
+during the window this app couldn't see the new Drive location at
+all. Real risk — the backfill will discover those exact same
+recordings as brand new (no row for them existed before), and a
+match (auto or manual) would have created a SECOND shortcut in the
+same folder pointing at the same file, plus a redundant "your
+recording is ready" notification.
+
+[attachRecordingToStudent/attachRecordingToGroupLesson](lib/admin/recording-matching.ts)
+now check `findShortcutTargeting` (already existed, previously only
+used by Unmatch) before creating a shortcut — an existing one pointing
+at the same file skips both the duplicate shortcut and the
+notification, while still marking the recording matched so it comes
+out of the manual-review queue regardless.
+
+`npx tsc --noEmit -p .` and `next build` both clean. Safe to click
+Backfill now.
+
 ## Recordings backfill: CRON_SECRET can't actually be read back out of Vercel (2026-09-22)
 
 Tried to run the one-time `?days=14` historical backfill myself right
