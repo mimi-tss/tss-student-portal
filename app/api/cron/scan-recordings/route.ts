@@ -22,6 +22,15 @@ const MATCH_FAIL_GRACE_HOURS = 3;
 const HEALTH_CHECK_STALE_HOURS = 4;
 const CRON_JOB_NAME = "scan-recordings";
 
+// No new recording landing in the shared Drive inbox for this long,
+// while real sessions are happening, means the recording pipeline
+// itself is broken (Meet not recording, a coach's own recording
+// setting, Drive access) — not just an individual match failure. Wider
+// than HEALTH_CHECK_STALE_HOURS on purpose: a coach can legitimately
+// go most of a day without a session recording depending on their
+// schedule, so this only needs to fire on a real multi-day silence.
+const RECORDING_PIPELINE_STALE_HOURS = 24;
+
 // Runs the exact same scan + auto-match pass the admin Recordings page
 // (app/api/admin/meet-recordings/route.ts) triggers on load — pulled
 // out so it can also run unattended, on a schedule, via GitHub Actions
@@ -93,6 +102,53 @@ export async function GET(req: NextRequest) {
       text: `Recording needs manual review — no auto-match found: ${r.file_name} (${coachName})`,
     });
     matchFailAlerted++;
+  }
+
+  // The alert above only ever covers a recording that DID arrive and
+  // then failed to auto-match — it says nothing when the pipeline stops
+  // delivering recordings at all. Confirmed live this is a real, silent
+  // failure mode: the shared Meet-recordings Drive folder went 12 days
+  // with zero new files, across every coach, and nothing above would
+  // ever have caught it — with 0 recordings sitting "unmatched," the
+  // per-recording alert has nothing to fire on even during a total
+  // blackout. This checks the inverse question: is there a real,
+  // recent session that should have produced a recording, with no
+  // recording newer than it anywhere in the table at all (not just
+  // unmatched — a genuinely dead pipeline means nothing new lands in
+  // ANY status). One alert a day while this stays true, not one per
+  // stale session, same dedup shape as the cron heartbeat check above.
+  const { data: latestRecording } = await admin
+    .from("meet_recordings")
+    .select("drive_created_at")
+    .order("drive_created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const pipelineStaleCutoff = new Date(Date.now() - RECORDING_PIPELINE_STALE_HOURS * 60 * 60 * 1000);
+  const pipelineLooksStale =
+    !latestRecording || new Date(latestRecording.drive_created_at).getTime() < pipelineStaleCutoff.getTime();
+
+  if (pipelineLooksStale) {
+    const { count: recentMissingCount } = await admin
+      .from("attention_items")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", "recording_missing")
+      .gte("created_at", pipelineStaleCutoff.toISOString());
+
+    // Only worth an alert if real sessions are actually happening and
+    // going unrecorded — a quiet studio (no due sessions) legitimately
+    // has no new recordings either, and that's not a pipeline problem.
+    if (recentMissingCount && recentMissingCount > 0) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const sinceText = latestRecording
+        ? `since ${latestRecording.drive_created_at}`
+        : "ever (no recordings in the table at all)";
+      await notifyStaff(admin, {
+        kind: "recording_pipeline_stale",
+        dedupKey: `staff:recording_pipeline_stale:${todayStr}`,
+        text: `⚠️ No new Meet recordings have landed in the Drive inbox ${sinceText}, but ${recentMissingCount} session(s) in that window have no recording — the recording pipeline itself may be broken (check each coach's Meet recording settings), not just individual match failures.`,
+      });
+    }
   }
 
   // Reconciles recording_missing/recording_unmatched (plus the other 5
