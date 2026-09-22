@@ -8586,22 +8586,18 @@ Code now points at the new location and understands its per-meeting-
 subfolder shape; the earlier "check why Meet stopped recording" item
 below is superseded by this, nothing further needed there.
 
-**New — migration 0108 needs to run** before `recording_pipeline_stale`
-(the new Needs-Review-only alert replacing the earlier Slack one) can
-actually insert anything — the table/index/RPC it needs don't exist
-until this applies:
-[0108_recording_pipeline_stale_attention_item.sql](supabase/migrations/0108_recording_pipeline_stale_attention_item.sql).
-Please confirm once applied. Not urgent — nothing breaks without it,
-that specific alert just can't fire yet (everything else shipped
-today works regardless).
-
-**Not action-needed-from-you, just flagging so it's not a surprise**:
-once 0108 is applied, plan is to run the scan-recordings cron route
-once with `?days=14` (a manual-only backfill parameter, still
-`CRON_SECRET`-gated) to pull in the real Sep 10–22 backlog — the
-ordinary 3-day window can't reach back that far on its own. I'll do
-that myself with the existing `CRON_SECRET`, no action needed from you
-for that part.
+**Migration 0108 confirmed applied** (2026-09-22) — user replied
+"successful"; verified directly against the real Supabase project
+rather than assumed (the same real-DB-verification convention every
+other migration here follows): inserted a real
+`recording_pipeline_stale` row (proves the CHECK constraint accepts
+the new kind), a second insert against the same still-open kind
+correctly 23505'd on `attention_items_recording_pipeline_stale_uidx`
+(proves the partial unique index exists), and calling
+`attention_item_upsert_recording_pipeline_stale` as service role
+correctly failed with "admin only" rather than "function does not
+exist" (proves the RPC itself exists and its admin gate works). Test
+row cleaned up after. Closed.
 
 Separately, still true and still worth doing whenever convenient:
 **`SLACK_WEBHOOK_URL` is unset in Vercel** — every OTHER staff Slack
