@@ -3,6 +3,37 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Recordings backfill: CRON_SECRET can't actually be read back out of Vercel (2026-09-22)
+
+Tried to run the one-time `?days=14` historical backfill myself right
+after confirming migration 0108, using the `CRON_SECRET` value from
+`.env.local` — got a real 401. Checked `cron_heartbeats` directly: the
+actual scheduled job (GitHub Actions) had run successfully 22 minutes
+earlier, so the deployed fix and the real secret both work fine — my
+local copy of `CRON_SECRET` is just stale/wrong. You then correctly
+pointed out why asking for the real value wouldn't work either: Vercel
+"Sensitive" env vars are write-only once saved — nobody, including
+whoever originally set it, can read it back out of the dashboard.
+
+Real fix, not a workaround: the admin Recordings page already had a
+"Check now" button (`/api/admin/meet-recordings/rescan`) gated by a
+real logged-in admin session, not `CRON_SECRET` at all — same
+scan/match functions the cron job uses. Gave that route an optional
+`days` override and added a second button next to it, **"Backfill
+last 14 days"** — reachable from the browser, no secret needed,
+period. This is also just a better permanent answer than a curl
+command: if Google ever reorganizes this folder again, whoever's
+logged in can fix it themselves without needing anyone to hunt down a
+secret that structurally can't be retrieved.
+
+The good news in the meantime: the regular 2-hour cron is healthy and
+already picking up the last ~3 days on its own with the corrected
+folder — only the older Sep 10–19 slice actually needs the manual
+button. **Next step: click "Backfill last 14 days" on the Recordings
+page** to pull in the rest.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration.
+
 ## Found it: Google restructured the Meet-recordings Drive folder (2026-09-22)
 
 Direct follow-up to the entry right below this one. You found the new
