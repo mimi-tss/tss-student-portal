@@ -78,10 +78,13 @@ export function identifyCoach(fileName: string, coaches: CoachForMatching[]): st
 // owning coach's own timezone (falls back to Eastern if the coach
 // couldn't be identified from the filename) — see the migration's own
 // comment for why this has to be a calendar day, not a raw timestamp.
-export async function scanForNewRecordings(admin: SupabaseClient): Promise<{ inserted: number }> {
+export async function scanForNewRecordings(
+  admin: SupabaseClient,
+  lookbackDays?: number,
+): Promise<{ inserted: number }> {
   const [{ data: coaches }, files] = await Promise.all([
     admin.from("coaches").select("id, name, timezone, meet_link"),
-    listMeetRecordingsInbox(),
+    listMeetRecordingsInbox(lookbackDays),
   ]);
 
   if (!files.length) return { inserted: 0 };
@@ -194,6 +197,7 @@ export async function attachRecordingToStudent(
       coachId: recording.coach_id,
       studentId,
       studentName: student.name,
+      driveFileId: recording.drive_file_id,
       fileName: recording.file_name,
       driveCreatedAt: recording.drive_created_at,
     });
@@ -477,7 +481,15 @@ const ATTRIBUTED_NAME_PATTERN = /[[(]([A-Z][a-zA-Z'-]+(?:\s[A-Z][a-zA-Z'-]+)+)[\
 // to "Natalie Semon" (her mom) throughout, never "Angelica" once.
 async function learnRecordingAlias(
   admin: SupabaseClient,
-  opts: { recordingId: string; coachId: string; studentId: string; studentName: string; fileName: string; driveCreatedAt: string },
+  opts: {
+    recordingId: string;
+    coachId: string;
+    studentId: string;
+    studentName: string;
+    driveFileId: string;
+    fileName: string;
+    driveCreatedAt: string;
+  },
 ): Promise<void> {
   try {
     const labelMatch = opts.fileName.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2} [A-Z]{2,4}/);
@@ -493,7 +505,7 @@ async function learnRecordingAlias(
       if (siblings && siblings.length > 0) return;
     }
 
-    const candidates = await findGeminiNotesForRecording(opts.fileName, opts.driveCreatedAt);
+    const candidates = await findGeminiNotesForRecording(opts.driveFileId, opts.fileName, opts.driveCreatedAt);
     if (candidates.length !== 1) return;
 
     const text = await exportDocText(candidates[0].id);
@@ -574,7 +586,7 @@ const NAME_MATCH_BATCH_SIZE = 8;
 export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
   const { data: unmatched } = await admin
     .from("meet_recordings")
-    .select("id, coach_id, file_name, drive_created_at")
+    .select("id, coach_id, drive_file_id, file_name, drive_created_at")
     .eq("status", "unmatched")
     .not("coach_id", "is", null)
     .order("drive_created_at", { ascending: true })
@@ -627,7 +639,11 @@ export async function runNameMatching(admin: SupabaseClient): Promise<{ matched:
       const coachEmail = coachEmailById.get(rec.coach_id as string);
       if (!coachEmail) return null;
 
-      const candidates = await findGeminiNotesForRecording(rec.file_name as string, rec.drive_created_at as string);
+      const candidates = await findGeminiNotesForRecording(
+        rec.drive_file_id as string,
+        rec.file_name as string,
+        rec.drive_created_at as string,
+      );
       for (const candidate of candidates) {
         const text = await exportDocText(candidate.id);
         if (text.toLowerCase().includes(coachEmail)) {

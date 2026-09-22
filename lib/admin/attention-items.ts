@@ -29,7 +29,8 @@ export type AttentionKind =
   | "group_lesson_understaffed"
   | "kajabi_grant_failed"
   | "pause_request"
-  | "change_plan_request";
+  | "change_plan_request"
+  | "recording_pipeline_stale";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
@@ -342,7 +343,52 @@ export async function syncComputedAttentionItems(supabase: SupabaseClient) {
   }
 
   await syncRecordingAttentionItems(supabase);
+  await syncRecordingPipelineStaleAttentionItem(supabase);
   await syncFifthWeekAttentionItems(supabase);
+}
+
+// No new recording landing in the shared Drive inbox for this long,
+// while real sessions are happening, means the recording pipeline
+// itself is broken (Meet not recording, a coach's own recording
+// setting, Drive access) — not just an individual recording_missing or
+// recording_unmatched case, and neither of those two catches it:
+// confirmed live, a 12-day total blackout produced zero
+// recording_unmatched rows (nothing was arriving to even fail to
+// match) while recording_missing kept firing per-session the whole
+// time, with nothing tying those together into "the pipeline itself
+// looks dead." Wider than the per-recording grace period on purpose —
+// a coach can legitimately go most of a day without a session
+// depending on their schedule, this only needs to fire on a real
+// multi-day silence. Needs-Review-only, no Slack — this replaced an
+// earlier Slack-only attempt in scan-recordings per direct request.
+const RECORDING_PIPELINE_STALE_HOURS = 24;
+
+async function syncRecordingPipelineStaleAttentionItem(supabase: SupabaseClient) {
+  const { data: latestRecording } = await supabase
+    .from("meet_recordings")
+    .select("drive_created_at")
+    .order("drive_created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const staleCutoff = new Date(Date.now() - RECORDING_PIPELINE_STALE_HOURS * 60 * 60 * 1000);
+  const looksStale = !latestRecording || new Date(latestRecording.drive_created_at).getTime() < staleCutoff.getTime();
+  if (!looksStale) return;
+
+  // Only worth flagging if real sessions are actually happening and
+  // going unrecorded — a quiet studio (no due sessions) legitimately
+  // has no new recordings either, and that's not a pipeline problem.
+  const { count: recentMissingCount } = await supabase
+    .from("attention_items")
+    .select("id", { count: "exact", head: true })
+    .eq("kind", "recording_missing")
+    .gte("created_at", staleCutoff.toISOString());
+  if (!recentMissingCount) return;
+
+  const sinceText = latestRecording ? `since ${latestRecording.drive_created_at}` : "ever (no recordings on record at all)";
+  await supabase.rpc("attention_item_upsert_recording_pipeline_stale", {
+    p_summary: `No new Meet recordings have landed in the Drive inbox ${sinceText}, but ${recentMissingCount} session(s) in that window have no recording — check each coach's Meet recording settings, not just individual matches.`,
+  });
 }
 
 // Weekly-cadence Pro/Elite students only — Suite has no session cap to

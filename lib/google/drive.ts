@@ -365,16 +365,27 @@ export async function removeStudentFolderItem(folderId: string, fileId: string):
   });
 }
 
-// Meet's fixed auto-save destination for every recording made under the
-// admin account (GOOGLE_ADMIN_EMAIL) — confirmed live: every coach's
-// recordings (Celine, Ivan, Nikki, Tara) land here regardless of whose
-// persistent room recorded it, since Meet's recording destination is
-// per-organizer-account, not per-room. There is no Workspace admin
-// setting on this account's plan to redirect it elsewhere (confirmed by
-// reviewing the actual Meet admin console — no "recording file
-// location" option present on this edition), so this is the one place
-// to watch for new recordings.
-export const MEET_RECORDINGS_INBOX_FOLDER_ID = "1TU_dSfCkJvzcUswFHb-MDQ5c8VMA3ZUd";
+// Meet's auto-save destination for every recording made under the admin
+// account (GOOGLE_ADMIN_EMAIL) — every coach's recordings (Celine, Ivan,
+// Nikki, Tara) land here regardless of whose persistent room recorded
+// it, since Meet's recording destination is per-organizer-account, not
+// per-room.
+//
+// This is the SECOND value this constant has ever held. Google silently
+// restructured how Meet organizes this folder around 2026-09-10 — files
+// used to land as flat siblings directly inside one folder; confirmed
+// live it's now one subfolder PER MEETING (a dated one-off folder for a
+// single occurrence, or a persistent "<room name> (recurring)" folder
+// for a coach's own standing room), with each meeting's recording/notes/
+// transcript nested one level inside that. The OLD folder id above this
+// comment used to point at the flat layout and went completely silent
+// the moment this happened — confirmed a 12-day, every-coach blackout
+// this way before finding the new location. `listMeetRecordingsInbox`
+// below is two-level (list qualifying subfolders, then each one's own
+// files) specifically because of this — there's no guarantee Google
+// doesn't restructure this again, but at least the subfolder-per-meeting
+// shape is unlikely to flatten back out on its own.
+export const MEET_RECORDINGS_INBOX_FOLDER_ID = "1Pw6ESQMVx97jsWnoNVj6a_EhI7JnDKT4";
 
 export interface MeetRecordingFile {
   id: string;
@@ -397,19 +408,70 @@ export interface MeetRecordingFile {
 // implemented (pagination, page size, etc.).
 const RECORDING_SCAN_LOOKBACK_DAYS = 3;
 
+// A "(recurring)" subfolder (one per coach's own standing personal
+// room) is a PERSISTENT container Meet keeps adding to indefinitely,
+// not a per-occurrence one — its own createdTime is from whenever that
+// room's very first recording ever landed, so filtering subfolders by
+// their own age would silently stop watching it after day one. A
+// dated one-off meeting folder ("<name> - YYYY/MM/DD HH:MM EDT") IS
+// created fresh per occurrence, so age-filtering those is exactly
+// right (an old one will never receive a new file anyway). This
+// query's OR lets both shapes coexist: any subfolder still young
+// enough to matter, plus every recurring one regardless of age — the
+// per-FILE createdTime filter inside each one (below) is what actually
+// bounds how much of a recurring folder's long history gets re-walked
+// every run.
+async function listQualifyingMeetingSubfolders(
+  drive: ReturnType<typeof getDriveClient>,
+  cutoffIso: string,
+): Promise<{ id: string; name: string }[]> {
+  const res = await drive.files.list({
+    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and (createdTime > '${cutoffIso}' or name contains '(recurring)')`,
+    pageSize: 100,
+    fields: "files(id, name)",
+  });
+  return (res.data.files ?? [])
+    .filter((f) => f.id)
+    .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled" }));
+}
+
 // Lists recent recordings sitting in the shared Meet-recordings inbox —
 // feeds lib/admin/recording-matching.ts's scan step, which diffs this
 // against meet_recordings.drive_file_id to find newly-arrived files.
-export async function listMeetRecordingsInbox(): Promise<MeetRecordingFile[]> {
+// Two-level: each meeting now gets its own subfolder (see
+// MEET_RECORDINGS_INBOX_FOLDER_ID's own comment for why), so this
+// finds the qualifying subfolders first, then each one's own recording
+// file(s) — a single meeting can have more than one recording (a
+// dropped/rejoined call produces "Recording", "Recording 2", etc., all
+// real, none to be silently dropped).
+//
+// `lookbackDays` defaults to the steady-state window but can be widened
+// for a one-time historical catch-up (see the cron route's own `days`
+// query param) without touching this constant, which stays tight for
+// ordinary runs specifically to avoid re-walking a recurring folder's
+// entire history every 2 hours.
+export async function listMeetRecordingsInbox(
+  lookbackDays: number = RECORDING_SCAN_LOOKBACK_DAYS,
+): Promise<MeetRecordingFile[]> {
   const drive = getDriveClient();
-  const cutoff = new Date(Date.now() - RECORDING_SCAN_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const res = await drive.files.list({
-    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'video/mp4' and createdTime > '${cutoff}'`,
-    orderBy: "createdTime desc",
-    pageSize: 200,
-    fields: "files(id, name, createdTime)",
-  });
-  return (res.data.files ?? [])
+  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const subfolders = await listQualifyingMeetingSubfolders(drive, cutoff);
+  if (!subfolders.length) return [];
+
+  const perFolder = await Promise.all(
+    subfolders.map((folder) =>
+      drive.files.list({
+        q: `'${folder.id}' in parents and trashed = false and mimeType = 'video/mp4' and createdTime > '${cutoff}'`,
+        orderBy: "createdTime desc",
+        pageSize: 50,
+        fields: "files(id, name, createdTime)",
+      }),
+    ),
+  );
+
+  return perFolder
+    .flatMap((res) => res.data.files ?? [])
     .filter((f) => f.id && f.createdTime)
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
 }
@@ -436,15 +498,29 @@ export interface GeminiNotesCandidate {
 const LABEL_PATTERN = /\d{4}\/\d{2}\/\d{2} \d{2}:\d{2} EDT/;
 
 export async function findGeminiNotesForRecording(
+  recordingFileId: string,
   recordingFileName: string,
   recordingCreatedTime: string,
 ): Promise<GeminiNotesCandidate[]> {
   const drive = getDriveClient();
   const labelMatch = recordingFileName.match(LABEL_PATTERN);
 
+  // The notes doc for a recording is now always its own sibling —
+  // Meet groups everything from one meeting into that meeting's own
+  // subfolder (see MEET_RECORDINGS_INBOX_FOLDER_ID's own comment) —
+  // so this searches the recording's OWN parent, not the shared root.
+  // Still worth two lookups (label match, then a time-window fallback)
+  // rather than just listing the whole subfolder: a "(recurring)" room
+  // folder holds every past meeting's files together, so an unscoped
+  // listing would return every notes doc that room has ever produced,
+  // not just this meeting's.
+  const fileMeta = await drive.files.get({ fileId: recordingFileId, fields: "parents" });
+  const parentFolderId = fileMeta.data.parents?.[0];
+  if (!parentFolderId) return [];
+
   if (labelMatch) {
     const res = await drive.files.list({
-      q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains '${labelMatch[0]}'`,
+      q: `'${parentFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains '${labelMatch[0]}'`,
       fields: "files(id, name)",
       pageSize: 5,
     });
@@ -459,7 +535,7 @@ export async function findGeminiNotesForRecording(
   const start = new Date(center - windowMinutes * 60 * 1000).toISOString();
   const end = new Date(center + windowMinutes * 60 * 1000).toISOString();
   const res = await drive.files.list({
-    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains 'Notes by Gemini' and createdTime > '${start}' and createdTime < '${end}'`,
+    q: `'${parentFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document' and name contains 'Notes by Gemini' and createdTime > '${start}' and createdTime < '${end}'`,
     fields: "files(id, name)",
     pageSize: 10,
   });
