@@ -100,10 +100,21 @@ export default function RecordingsClient() {
   // automatically every 2 hours in the background regardless
   // (.github/workflows/scan-recordings.yml); this button is only for
   // "check right now" instead of waiting for the next scheduled pass.
-  async function rescan() {
+  // `days` widens the ordinary 3-day scan window for a one-time
+  // historical catch-up (the "Backfill" button below) — e.g. the
+  // 2026-09-10 Drive restructure (see PROGRESS.md) went undetected long
+  // enough that the normal window couldn't reach back far enough once
+  // found, and CRON_SECRET can't be read back out of Vercel to trigger
+  // the cron route's own equivalent manually. Omitted, this is exactly
+  // the ordinary "check right now" call it always was.
+  async function rescan(days?: number) {
     setRescanning(true);
     setError(null);
-    const res = await fetch("/api/admin/meet-recordings/rescan", { method: "POST" });
+    const res = await fetch("/api/admin/meet-recordings/rescan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ days }),
+    });
     const data = await res.json().catch(() => ({}));
     setRescanning(false);
     if (!res.ok) {
@@ -214,9 +225,19 @@ export default function RecordingsClient() {
           dismiss if it&apos;s not a lesson recording (an internal meeting, a personal call). New recordings are
           checked automatically every 2 hours.
         </p>
-        <button className={styles.linkBtnSmall} disabled={rescanning} onClick={rescan} style={{ flexShrink: 0 }}>
-          {rescanning ? "Checking…" : "Check now"}
-        </button>
+        <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
+          <button className={styles.linkBtnSmall} disabled={rescanning} onClick={() => rescan()}>
+            {rescanning ? "Checking…" : "Check now"}
+          </button>
+          <button
+            className={styles.linkBtnSmall}
+            disabled={rescanning}
+            onClick={() => rescan(14)}
+            title="Widen the scan window to catch up on an older gap (e.g. Drive moved/restructured and the normal 3-day window can't reach back far enough)"
+          >
+            Backfill last 14 days
+          </button>
+        </span>
       </div>
       {autoMatched > 0 && (
         <p className={styles.panelText}>
