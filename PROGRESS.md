@@ -3,6 +3,29 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## Coach never got a Slack ping when their recurring weekly schedule changed (2026-09-22)
+
+You flagged it plainly: "coach is not notified on slack when recurring
+schedule is changed." Checked — true, and a real gap, not a
+misconfiguration: [recurring-schedule](app/api/admin/recurring-schedule/route.ts)'s
+POST (create/edit) and DELETE (remove) both silently materialize or
+clear real `sessions` rows without ever touching notifications at
+all. A one-off booking/cancel already Slacks the coach
+(`notifyCoachSessionEvent`, lib/notifications/session-events.ts) —
+this was just never extended to the recurring-schedule path.
+
+New `notifyCoachRecurringScheduleEvent` sends one consolidated ping
+per save/remove — e.g. "Weekly schedule updated: Fridays 7:30 PM with
+Victoria Alvarez, starting Oct 2" — not one per materialized
+occurrence (same reasoning the group-lesson bulk-register path
+already uses to avoid spamming a coach with dozens of identical
+messages). Covers every path into that route, including last week's
+reactivate-a-removed-slot fix (Victoria's own case).
+
+`npx tsc --noEmit -p .` and `next build` both clean. Not live-verified
+against a real Slack webhook — no login here. No migration;
+`notification_log` and `coaches.slack_webhook_url` already existed.
+
 ## Anna Marie Datsun: not missing, misnamed — plus two real dead-ends this surfaced, plus real Stripe subscriptions from the manual-add form (2026-09-17)
 
 You couldn't add "Anna Marie Datsun" (duplicate-email error) and
