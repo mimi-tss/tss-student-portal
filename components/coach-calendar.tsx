@@ -762,6 +762,9 @@ export default function CoachCalendar({
           <span className="inline-block h-3 w-3 bg-[var(--slot-biweekly)]" /> Biweekly student
         </span>
         <span className="flex items-center gap-1">
+          <span className="inline-block h-3 w-3 bg-[var(--slot-makeup)]" /> Makeup
+        </span>
+        <span className="flex items-center gap-1">
           <span className="inline-block h-3 w-3 bg-[var(--slot-group)]" /> Group lesson
         </span>
         <span className="flex items-center gap-1">
@@ -948,6 +951,7 @@ export default function CoachCalendar({
                   const state = cellState(dayKey, minutes);
                   const isTrial = state.type === "session" && state.session.isTrial;
                   const isBiweekly = state.type === "session" && state.session.isBiweekly;
+                  const isMakeup = state.type === "session" && state.session.isMakeup;
                   const isPast =
                     state.type === "session" &&
                     new Date(state.session.scheduledAt) <= new Date();
@@ -995,16 +999,18 @@ export default function CoachCalendar({
                               : state.type === "session"
                                 ? isTrial
                                   ? "bg-[var(--slot-trial)] text-[var(--slot-trial-text)]"
-                                  : isBiweekly
-                                    ? "bg-[var(--slot-biweekly)] text-[var(--slot-biweekly-text)]"
-                                    : "bg-[var(--gold)] text-[var(--gold-text)]"
+                                  : isMakeup
+                                    ? "bg-[var(--slot-makeup)] text-[var(--slot-makeup-text)]"
+                                    : isBiweekly
+                                      ? "bg-[var(--slot-biweekly)] text-[var(--slot-biweekly-text)]"
+                                      : "bg-[var(--gold)] text-[var(--gold-text)]"
                                 : state.type === "block"
                                   ? "bg-[var(--slot-blocked)] text-[var(--text-muted)]"
                                   : "bg-[var(--bg)] text-[var(--text-muted)]"
                       }`}
                       title={
                         state.type === "session"
-                          ? `${state.session.studentName}${isTrial ? " (trial — pitch Pro upgrade)" : isBiweekly ? " (biweekly)" : ""} — ${state.session.status}${canCancelSession ? " — click to cancel" : ""}`
+                          ? `${state.session.studentName}${isTrial ? " (trial — pitch Pro upgrade)" : isMakeup ? " (makeup)" : isBiweekly ? " (biweekly)" : ""} — ${state.session.status}${canCancelSession ? " — click to cancel" : ""}`
                           : state.type === "group"
                             ? `${state.groupLesson.topic || "Group Lesson"} — ${state.groupLesson.attendees.length} student${state.groupLesson.attendees.length === 1 ? "" : "s"}${canCancelGroup ? " — click to cancel" : ""}`
                             : state.type === "held"

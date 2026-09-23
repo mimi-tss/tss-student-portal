@@ -35,6 +35,7 @@ export interface TodaySession {
   durationMinutes: number;
   status: string;
   isTrial: boolean;
+  isMakeup: boolean;
   isBiweekly: boolean;
   studentId: string;
   studentName: string;
@@ -61,7 +62,7 @@ export async function getTodaysSchedule(
   // see statusDotClass/STATUS_LABEL in dashboard-client.tsx).
   const { data } = await supabase
     .from("sessions")
-    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier), recurring_schedules(cadence)")
+    .select("id, scheduled_at, duration_minutes, status, is_trial, is_makeup, student_id, students(name, tier), recurring_schedules(cadence)")
     .eq("actual_coach_id", coachId)
     .gte("scheduled_at", dayStart.toISOString())
     .lt("scheduled_at", dayEnd.toISOString())
@@ -77,6 +78,7 @@ export async function getTodaysSchedule(
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      isMakeup: s.is_makeup,
       isBiweekly: isBiweeklyJoin(s.recurring_schedules),
       studentId: s.student_id,
       studentName: student?.name ?? "Student",
@@ -109,7 +111,7 @@ export async function getPastUnmarkedAttendance(
 
   const { data } = await supabase
     .from("sessions")
-    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier), recurring_schedules(cadence)")
+    .select("id, scheduled_at, duration_minutes, status, is_trial, is_makeup, student_id, students(name, tier), recurring_schedules(cadence)")
     .eq("actual_coach_id", coachId)
     .eq("status", "scheduled")
     .gte("scheduled_at", lookbackStart.toISOString())
@@ -124,6 +126,7 @@ export async function getPastUnmarkedAttendance(
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      isMakeup: s.is_makeup,
       isBiweekly: isBiweeklyJoin(s.recurring_schedules),
       studentId: s.student_id,
       studentName: student?.name ?? "Student",
