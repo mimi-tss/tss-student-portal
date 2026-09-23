@@ -7,6 +7,7 @@ import { TimeZoneProvider } from "@/components/timezone-context";
 import NotificationBell from "@/components/notification-bell";
 import ProfileMenu from "@/components/profile-menu";
 import ThemeToggle from "@/components/theme-toggle";
+import BugReportButton from "@/components/bug-report-button";
 import StudentNav from "./student-nav";
 import styles from "./student.module.css";
 
@@ -50,6 +51,7 @@ export default async function StudentLayout({
           </div>
           <StudentNav />
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <BugReportButton defaultEmail={user.email ?? ""} />
             <ThemeToggle />
             <NotificationBell />
             <ProfileMenu initials={initials(student.name)} />
