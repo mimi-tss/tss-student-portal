@@ -3,6 +3,43 @@
 Working notes so nothing gets lost across sessions. Update this file at the
 end of each work session rather than relying on chat history.
 
+## The recordings pipeline is actually fixed now — real root cause was a Drive sharing gap (2026-09-22)
+
+Direct follow-up to the entries below. Clicking "Backfill last 14
+days" kept returning `inserted: 0` even after the Drive-restructure
+code fix — a real mystery, since a local script using the identical
+code path had already confirmed 124 real recordings sitting there.
+Added a temporary diagnostic to the rescan route (subfolder count,
+which Google identity production's credentials resolve to, a sanity
+check against the old folder) rather than keep guessing, and it
+answered immediately: **production's Google credentials impersonate
+`mimi@tarasimonstudios.com`, not `info@tarasimonstudios.com`.** The
+new "Google Meet" folder is Meet's own auto-created folder, owned
+solely by `info@` — nothing shared it with anyone. The OLD folder,
+by contrast, had "Anyone with the link: reader" enabled (confirmed by
+listing its actual permissions), which is the only reason `mimi@`
+could ever see it. Nobody had extended that same sharing to the new
+location.
+
+This was never a code bug at all — granted the identical "Anyone with
+the link: reader" permission on the new folder directly (confirmed
+first via the debug route that this flipped `mimi@`'s own visible
+subfolder count from 0 to 34), then ran the real backfill immediately
+after: **125 recordings inserted, 2 auto-matched, 123 now sitting in
+the Recordings queue for a real review** — the actual backlog, finally
+visible and actionable. Removed the temporary diagnostic code once
+confirmed resolved.
+
+Worth knowing for next time Google reorganizes this folder again (and
+it may): the fix isn't only ever a code change — check who the
+Vercel-deployed credentials actually resolve to (`drive.about.get()`)
+and whether that identity has real access to wherever Google put
+things this time, same as this incident.
+
+`npx tsc --noEmit -p .` and `next build` both clean. No migration; no
+Vercel env var changed either — this was a Drive-native permission
+grant, not application configuration.
+
 ## Backfill dedup: don't double-link a recording already shared manually (2026-09-22)
 
 You flagged it before running the new "Backfill last 14 days" button:
