@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { getGoogleAuth, DRIVE_SCOPES } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export function getDriveClient() {
+function getDriveClient() {
   return google.drive({ version: "v3", auth: getGoogleAuth(DRIVE_SCOPES) });
 }
 
@@ -421,7 +421,7 @@ const RECORDING_SCAN_LOOKBACK_DAYS = 3;
 // per-FILE createdTime filter inside each one (below) is what actually
 // bounds how much of a recurring folder's long history gets re-walked
 // every run.
-export async function listQualifyingMeetingSubfolders(
+async function listQualifyingMeetingSubfolders(
   cutoffIso: string,
 ): Promise<{ id: string; name: string }[]> {
   const drive = getDriveClient();
