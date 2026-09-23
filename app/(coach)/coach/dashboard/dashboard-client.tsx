@@ -49,6 +49,7 @@ function statusDotClass(session: TodaySession): string {
   if (session.status === "cancelled-no-notice" || session.status === "paused" || session.status === "holiday")
     return styles.dotHeld;
   if (session.isTrial) return styles.dotTrial;
+  if (session.isBiweekly) return styles.dotBiweekly;
   return styles.dotUpcoming;
 }
 
@@ -427,7 +428,7 @@ export default function DashboardClient({
                         <div className={styles.scheduleRowName}>{row.s.studentName}</div>
                         <div className={styles.scheduleRowSub}>
                           {TIER_LABEL[row.s.tier] ?? row.s.tier} · {row.s.durationMinutes} min
-                          {row.s.isTrial ? " · Trial" : ""}
+                          {row.s.isTrial ? " · Trial" : row.s.isBiweekly ? " · Biweekly" : ""}
                           {STATUS_LABEL[row.s.status] ? ` · ${STATUS_LABEL[row.s.status]}` : ""}
                         </div>
                       </span>

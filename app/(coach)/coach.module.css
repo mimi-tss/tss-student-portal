@@ -316,6 +316,7 @@
 .dotAttended { background: #4ade80; }
 .dotNoShow { background: var(--coral); }
 .dotTrial { background: var(--slot-trial); }
+.dotBiweekly { background: var(--slot-biweekly); }
 .dotGroup { background: var(--slot-group); }
 .dotHeld { background: var(--slot-held); }
 .scheduleRowTime {

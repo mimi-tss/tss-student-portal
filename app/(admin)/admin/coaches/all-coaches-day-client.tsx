@@ -68,6 +68,7 @@ interface Session {
   status: string;
   isTrial: boolean;
   isMakeup: boolean;
+  isBiweekly: boolean;
   studentId: string;
   studentName: string;
 }
@@ -558,6 +559,7 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
         <span><span style={legendDotStyle("var(--slot-open)")} />Available</span>
         <span><span style={legendDotStyle("var(--gold)")} />Scheduled</span>
         <span><span style={legendDotStyle("var(--slot-trial)")} />Trial lesson</span>
+        <span><span style={legendDotStyle("var(--slot-biweekly)")} />Biweekly student</span>
         <span><span style={legendDotStyle("var(--slot-group)")} />Group lesson</span>
         <span><span style={legendDotStyle("var(--slot-blocked)", true)} />Blocked</span>
         <span><span style={legendDotStyle("var(--slot-held)")} />Held (no booking)</span>
@@ -610,14 +612,14 @@ export default function AllCoachesDayClient({ coaches }: { coaches: CoachRow[] }
                     state.type === "available" ? "var(--slot-open)"
                     : state.type === "group" ? "var(--slot-group)"
                     : state.type === "held" ? "var(--slot-held)"
-                    : state.type === "session" ? (state.session.isTrial ? "var(--slot-trial)" : "var(--gold)")
+                    : state.type === "session" ? (state.session.isTrial ? "var(--slot-trial)" : state.session.isBiweekly ? "var(--slot-biweekly)" : "var(--gold)")
                     : state.type === "block" ? "var(--slot-blocked)"
                     : "var(--bg)";
                   const fg =
                     state.type === "available" ? "var(--text-muted)"
                     : state.type === "group" ? "var(--slot-group-text)"
                     : state.type === "held" ? "var(--slot-held-text)"
-                    : state.type === "session" ? (state.session.isTrial ? "var(--slot-trial-text)" : "var(--gold-text)")
+                    : state.type === "session" ? (state.session.isTrial ? "var(--slot-trial-text)" : state.session.isBiweekly ? "var(--slot-biweekly-text)" : "var(--gold-text)")
                     : "var(--text-muted)";
                   const label =
                     state.type === "session" && state.isStart ? (

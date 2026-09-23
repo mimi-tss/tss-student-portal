@@ -1,6 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay, zonedTimeToUtc } from "@/lib/timezone";
-import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/scheduling/recurring";
+import { currentBillingCycleRange, effectiveSessionCycleCap, isBiweeklyJoin } from "@/lib/scheduling/recurring";
 import { getCoachGroupLessons, type CoachGroupLesson } from "@/lib/group-lessons";
 import { calculateAge } from "@/lib/format-date";
 
@@ -35,6 +35,7 @@ export interface TodaySession {
   durationMinutes: number;
   status: string;
   isTrial: boolean;
+  isBiweekly: boolean;
   studentId: string;
   studentName: string;
   tier: string;
@@ -60,7 +61,7 @@ export async function getTodaysSchedule(
   // see statusDotClass/STATUS_LABEL in dashboard-client.tsx).
   const { data } = await supabase
     .from("sessions")
-    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier)")
+    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier), recurring_schedules(cadence)")
     .eq("actual_coach_id", coachId)
     .gte("scheduled_at", dayStart.toISOString())
     .lt("scheduled_at", dayEnd.toISOString())
@@ -76,6 +77,7 @@ export async function getTodaysSchedule(
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      isBiweekly: isBiweeklyJoin(s.recurring_schedules),
       studentId: s.student_id,
       studentName: student?.name ?? "Student",
       tier: student?.tier ?? "",
@@ -107,7 +109,7 @@ export async function getPastUnmarkedAttendance(
 
   const { data } = await supabase
     .from("sessions")
-    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier)")
+    .select("id, scheduled_at, duration_minutes, status, is_trial, student_id, students(name, tier), recurring_schedules(cadence)")
     .eq("actual_coach_id", coachId)
     .eq("status", "scheduled")
     .gte("scheduled_at", lookbackStart.toISOString())
@@ -122,6 +124,7 @@ export async function getPastUnmarkedAttendance(
       durationMinutes: s.duration_minutes,
       status: s.status,
       isTrial: s.is_trial,
+      isBiweekly: isBiweeklyJoin(s.recurring_schedules),
       studentId: s.student_id,
       studentName: student?.name ?? "Student",
       tier: student?.tier ?? "",

@@ -39,6 +39,8 @@
   --slot-blocked: #000000;
   --slot-trial: #f5b942;
   --slot-trial-text: #3d2b00;
+  --slot-biweekly: #38bdf8;
+  --slot-biweekly-text: #062a3d;
   --slot-group: #22c55e;
   --slot-group-text: #052e14;
 
@@ -80,6 +82,8 @@
   --slot-blocked: #46424f;
   --slot-trial: #f5b942;
   --slot-trial-text: #3d2b00;
+  --slot-biweekly: #38bdf8;
+  --slot-biweekly-text: #062a3d;
   --slot-group: #22c55e;
   --slot-group-text: #052e14;
 

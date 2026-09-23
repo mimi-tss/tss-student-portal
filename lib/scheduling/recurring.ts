@@ -85,6 +85,16 @@ export const CYCLE_SESSION_CAP = 4;
 // billing-cycle-anchored CYCLE_SESSION_CAP weekly schedules use.
 export type ScheduleCadence = "weekly" | "biweekly";
 
+// Whether a session came from a biweekly recurring schedule, given the
+// `recurring_schedules(cadence)` embed on a sessions query (PostgREST
+// can hand back an object or a one-element array). Drives the distinct
+// biweekly color on the coach/admin calendars so a coach can tell at a
+// glance which students are on the every-other-week arrangement.
+export function isBiweeklyJoin(join: unknown): boolean {
+  const row = Array.isArray(join) ? join[0] : join;
+  return (row as { cadence?: string } | null | undefined)?.cadence === "biweekly";
+}
+
 // The effective "sessions per cycle" cap shown on the coach/student
 // dashboards. Suite tier stays unlimited (null) regardless of cadence;
 // everyone else sums a per-schedule contribution — CYCLE_SESSION_CAP (4)

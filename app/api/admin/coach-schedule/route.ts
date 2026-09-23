@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCoachGroupLessons } from "@/lib/group-lessons";
-import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
+import { getHeldRecurringSlots, isBiweeklyJoin } from "@/lib/scheduling/recurring";
 
 // Admin equivalent of app/api/coach/schedule — same shape, but for any
 // coach (relies on the "admins can view all ..." RLS policies, not just
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       .gte("end_at", start),
     supabase
       .from("sessions")
-      .select("id, scheduled_at, duration_minutes, status, is_trial, is_makeup, student_id, students(name)")
+      .select("id, scheduled_at, duration_minutes, status, is_trial, is_makeup, student_id, students(name), recurring_schedules(cadence)")
       .eq("actual_coach_id", coach.id)
       .gte("scheduled_at", start)
       .lte("scheduled_at", end)
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
       status: s.status,
       isTrial: s.is_trial,
       isMakeup: s.is_makeup,
+      isBiweekly: isBiweeklyJoin(s.recurring_schedules),
       studentId: s.student_id,
       studentName: (s.students as unknown as { name: string } | null)?.name ?? "Student",
     })),
