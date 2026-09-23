@@ -96,8 +96,11 @@ export async function POST(req: NextRequest) {
   const who = reporterName ? `${reporterName} (${role})` : email;
   const shots = screenshotPaths.length ? ` · ${screenshotPaths.length} screenshot(s)` : "";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  // Own channel (SLACK_BUG_REPORTS_WEBHOOK_URL) so bug reports don't
+  // share the staff SLACK_WEBHOOK_URL feed; falls back to that if unset.
   await notifySlack(
     `:beetle: New bug report from ${who}${shots}\n>${message.slice(0, 300).replace(/\n/g, "\n>")}\n${appUrl}/admin/bug-reports`,
+    process.env.SLACK_BUG_REPORTS_WEBHOOK_URL || undefined,
   );
 
   return NextResponse.json({ ok: true });
