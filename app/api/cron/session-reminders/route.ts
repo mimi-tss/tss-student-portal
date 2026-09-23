@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
 import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
+import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -32,9 +33,20 @@ interface SessionRow {
   scheduled_at: string;
   duration_minutes: number;
   students:
-    | { id: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean }
-    | { id: string; email: string; phone: string | null; notify_alerts_email: boolean; notify_alerts_sms: boolean; notify_alerts_inapp: boolean }[]
+    | StudentRow
+    | StudentRow[]
     | null;
+  coaches: { name: string; timezone: string } | { name: string; timezone: string }[] | null;
+}
+
+interface StudentRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  notify_alerts_email: boolean;
+  notify_alerts_sms: boolean;
+  notify_alerts_inapp: boolean;
 }
 
 function unwrap<T>(v: T | T[] | null): T | null {
@@ -46,7 +58,8 @@ async function sessionsInWindow(admin: ReturnType<typeof createAdminClient>, win
     .from("sessions")
     .select(
       "id, scheduled_at, duration_minutes, " +
-        "students(id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp)",
+        "students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
+        "coaches:actual_coach_id(name, timezone)",
     )
     .eq("status", "scheduled")
     .gte("scheduled_at", windowStart.toISOString())
@@ -83,6 +96,7 @@ export async function GET(req: NextRequest) {
     for (const s of sessions) {
       const student = unwrap(s.students);
       if (!student) continue;
+      const coach = unwrap(s.coaches);
 
       await notifyStudent(admin, {
         studentId: student.id,
@@ -94,7 +108,15 @@ export async function GET(req: NextRequest) {
         title,
         body: studentBody,
         linkUrl: "/student/dashboard",
-        ghlData: { sessionId: s.id, scheduledAt: s.scheduled_at, durationMinutes: s.duration_minutes },
+        ghlData: {
+          sessionId: s.id,
+          scheduledAt: s.scheduled_at,
+          durationMinutes: s.duration_minutes,
+          firstName: firstNameOf(student.name),
+          coachName: coach?.name ?? "your coach",
+          ...lessonTimeFields(s.scheduled_at, coach?.timezone),
+          portalUrl: portalUrl("/student/dashboard"),
+        },
         channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
       });
       notified++;
