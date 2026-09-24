@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
-import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, billing_anniversary_date")
+    .select("id, name, billing_anniversary_date, billing_interval")
     .eq("profile_id", user.id)
     .single();
 
@@ -54,10 +54,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "session has already passed" }, { status: 409 });
   }
 
-  // Only the current billing cycle is actually paid for — a session in a
-  // future cycle can't be cancelled for a credit that hasn't been earned
-  // yet. Doesn't apply to staff-cancel, which is an admin override.
-  const { end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
+  // Only what's actually paid for can be cancelled — the current monthly
+  // cycle, or a prepaid 6-month/yearly student's whole term (see
+  // paidThroughEnd). A session past that can't be cancelled for a credit
+  // that hasn't been earned yet. Doesn't apply to staff-cancel, which is
+  // an admin override.
+  const cycleEnd = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
   if (scheduledAt.getTime() >= cycleEnd.getTime()) {
     return NextResponse.json(
       { error: "This session is in a future billing cycle and can't be cancelled yet." },

@@ -29,6 +29,18 @@ export const INTERVAL_MONTHS: Record<BillingInterval, number> = {
   yearly: 12,
 };
 
+// A Stripe Price's recurring period as one of our BillingIntervals —
+// read off the live Price itself, so it covers legacy/grandfathered
+// prices too (not just the env-configured current ones). null for a
+// one-time price or a period we don't sell.
+export function billingIntervalFromPrice(price: Stripe.Price | null | undefined): BillingInterval | null {
+  const r = price?.recurring;
+  if (!r) return null;
+  const months = r.interval === "year" ? 12 * r.interval_count : r.interval === "month" ? r.interval_count : 0;
+  const match = BILLING_INTERVALS.find((i) => INTERVAL_MONTHS[i] === months);
+  return match ?? null;
+}
+
 const ENV_SUFFIX: Record<BillingInterval, string> = {
   monthly: "MONTHLY",
   "3month": "3MONTH",

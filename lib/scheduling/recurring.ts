@@ -1,6 +1,7 @@
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { windowEndMinutes } from "@/lib/scheduling/working-hours";
+import { INTERVAL_MONTHS } from "@/lib/stripe/tiers";
 
 // How far ahead recurring occurrences are materialized. Topped up daily
 // by /api/cron/materialize-recurring, so a recurring schedule already
@@ -207,6 +208,39 @@ export function currentBillingCycleRange(
   const end = new Date(Date.UTC(nextYear, nextMonth - 1, endDay));
 
   return { start, end };
+}
+
+// How far ahead a student has actually PAID for — the end of the
+// prepaid term their billing interval covers (students.billing_interval,
+// migration 0107), anchored on billing_anniversary_date in steps of that
+// interval's length. A monthly (or unknown) student is paid through the
+// end of the current monthly cycle, exactly currentBillingCycleRange's
+// end — so nothing changes for them. A 6-month or yearly student has paid
+// for the whole term up front, so they can see (and cancel within) every
+// lesson through the end of it, not just this month. Never earlier than
+// the monthly cycle end, so a stale anchor can only ever over-show a
+// prepaid student's term, never hide their current month.
+export function paidThroughEnd(
+  billingAnniversaryDate: string | null | undefined,
+  billingInterval: string | null | undefined,
+  now: Date = new Date(),
+): Date {
+  const { end: monthlyEnd } = currentBillingCycleRange(billingAnniversaryDate, now);
+  const months = billingInterval ? (INTERVAL_MONTHS as Record<string, number>)[billingInterval] : undefined;
+  if (!billingAnniversaryDate || !months || months <= 1) return monthlyEnd;
+
+  const anchor = new Date(`${billingAnniversaryDate}T00:00:00Z`);
+  const anchorDay = anchor.getUTCDate();
+  const termEnd = (k: number) => {
+    const total = anchor.getUTCMonth() + months * k;
+    const y = anchor.getUTCFullYear() + Math.floor(total / 12);
+    const m = ((total % 12) + 12) % 12;
+    return new Date(Date.UTC(y, m, Math.min(anchorDay, daysInMonth(y, m + 1))));
+  };
+  let k = 1;
+  while (termEnd(k).getTime() <= now.getTime()) k++;
+  const end = termEnd(k);
+  return end.getTime() > monthlyEnd.getTime() ? end : monthlyEnd;
 }
 
 // The current billing cycle's own 5th same-weekday occurrence of a

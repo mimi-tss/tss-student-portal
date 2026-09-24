@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BILLING_INTERVALS, INTERVAL_LABEL } from "@/lib/stripe/tiers";
 import styles from "../../../admin.module.css";
 
 interface Coach {
@@ -33,6 +34,7 @@ export interface EditStudentInitial {
   studentSinceOverride: string | null;
   createdAt: string;
   billingAnniversaryDate: string | null;
+  billingInterval: string | null;
 }
 
 const TIER_OPTIONS = ["lite", "suite", "pro", "elite"];
@@ -113,6 +115,7 @@ export default function EditStudentModal({
   const [coachStartDateOverride, setCoachStartDateOverride] = useState(initial.coachStartDateOverride ?? "");
   const [studentSinceOverride, setStudentSinceOverride] = useState(initial.studentSinceOverride ?? "");
   const [billingAnniversaryDate, setBillingAnniversaryDate] = useState(initial.billingAnniversaryDate ?? "");
+  const [billingInterval, setBillingInterval] = useState(initial.billingInterval ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,6 +169,9 @@ export default function EditStudentModal({
     }
     if (billingAnniversaryDate && billingAnniversaryDate !== initial.billingAnniversaryDate) {
       requests.push(postJson("/api/admin/set-billing-anniversary", { studentId, billingAnniversaryDate }));
+    }
+    if (billingInterval !== (initial.billingInterval ?? "")) {
+      requests.push(postJson("/api/admin/set-billing-interval", { studentId, billingInterval: billingInterval || null }));
     }
 
     const results = await Promise.all(requests);
@@ -353,6 +359,20 @@ export default function EditStudentModal({
               onChange={(e) => setBillingAnniversaryDate(e.target.value)}
               className={styles.input}
             />
+          </div>
+          <div className={styles.field}>
+            <label>Billing plan</label>
+            <select value={billingInterval} onChange={(e) => setBillingInterval(e.target.value)} className={styles.select}>
+              <option value="">Not set (monthly)</option>
+              {BILLING_INTERVALS.map((i) => (
+                <option key={i} value={i}>
+                  {INTERVAL_LABEL[i]}
+                </option>
+              ))}
+            </select>
+            <span className={styles.mutedText} style={{ fontSize: 11 }}>
+              6 Months / Yearly: student sees their whole prepaid term, from the anchor date
+            </span>
           </div>
         </div>
 

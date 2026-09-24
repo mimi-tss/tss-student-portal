@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
-import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 
 // Admin-triggered version of the student's own self-service cancel — same
@@ -37,11 +37,11 @@ export async function POST(req: NextRequest) {
   // cancelled yet. Staff-cancel is the deliberate override for this.
   const { data: student } = await supabase
     .from("students")
-    .select("billing_anniversary_date")
+    .select("billing_anniversary_date, billing_interval")
     .eq("id", session.student_id)
     .single();
 
-  const { end: cycleEnd } = currentBillingCycleRange(student?.billing_anniversary_date);
+  const cycleEnd = paidThroughEnd(student?.billing_anniversary_date, student?.billing_interval);
   if (new Date(session.scheduled_at).getTime() >= cycleEnd.getTime()) {
     return NextResponse.json(
       { error: "This session is in a future billing cycle and can't be cancelled yet." },

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe, stripeOpus } from "@/lib/stripe/client";
-import { resolveTier } from "@/lib/stripe/tiers";
+import { resolveTier, billingIntervalFromPrice } from "@/lib/stripe/tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
@@ -266,6 +266,9 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
   // header comment (lib/stripe/tiers.ts) for why.
   const tier = resolveTier(subscription, price) ?? undefined;
   const priceId = price?.id;
+  // Mirrored so paidThroughEnd (lib/scheduling/recurring.ts) knows a
+  // 6-month/yearly subscriber has prepaid their whole term.
+  const billingInterval = billingIntervalFromPrice(price);
 
   const { data: student } = await admin
     .from("students")
@@ -296,6 +299,7 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
       stripe_subscription_id: subscription.id,
       stripe_price_id: priceId ?? null,
       stripe_account: account,
+      ...(billingInterval ? { billing_interval: billingInterval } : {}),
     })
     .eq("id", student.id);
 

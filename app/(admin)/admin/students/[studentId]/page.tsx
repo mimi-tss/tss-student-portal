@@ -71,7 +71,7 @@ export default async function AdminStudentPage({
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, referred_by_coach_id, ambassador, student_since_override, phone, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, archived",
+      "id, name, email, tier, subscription_status, drive_folder_id, assigned_coach_id, session_duration_minutes, birth_date, coach_start_date_override, paused_start, paused_end, created_at, billing_anniversary_date, billing_interval, referred_by_coach_id, ambassador, student_since_override, phone, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, archived",
     )
     .eq("id", studentId)
     .maybeSingle();
@@ -294,6 +294,7 @@ export default async function AdminStudentPage({
             studentSinceOverride: student.student_since_override,
             createdAt: student.created_at,
             billingAnniversaryDate: student.billing_anniversary_date,
+            billingInterval: student.billing_interval,
           }}
         />
       </div>

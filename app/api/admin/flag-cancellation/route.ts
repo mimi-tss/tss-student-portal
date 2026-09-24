@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { createAttentionItem } from "@/lib/admin/attention-items";
 
 // Admin-initiated version of app/api/student/requests/route.ts — same
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, name, billing_anniversary_date")
+    .select("id, name, billing_anniversary_date, billing_interval")
     .eq("id", studentId)
     .maybeSingle();
   if (!student) return NextResponse.json({ error: "student not found" }, { status: 404 });
@@ -39,7 +39,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A cancellation is already flagged for this student." }, { status: 409 });
   }
 
-  const { end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
+  // Effective at the end of what's already paid for — a prepaid
+  // 6-month/yearly student keeps lessons through their whole term.
+  const cycleEnd = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
   const effectiveDate = cycleEnd.toISOString().slice(0, 10);
 
   const { data: inserted, error } = await supabase

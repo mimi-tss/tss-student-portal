@@ -7,7 +7,7 @@ import { renewalInfo } from "@/lib/billing/renewal";
 import { creditDisplayName } from "@/lib/booking/credit-display";
 import { FormattedDate, FormattedDateTime, FormattedTime } from "@/components/formatted-time";
 import ChatPanel from "@/components/chat-panel";
-import { currentBillingCycleRange, effectiveSessionCycleCap } from "@/lib/scheduling/recurring";
+import { currentBillingCycleRange, effectiveSessionCycleCap, paidThroughEnd } from "@/lib/scheduling/recurring";
 import JoinButton from "./join-button";
 import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
@@ -51,7 +51,7 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, streak_count, ambassador",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, billing_interval, streak_count, ambassador",
     )
     .eq("profile_id", user.id)
     .single();
@@ -62,6 +62,10 @@ export default async function StudentDashboardPage() {
   const { start: cycleStart, end: cycleEnd } = currentBillingCycleRange(
     student.billing_anniversary_date,
   );
+  // Upcoming-lessons card reaches through everything already paid for —
+  // a prepaid 6-month/yearly student sees their whole term, not just
+  // this month (monthly students: identical to cycleEnd).
+  const paidThrough = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
 
   // A session already in progress must still count as "next" — the query
   // below floors on scheduled_at (session START), which the moment a
@@ -136,7 +140,7 @@ export default async function StudentDashboardPage() {
       .eq("student_id", student.id)
       .eq("status", "scheduled")
       .gte("scheduled_at", new Date().toISOString())
-      .lt("scheduled_at", cycleEnd.toISOString())
+      .lt("scheduled_at", paidThrough.toISOString())
       .order("scheduled_at"),
     supabase
       .from("student_requests")
@@ -212,7 +216,7 @@ export default async function StudentDashboardPage() {
       group: null,
     })),
     ...upcomingGroupLessons
-      .filter((g) => new Date(g.scheduledAt).getTime() < cycleEnd.getTime())
+      .filter((g) => new Date(g.scheduledAt).getTime() < paidThrough.getTime())
       .map((g) => ({
         id: g.id,
         scheduledAt: g.scheduledAt,
@@ -430,7 +434,7 @@ export default async function StudentDashboardPage() {
         </div>
 
         <Link href="/student/book" className={styles.panelLink}>
-          <h3>Upcoming lessons this cycle</h3>
+          <h3>{paidThrough.getTime() > cycleEnd.getTime() ? "Upcoming lessons (paid)" : "Upcoming lessons this cycle"}</h3>
           {cycleItems.length > 0 ? (
             <ul className={styles.sessionList}>
               {cycleItems.map((item) => (

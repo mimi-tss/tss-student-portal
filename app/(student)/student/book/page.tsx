@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { FormattedDateTime } from "@/components/formatted-time";
 import { getUnusedGroupLessonCredits, getRedeemableGroupLessons } from "@/lib/group-lesson-credits";
 import BookingClient from "./booking-client";
@@ -125,7 +125,7 @@ export default async function BookPage() {
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, assigned_coach_id, tier, billing_anniversary_date")
+    .select("id, assigned_coach_id, tier, billing_anniversary_date, billing_interval")
     .eq("profile_id", user.id)
     .single();
 
@@ -142,7 +142,7 @@ export default async function BookPage() {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
     const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
-    const { end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
+    const cycleEnd = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
 
     const [{ data: credits }, { data: upcomingSessions }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }] =
       await Promise.all([

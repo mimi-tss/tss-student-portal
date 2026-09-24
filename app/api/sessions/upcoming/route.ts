@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { currentBillingCycleRange } from "@/lib/scheduling/recurring";
+import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { getStudentUpcomingGroupLessons } from "@/lib/group-lessons";
 import { isAdminRole } from "@/lib/auth/roles";
 
-// Every scheduled session within the caller's current (paid) billing
-// cycle — backs the admin per-student page's "All sessions this billing
-// cycle" list, so admin can cancel a specific future occurrence in
-// advance rather than only the next one. Deliberately bounded to the
-// current cycle: a student can't see or cancel sessions in a cycle they
-// haven't paid for yet (spec section 6).
+// Every scheduled session the caller has paid for — the current monthly
+// cycle, or a prepaid 6-month/yearly student's whole term (see
+// paidThroughEnd). Deliberately bounded for a student: they can't see or
+// cancel sessions they haven't paid for yet (spec section 6).
+//
+// Admin (with ?studentId=) gets EVERY future session instead, so they can
+// check the whole recurring run is scheduled correctly, plus `paidThrough`
+// so the list can mark what's past it as unpaid (and offer "Cancel
+// unpaid" on those — a no-credit staff cancel).
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
 
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
   // always gets their own, regardless of any studentId they pass, since
   // the broader "students can view sessions involving their own coach"
   // RLS policy would otherwise leak other students' schedules here.
-  const studentQuery = supabase.from("students").select("id, billing_anniversary_date");
+  const studentQuery = supabase.from("students").select("id, billing_anniversary_date, billing_interval");
   const { data: student } =
     isAdmin && requestedStudentId
       ? await studentQuery.eq("id", requestedStudentId).maybeSingle()
@@ -45,17 +48,19 @@ export async function GET(req: NextRequest) {
 
   const studentId = student.id;
 
-  const { end: cycleEnd } = currentBillingCycleRange(student.billing_anniversary_date);
+  const paidThrough = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
+  const showAll = isAdmin && !!requestedStudentId;
+
+  let sessionsQuery = supabase
+    .from("sessions")
+    .select("id, scheduled_at, duration_minutes, is_makeup, actual_coach_id")
+    .eq("student_id", studentId)
+    .eq("status", "scheduled")
+    .gte("scheduled_at", new Date().toISOString());
+  if (!showAll) sessionsQuery = sessionsQuery.lt("scheduled_at", paidThrough.toISOString());
 
   const [{ data: sessions, error }, upcomingGroupLessons] = await Promise.all([
-    supabase
-      .from("sessions")
-      .select("id, scheduled_at, duration_minutes, is_makeup, actual_coach_id")
-      .eq("student_id", studentId)
-      .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString())
-      .lt("scheduled_at", cycleEnd.toISOString())
-      .order("scheduled_at"),
+    sessionsQuery.order("scheduled_at"),
     // A group-lesson registration (bootcamp, etc.) is a real upcoming
     // commitment too, but lives in a separate table this route never
     // used to query — same gap the student's own dashboard already
@@ -67,9 +72,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const groupLessons = upcomingGroupLessons.filter(
-    (g) => new Date(g.scheduledAt).getTime() < cycleEnd.getTime(),
-  );
+  const groupLessons = showAll
+    ? upcomingGroupLessons
+    : upcomingGroupLessons.filter((g) => new Date(g.scheduledAt).getTime() < paidThrough.getTime());
 
-  return NextResponse.json({ sessions: sessions ?? [], groupLessons });
+  return NextResponse.json({ sessions: sessions ?? [], groupLessons, paidThrough: paidThrough.toISOString() });
 }
