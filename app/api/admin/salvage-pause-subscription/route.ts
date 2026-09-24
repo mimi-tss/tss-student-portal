@@ -41,6 +41,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const client = getStripeClient(student.stripe_account as StripeAccount);
+    const current = await client.subscriptions.retrieve(student.stripe_subscription_id);
+    if (current.status === "canceled" || current.status === "incomplete_expired") {
+      return NextResponse.json(
+        { error: "This subscription has already ended in Stripe — there's nothing to pause. Use Mark cancelled (confirmed)." },
+        { status: 409 },
+      );
+    }
     const resumesAt = Math.floor((Date.now() + SALVAGE_PAUSE_DAYS * 24 * 60 * 60 * 1000) / 1000);
     await client.subscriptions.update(student.stripe_subscription_id, {
       pause_collection: { behavior: "void", resumes_at: resumesAt },

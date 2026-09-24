@@ -821,6 +821,26 @@ async function applyBillingRequestOutcome(
   const client = getStripeClient(student.stripe_account as StripeAccount);
   const subscriptionId = student.stripe_subscription_id;
 
+  // Already ended in Stripe (e.g. lost during the Opus→own transfer) —
+  // Stripe refuses any update to a canceled subscription ("can only
+  // update its cancellation_details and metadata"), which used to block
+  // admin from resolving the request at all. Nothing left to change in
+  // Stripe; the portal-side resolve still goes through.
+  const current = await client.subscriptions.retrieve(subscriptionId);
+  if (current.status === "canceled" || current.status === "incomplete_expired") {
+    if (kind === "change_plan_request" && outcome === "approved") {
+      throw new Error("This student's Stripe subscription has already ended — there's no plan to change. Start a new subscription instead.");
+    }
+    // The subscription-deleted webhook normally flips this, but it can
+    // miss a student whose link pointed elsewhere when Stripe ended it
+    // (confirmed live: Brielle Davis, still "active" weeks later) — and
+    // it'll never fire again. Confirming the cancel is the moment to fix it.
+    if (kind === "cancel_request" && outcome === "approved") {
+      await supabase.from("students").update({ subscription_status: "cancelled" }).eq("id", studentId);
+    }
+    return;
+  }
+
   if (kind === "cancel_request") {
     if (outcome === "approved") {
       // "Mark cancelled" — schedules the real cancellation. This alone
