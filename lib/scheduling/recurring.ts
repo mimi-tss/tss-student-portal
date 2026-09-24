@@ -144,13 +144,42 @@ function cycleStartForDate(
 // Wednesday since the cycle started. Cycle-date arithmetic is done in
 // the coach's own zone, the same frame occurrences are already
 // generated in.
-function cycleOccurrenceNumber(instant: Date, anchorDay: number, timeZone: string): number {
+export function cycleOccurrenceNumber(instant: Date, anchorDay: number, timeZone: string): number {
   const [y, m, d] = zonedYearMonthDay(instant, timeZone);
   const [cy, cm, cd] = cycleStartForDate(y, m, d, anchorDay);
   const cycleStart = Date.UTC(cy, cm - 1, cd);
   const dateOnly = Date.UTC(y, m - 1, d);
   const daysSinceCycleStart = Math.round((dateOnly - cycleStart) / 86_400_000);
   return Math.floor(daysSinceCycleStart / 7) + 1;
+}
+
+// Whether any of the `weeks` same-weekday dates before `dateOnly` (a
+// UTC-midnight date in the coach's zone) was a studio holiday at this
+// slot's wall-clock time — i.e. a lesson this student lost to a
+// closure. Drives the holiday "5th week" replacement: a weekly
+// student's cycle normally leaves its 5th occurrence unscheduled
+// (CYCLE_SESSION_CAP), but if a holiday knocked out one of occurrences
+// 1-4, the 5th is scheduled instead so they still get 4 that cycle.
+// Only one 5th week exists per cycle, so a 2nd holiday in the same
+// cycle gets a studio-planned credit instead (grantHolidayCredits,
+// lib/scheduling/holiday-credits.ts). Dates before the schedule's own
+// start_date aren't counted — that lesson was never this schedule's.
+export function holidayLostInPriorWeeks(
+  dateOnly: Date,
+  weeks: number,
+  hh: number,
+  mm: number,
+  timeZone: string,
+  holidayDates: Set<string>,
+  scheduleStartDate?: Date | null,
+): boolean {
+  for (let k = 1; k <= weeks; k++) {
+    const d = new Date(dateOnly.getTime() - k * 7 * 86_400_000);
+    if (scheduleStartDate && d < scheduleStartDate) break;
+    const instant = zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), hh, mm, timeZone);
+    if (isHolidayInstant(instant, holidayDates)) return true;
+  }
+  return false;
 }
 
 // 1-indexed position of `instant` among same-weekday dates within its
@@ -288,7 +317,14 @@ export function fifthWeekOccurrence(
     );
     if (instant <= from) continue;
     if (holidayDates && isHolidayInstant(instant, holidayDates)) continue;
-    if (cycleOccurrenceNumber(instant, anchorDay, timeZone) === 5) return instant;
+    if (cycleOccurrenceNumber(instant, anchorDay, timeZone) === 5) {
+      // Already taken as the replacement for a holiday-lost lesson
+      // (occurrencesFor schedules it), so it's not an open upsell slot.
+      if (holidayDates && holidayLostInPriorWeeks(dateOnly, CYCLE_SESSION_CAP, hh, mm, timeZone, holidayDates)) {
+        return null;
+      }
+      return instant;
+    }
   }
 
   return null;
@@ -342,7 +378,9 @@ export function slotFitsWorkingHours(
 // wall-clock lesson time put. When billingAnniversaryDate is given, any
 // occurrence that would be the 5th of that weekday in its billing cycle
 // is left out entirely (spec section 4) — no session row is ever
-// created for it, rather than creating then hiding one. Same treatment
+// created for it, rather than creating then hiding one — unless a
+// studio holiday knocked out one of that cycle's first 4, in which case
+// the 5th is scheduled as its replacement (holidayLostInPriorWeeks). Same treatment
 // for holidayDates (studio_holidays, migration 0055) — a studio-closed
 // date is never even offered a session to skip, matching how the
 // billing-cap "week off" already works. The holiday check is deliberately
@@ -407,7 +445,15 @@ export function occurrencesFor(
       }
     } else if (anchorDay !== null) {
       const occurrenceNumber = cycleOccurrenceNumber(instant, anchorDay, timeZone);
-      if (occurrenceNumber > CYCLE_SESSION_CAP) continue;
+      if (occurrenceNumber > CYCLE_SESSION_CAP) {
+        // The cycle's 5th week stands in for a lesson lost to a studio
+        // holiday earlier in the same cycle (holidayLostInPriorWeeks).
+        const replacesHoliday =
+          holidayDates !== undefined &&
+          occurrenceNumber === CYCLE_SESSION_CAP + 1 &&
+          holidayLostInPriorWeeks(dateOnly, CYCLE_SESSION_CAP, hh, mm, timeZone, holidayDates, scheduleStartDate);
+        if (!replacesHoliday) continue;
+      }
     }
 
     out.push(instant);

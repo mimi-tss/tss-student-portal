@@ -4,6 +4,7 @@ import { autoResumeExpiredPauses, materializeRecurringSessions } from "@/lib/sch
 import { materializeRecurringGroupLessons } from "@/lib/group-lessons";
 import { forfeitHolidaySessions } from "@/lib/scheduling/holidays";
 import { materializeRecurringCoachBlocks } from "@/lib/coach-blocks";
+import { grantHolidayCredits } from "@/lib/scheduling/holiday-credits";
 
 // Daily top-up: ensures every active recurring schedule has real
 // `sessions` rows out to the horizon (lib/scheduling/recurring.ts),
@@ -46,12 +47,16 @@ export async function GET(req: NextRequest) {
   // needs to exist before sessions' own check runs, not after.
   const groupLessonResult = await materializeRecurringGroupLessons(admin);
   const result = await materializeRecurringSessions(admin);
+  // After materializing, so a holiday's 5th-week replacement session
+  // already exists when deciding whether a credit is still owed.
+  const holidayCredits = await grantHolidayCredits(admin);
 
   return NextResponse.json({
     resumed,
     ...holidayForfeit,
     coachBlocksCreated: coachBlockResult.created,
     ...result,
+    ...holidayCredits,
     groupLessonsCreated: groupLessonResult.created,
     groupLessonsSkipped: groupLessonResult.skipped,
   });

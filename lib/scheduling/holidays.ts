@@ -4,10 +4,12 @@ import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 // Studio-wide closure dates (studio_holidays, migration 0055) — distinct
 // from a per-coach coach_blocks entry: every coach is closed at once, no
 // one can book, and any already-materialized session gets auto-
-// forfeited with no makeup credit rather than just being blocked going
-// forward. Shared by recurring materialization (skip generating on
-// these dates), booking (reject a request landing on one), and the
-// daily cron's retroactive forfeit sweep below.
+// forfeited rather than just being blocked going forward (the lost
+// lesson is made up via the 5th week or a studio-planned credit —
+// lib/scheduling/holiday-credits.ts). Shared by recurring
+// materialization (skip generating on these dates), booking (reject a
+// request landing on one), and the daily cron's retroactive forfeit
+// sweep below.
 export async function getHolidayDateKeys(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -39,10 +41,10 @@ interface ForfeitResult {
 // not-yet-cancelled group lesson) that lands on a studio holiday, in
 // Florida's own calendar day — covers both a date just added to
 // studio_holidays and any occurrence that slipped through before this
-// feature existed. Deliberately does NOT touch makeup_credits at all
-// (no reinstatement, no new credit) — "auto forfeit, no makeup" per the
-// studio's own policy, unlike a normal within-notice cancellation
-// (lib/booking/cancel-session.ts). Idempotent — only ever matches rows
+// feature existed. A forfeited makeup gets the credit it was booked
+// with reinstated; a forfeited recurring lesson is made up by the 5th
+// week or a studio-planned credit (lib/scheduling/holiday-credits.ts),
+// not here. Idempotent — only ever matches rows
 // not already forfeited/cancelled, so it's safe to call on every daily
 // cron run indefinitely.
 export async function forfeitHolidaySessions(
@@ -66,7 +68,7 @@ export async function forfeitHolidaySessions(
   const [{ data: sessions }, { data: groupLessons }] = await Promise.all([
     supabase
       .from("sessions")
-      .select("id, scheduled_at")
+      .select("id, scheduled_at, makeup_credit_id")
       .eq("status", "scheduled")
       .gte("scheduled_at", rangeStart.toISOString())
       .lt("scheduled_at", rangeEnd.toISOString()),
@@ -78,9 +80,17 @@ export async function forfeitHolidaySessions(
       .lt("scheduled_at", rangeEnd.toISOString()),
   ]);
 
-  const sessionIdsToForfeit = (sessions ?? [])
-    .filter((s: { scheduled_at: string }) => isHolidayInstant(new Date(s.scheduled_at), holidayDates))
-    .map((s: { id: string }) => s.id);
+  const sessionsToForfeit = (sessions ?? []).filter((s: { scheduled_at: string }) =>
+    isHolidayInstant(new Date(s.scheduled_at), holidayDates),
+  );
+  const sessionIdsToForfeit = sessionsToForfeit.map((s: { id: string }) => s.id);
+  // A makeup booked with a credit before the holiday was added gets
+  // that credit back — the student didn't lose the lesson, the studio
+  // closed. (Recurring lessons lost this way are made up separately:
+  // 5th week or a studio-planned credit, lib/scheduling/holiday-credits.ts.)
+  const creditIdsToReinstate = sessionsToForfeit
+    .map((s: { makeup_credit_id: string | null }) => s.makeup_credit_id)
+    .filter((id: string | null): id is string => !!id);
 
   const groupLessonIdsToCancel = (groupLessons ?? [])
     .filter((g: { scheduled_at: string }) => isHolidayInstant(new Date(g.scheduled_at), holidayDates))
@@ -88,6 +98,12 @@ export async function forfeitHolidaySessions(
 
   if (sessionIdsToForfeit.length > 0) {
     await supabase.from("sessions").update({ status: "holiday" }).in("id", sessionIdsToForfeit);
+  }
+  if (creditIdsToReinstate.length > 0) {
+    await supabase
+      .from("makeup_credits")
+      .update({ used: false, used_session_id: null })
+      .in("id", creditIdsToReinstate);
   }
   if (groupLessonIdsToCancel.length > 0) {
     await supabase
