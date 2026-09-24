@@ -203,8 +203,8 @@ export default function ChatPanel({
           const attachmentUrl = m.attachment_url ? signedUrls[m.attachment_url] : null;
 
           const bubbleClass = mine
-            ? "max-w-xs rounded-xl rounded-br-sm p-2.5 text-sm bg-[var(--gold)] text-[var(--gold-text)]"
-            : "max-w-xs rounded-xl rounded-bl-sm p-2.5 text-sm bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]";
+            ? "min-w-0 max-w-xs break-words rounded-xl rounded-br-sm p-2.5 text-sm bg-[var(--gold)] text-[var(--gold-text)]"
+            : "min-w-0 max-w-xs break-words rounded-xl rounded-bl-sm p-2.5 text-sm bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]";
 
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
