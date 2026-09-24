@@ -36,6 +36,9 @@ export const INTERVAL_MONTHS: Record<BillingInterval, number> = {
 export function billingIntervalFromPrice(price: Stripe.Price | null | undefined): BillingInterval | null {
   const r = price?.recurring;
   if (!r) return null;
+  // Many real subscriptions bill "every 4 weeks" (24 confirmed live) —
+  // pay-as-you-go, same as monthly for how far ahead is prepaid.
+  if (r.interval === "week" && r.interval_count <= 5) return "monthly";
   const months = r.interval === "year" ? 12 * r.interval_count : r.interval === "month" ? r.interval_count : 0;
   const match = BILLING_INTERVALS.find((i) => INTERVAL_MONTHS[i] === months);
   return match ?? null;
