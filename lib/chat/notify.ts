@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { notifySlack } from "@/lib/slack/notify";
+import { STUDENT_NOTIFICATIONS_PAUSED } from "@/lib/notifications/pause";
 
 const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 
@@ -72,7 +73,7 @@ export async function notifyChatRecipient(
         ? (thread.students as unknown as { name: string } | null)?.name
         : "Admin"; // same "no coach/student row = Admin" convention GET's own participants map uses
 
-  if (recipient?.email) {
+  if (recipient?.email && !(recipientRole === "student" && STUDENT_NOTIFICATIONS_PAUSED)) {
     await sendEmail(
       recipient.email,
       "New message on Tara Simon Studios",

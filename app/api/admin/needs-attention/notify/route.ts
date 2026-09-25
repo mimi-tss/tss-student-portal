@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
+import { STUDENT_NOTIFICATIONS_PAUSED } from "@/lib/notifications/pause";
 
 // "Nudge" (unbooked trial) / "Notify" (expiring credit) buttons on the
 // Overview "Needs Attention" queue — a one-off reminder email, generic
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: student } = await supabase.from("students").select("name, email").eq("id", studentId).maybeSingle();
   if (!student) return NextResponse.json({ error: "student not found" }, { status: 404 });
+
+  if (STUDENT_NOTIFICATIONS_PAUSED) {
+    return NextResponse.json({ error: "Student notifications are paused" }, { status: 409 });
+  }
 
   const { subject, body } = COPY[kind];
   await sendEmail(student.email, subject, body(student.name));

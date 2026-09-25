@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { notifyGhl, type GhlEvent } from "@/lib/ghl/notify";
 import { notifySlack } from "@/lib/slack/notify";
+import { STUDENT_NOTIFICATIONS_PAUSED } from "@/lib/notifications/pause";
 
 type NotificationGroup = "digest" | "alerts";
 type NotificationKind =
@@ -54,6 +55,8 @@ interface StudentNotifyInput {
 // in-app enabled still only gets one "already sent" outcome per event —
 // not a separate race per channel.
 export async function notifyStudent(admin: SupabaseClient, input: StudentNotifyInput): Promise<void> {
+  // Paused: skip before claiming dedup, so nothing is marked "sent".
+  if (STUDENT_NOTIFICATIONS_PAUSED) return;
   const claimed = await claim(admin, "student", input.studentId, input.kind, input.dedupKey);
   if (!claimed) return;
 
