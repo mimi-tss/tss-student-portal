@@ -10,6 +10,9 @@ export async function sendEmail(to: string, subject: string, html: string) {
     },
     body: JSON.stringify({
       from: process.env.EMAIL_FROM,
+      // Sends from the portal subdomain (the Resend-verified one), but
+      // replies go to the studio's real inbox.
+      reply_to: process.env.EMAIL_REPLY_TO || "info@tarasimonstudios.com",
       to,
       subject,
       html,
