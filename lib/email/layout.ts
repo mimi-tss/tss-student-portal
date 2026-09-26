@@ -157,15 +157,18 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
   return { html, text };
 }
 
-// SMS copy helper — branded up front by default, always the opt-out at the
-// end (carrier/A2P requirement), and warns in dev if it'd split into
-// multiple segments (160 GSM chars).
+// SMS copy helper — branded up front by default. No opt-out line here:
+// GHL appends its own STOP/opt-out text to every outgoing SMS, so adding
+// one would show it twice. Warns in dev if the text plus GHL's line
+// (~30 chars reserved) would split into multiple 160-char segments.
+const GHL_OPT_OUT_RESERVE = 30;
+
 export function smsText(body: string, opts: { brandPrefix?: boolean } = {}): string {
   // brandPrefix: false when the copy already reads as coming from the
   // studio (texts send from the studio's own GHL number either way).
-  const s = `${opts.brandPrefix === false ? "" : "Tara Simon Studios: "}${body} Reply STOP to opt out`;
-  if (s.length > 160 && process.env.NODE_ENV !== "production") {
-    console.warn(`SMS over one segment (${s.length} chars): ${s}`);
+  const s = `${opts.brandPrefix === false ? "" : "Tara Simon Studios: "}${body}`;
+  if (s.length + GHL_OPT_OUT_RESERVE > 160 && process.env.NODE_ENV !== "production") {
+    console.warn(`SMS likely over one segment (${s.length} + GHL opt-out): ${s}`);
   }
   return s;
 }
