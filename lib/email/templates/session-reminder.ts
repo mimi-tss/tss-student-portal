@@ -36,14 +36,15 @@ export function sessionReminder24h(i: SessionReminderInput): RenderedNotificatio
       },
       { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       { type: "p", text: "Your Google Meet link will pop up in your portal chat 10 minutes before we start." },
-      { type: "p", text: "You will be in the Waiting Room; please wait for your Coach to let you in." },
-      { type: "note", text: "Have some water nearby and give yourself a few minutes to warm up." },
+      { type: "note", text: "You will be in the Waiting Room; please wait for your Coach to let you in." },
+      { type: "p", text: "Have some water nearby and give yourself a few minutes to warm up before your lesson." },
     ],
     reason: "You're getting this because lesson reminders are on.",
   });
 
   const sms = smsText(
-    `reminder, your Private Coaching Session with ${coach} is tomorrow at ${i.lessonTime}. ${STUDENT_APP_SHORT}`,
+    `Hi ${i.firstName}, your Private Coaching Session with ${coach} is tomorrow at ${i.lessonTime}. Log in here: ${STUDENT_APP_SHORT}`,
+    { brandPrefix: false },
   );
 
   return { subject, preheader, html, text, sms };

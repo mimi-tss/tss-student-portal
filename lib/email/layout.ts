@@ -156,11 +156,13 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
   return { html, text };
 }
 
-// SMS copy helper — always branded up front, always the opt-out at the
+// SMS copy helper — branded up front by default, always the opt-out at the
 // end (carrier/A2P requirement), and warns in dev if it'd split into
 // multiple segments (160 GSM chars).
-export function smsText(body: string): string {
-  const s = `Tara Simon Studios: ${body} Reply STOP to opt out`;
+export function smsText(body: string, opts: { brandPrefix?: boolean } = {}): string {
+  // brandPrefix: false when the copy already reads as coming from the
+  // studio (texts send from the studio's own GHL number either way).
+  const s = `${opts.brandPrefix === false ? "" : "Tara Simon Studios: "}${body} Reply STOP to opt out`;
   if (s.length > 160 && process.env.NODE_ENV !== "production") {
     console.warn(`SMS over one segment (${s.length} chars): ${s}`);
   }
