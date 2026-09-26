@@ -36,6 +36,10 @@ export interface EmailContent {
   // practice and it cuts spam complaints ("You're getting this because
   // lesson reminders are on.").
   reason: string;
+  // Replaces the default "Questions? Just reply…" footer line; "" drops
+  // it. For emails where replying by email is the wrong move (chat:
+  // replies land in the studio's info@ inbox, not with the coach).
+  replyLine?: string;
 }
 
 export function esc(s: string): string {
@@ -134,7 +138,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
         ${c.blocks.map(blockHtml).join("\n        ")}
       </td></tr>
       <tr><td style="padding:24px 16px 0;font:13px/1.6 ${FONT};color:${COLOR.muted};text-align:center;">
-        Questions? Just reply to this email &mdash; it goes straight to the studio.<br>
+        ${c.replyLine === undefined ? "Questions? Just reply to this email &mdash; it goes straight to the studio.<br>" : c.replyLine ? `${esc(c.replyLine)}<br>` : ""}
         ${esc(c.reason)} <a href="${prefsUrl}" style="color:${COLOR.muted};text-decoration:underline;">Manage notifications</a><br>
         Tara Simon Studios &middot; Your Voice Matters!
       </td></tr>
@@ -149,7 +153,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     "",
     ...c.blocks.flatMap((b) => [blockText(b), ""]),
     "—",
-    "Questions? Just reply to this email.",
+    ...(c.replyLine === undefined ? ["Questions? Just reply to this email."] : c.replyLine ? [c.replyLine] : []),
     `${c.reason} Manage notifications: ${prefsUrl}`,
     "Tara Simon Studios · Your Voice Matters!",
   ].join("\n");

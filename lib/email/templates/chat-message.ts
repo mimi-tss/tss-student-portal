@@ -34,11 +34,14 @@ export function chatMessage(i: ChatMessageInput): RenderedNotification {
       { type: "quote", text: emailPreview, from: i.senderLabel },
       { type: "button", label: "REPLY IN THE SING SMARTER APP", url: STUDENT_APP_URL },
       {
-        type: "note",
-        text: `Replies go straight to ${i.senderLabel.startsWith("Coach ") ? "your coach" : "the studio"} in your portal chat.`,
+        type: "p",
+        text: i.senderLabel.startsWith("Coach ")
+          ? `**Please reply in the app.** Replying to this email won't reach ${i.senderLabel}.`
+          : "**Please reply in the app** so your message stays with your lesson chat.",
       },
     ],
     reason: "You're getting this because message alerts are on.",
+    replyLine: "",
   });
 
   // Budget the quote so the whole text stays in one segment with GHL's
