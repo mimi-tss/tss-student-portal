@@ -97,6 +97,18 @@ export async function GET(req: NextRequest) {
       const student = unwrap(s.students);
       if (!student) continue;
       const coach = unwrap(s.coaches);
+      const when = lessonTimeFields(s.scheduled_at, coach?.timezone);
+
+      // Bell copy for the 24h reminder mirrors the approved email
+      // (lib/email/templates/session-reminder.ts): who + when, not
+      // "in about 24 hours".
+      const bell =
+        kind === "session_reminder_24h"
+          ? {
+              title: `Lesson tomorrow with Coach ${firstNameOf(coach?.name)}`,
+              body: `${when.lessonDate} · ${when.lessonTime} · ${s.duration_minutes} min`,
+            }
+          : { title, body: studentBody };
 
       await notifyStudent(admin, {
         studentId: student.id,
@@ -105,8 +117,8 @@ export async function GET(req: NextRequest) {
         group: "alerts",
         kind,
         dedupKey: `student:${student.id}:${kind}:${s.id}`,
-        title,
-        body: studentBody,
+        title: bell.title,
+        body: bell.body,
         linkUrl: "/student/dashboard",
         ghlData: {
           sessionId: s.id,
@@ -114,7 +126,7 @@ export async function GET(req: NextRequest) {
           durationMinutes: s.duration_minutes,
           firstName: firstNameOf(student.name),
           coachName: coach?.name ?? "your coach",
-          ...lessonTimeFields(s.scheduled_at, coach?.timezone),
+          ...when,
           portalUrl: portalUrl("/student/dashboard"),
         },
         channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },

@@ -18,6 +18,19 @@ interface NotificationRow {
 // realtime/websocket usage anywhere, and per the studio's own call this
 // doesn't need one either (in-app notifications aren't time-critical the
 // way the actual reminder itself, sent via email/SMS/Slack, is).
+// "just now" / "5m ago" / "3h ago" / "2d ago" / "Sep 12" — so a student
+// can tell a fresh reminder from last week's.
+function timeAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
@@ -92,6 +105,7 @@ export default function NotificationBell() {
                   >
                     <p className="text-sm font-medium text-[var(--text)]">{n.title}</p>
                     <p className="mt-0.5 text-xs text-[var(--text-muted)]">{n.body}</p>
+                    <p className="mt-1 text-[11px] text-[var(--text-muted)] opacity-70">{timeAgo(n.created_at)}</p>
                   </div>
                 );
                 return n.link_url ? (
