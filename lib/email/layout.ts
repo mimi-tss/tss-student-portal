@@ -163,10 +163,24 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
 // (~30 chars reserved) would split into multiple 160-char segments.
 const GHL_OPT_OUT_RESERVE = 30;
 
+// One non-GSM character (curly quote, ellipsis, em dash, emoji) switches
+// the WHOLE text to UCS-2, where a segment is 70 chars instead of 160 —
+// a normal reminder would bill as 3 texts. Coaches type curly quotes
+// from phones all the time, so flatten them; strip anything else exotic.
+function toGsm(s: string): string {
+  return s
+    .replace(/[\u2018\u2019\u201A\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/[^\n\r -~£¥èéùìòÇØøÅåÄÖÑÜ§äöñüà¡¿]/g, "");
+}
+
 export function smsText(body: string, opts: { brandPrefix?: boolean } = {}): string {
   // brandPrefix: false when the copy already reads as coming from the
   // studio (texts send from the studio's own GHL number either way).
-  const s = `${opts.brandPrefix === false ? "" : "Tara Simon Studios: "}${body}`;
+  const s = toGsm(`${opts.brandPrefix === false ? "" : "Tara Simon Studios: "}${body}`);
   if (s.length + GHL_OPT_OUT_RESERVE > 160 && process.env.NODE_ENV !== "production") {
     console.warn(`SMS likely over one segment (${s.length} + GHL opt-out): ${s}`);
   }

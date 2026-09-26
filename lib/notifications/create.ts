@@ -10,7 +10,8 @@ type NotificationKind =
   | "recording_ready"
   | "makeup_credit_needs_scheduling"
   | "weekly_digest"
-  | "group_lesson_cancelled";
+  | "group_lesson_cancelled"
+  | "chat_message";
 
 // Claims a dedup_key in notification_log — returns false (already sent)
 // on a unique-violation, true if this call is the one that gets to send.

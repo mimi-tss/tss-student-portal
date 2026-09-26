@@ -1,6 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrCreateThreadId } from "@/lib/chat/thread";
-import { notifyChatRecipient } from "@/lib/chat/notify";
 
 // Safety net for the Join button — confirmed live (2026-09-10) that a
 // scripted/popup navigation can silently fail in some real client while
@@ -52,9 +51,8 @@ async function sendMeetLinkMessage(admin: Admin, studentId: string, coachId: str
     return false;
   }
 
-  notifyChatRecipient(threadId, "coach", body).catch((err) =>
-    console.error(`meet-link chat notification failed for thread ${threadId}`, err),
-  );
+  // No "new message" email/text for this one — it would just repeat the
+  // lesson reminder the student already got (studio cleanup 2026-09-26).
   return true;
 }
 

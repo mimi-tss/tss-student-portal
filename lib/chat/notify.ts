@@ -1,14 +1,26 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { notifySlack } from "@/lib/slack/notify";
-import { STUDENT_NOTIFICATIONS_PAUSED } from "@/lib/notifications/pause";
+import { notifyStudent } from "@/lib/notifications/create";
+import { chatMessage } from "@/lib/email/templates/chat-message";
+import { firstNameOf } from "@/lib/ghl/fields";
+
+interface StudentRecipient {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  notify_alerts_email: boolean;
+  notify_alerts_sms: boolean;
+}
 
 const NOTIFY_THROTTLE_MS = 15 * 60 * 1000;
 
 export type ChatSenderRole = "student" | "coach" | "admin";
 
-// Generic "you have a new message" nudge (TSS_App_Spec_1.md section 9) —
-// no message content or contact info exposed. No real in-app presence
+// "You have a new message" nudge (TSS_App_Spec_1.md section 9). Coaches
+// get a generic email + Slack preview; students get a GHL email/SMS with a
+// short preview of the message (see the student branch below). No real in-app presence
 // signal exists (chat is 4s-polling while mounted, nothing tracks
 // "active right now"), so this is throttled to at most one email per
 // recipient per thread per 15 minutes rather than a true
@@ -46,7 +58,7 @@ export async function notifyChatRecipient(
   const { data: thread } = await admin
     .from("chat_threads")
     .select(
-      "student_id, coach_id, student_last_notified_at, coach_last_notified_at, students(name, email), coaches(name, email, slack_webhook_url)",
+      "student_id, coach_id, student_last_notified_at, coach_last_notified_at, students(id, name, email, phone, notify_alerts_email, notify_alerts_sms), coaches(name, email, slack_webhook_url)",
     )
     .eq("id", threadId)
     .single();
@@ -73,7 +85,33 @@ export async function notifyChatRecipient(
         ? (thread.students as unknown as { name: string } | null)?.name
         : "Admin"; // same "no coach/student row = Admin" convention GET's own participants map uses
 
-  if (recipient?.email && !(recipientRole === "student" && STUDENT_NOTIFICATIONS_PAUSED)) {
+  if (recipientRole === "student") {
+    // Student side goes through GHL (email + SMS per their alert prefs),
+    // with a short preview of what was actually written — the studio
+    // wants students to see the gist and tap through to reply
+    // (2026-09-26), overriding the original "no content in the nudge"
+    // spec. No bell row (inApp: false): chat has its own screen.
+    const student = recipient as unknown as StudentRecipient | null;
+    if (student?.email && bodyPreview?.trim()) {
+      const senderLabel =
+        senderRole === "coach" ? `Coach ${firstNameOf(senderName)}` : "Tara Simon Studios";
+      const rendered = chatMessage({ firstName: firstNameOf(student.name), senderLabel, message: bodyPreview });
+      await notifyStudent(admin, {
+        studentId: student.id,
+        email: student.email,
+        phone: student.phone,
+        group: "alerts",
+        kind: "chat_message",
+        // Throttle above already limits this to one per thread per 15
+        // min; the timestamp just keeps each allowed send distinct.
+        dedupKey: `student:${student.id}:chat_message:${threadId}:${now.toISOString()}`,
+        title: rendered.subject,
+        body: rendered.preheader,
+        ghlData: { ...rendered, senderLabel, firstName: firstNameOf(student.name) },
+        channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: false },
+      });
+    }
+  } else if (recipient?.email) {
     await sendEmail(
       recipient.email,
       "New message on Tara Simon Studios",
