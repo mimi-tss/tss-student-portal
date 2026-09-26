@@ -136,7 +136,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
       <tr><td style="padding:24px 16px 0;font:13px/1.6 ${FONT};color:${COLOR.muted};text-align:center;">
         Questions? Just reply to this email &mdash; it goes straight to the studio.<br>
         ${esc(c.reason)} <a href="${prefsUrl}" style="color:${COLOR.muted};text-decoration:underline;">Manage notifications</a><br>
-        Tara Simon Studios &middot; Private voice coaching
+        Tara Simon Studios &middot; Your Voice Matters!
       </td></tr>
     </table>
   </td></tr>
@@ -151,7 +151,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     "—",
     "Questions? Just reply to this email.",
     `${c.reason} Manage notifications: ${prefsUrl}`,
-    "Tara Simon Studios · Private voice coaching",
+    "Tara Simon Studios · Your Voice Matters!",
   ].join("\n");
 
   return { html, text };
