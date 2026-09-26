@@ -106,7 +106,8 @@ function blockText(b: EmailBlock): string {
 
 export function renderEmail(c: EmailContent): { html: string; text: string } {
   const prefsUrl = appUrl("/billing/account");
-  const logoUrl = appUrl("/logo.png");
+  // 120px source shown at 40px — crisp on retina screens.
+  const logoUrl = appUrl("/email-logo.png");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -124,7 +125,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
       <tr><td style="padding:0 8px 20px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td style="vertical-align:middle;padding-right:10px;"><img src="${logoUrl}" width="22" height="32" alt="" style="display:block;border:0;"></td>
+          <td style="vertical-align:middle;padding-right:10px;"><img src="${logoUrl}" width="40" height="40" alt="Tara Simon Studios" style="display:block;border:0;"></td>
           <td style="vertical-align:middle;font:18px/1 ${DISPLAY_FONT};letter-spacing:2px;text-transform:uppercase;color:${COLOR.text};">Tara Simon Studios</td>
         </tr></table>
       </td></tr>
