@@ -10,6 +10,8 @@ import {
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
 import { notifyStudent } from "@/lib/notifications/create";
+import { recordingReady } from "@/lib/email/templates/recording-ready";
+import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 
 interface CoachForMatching {
   id: string;
@@ -221,6 +223,19 @@ export async function attachRecordingToStudent(
   // already seen it, so "your recording is ready" would be stale news,
   // not a genuine new signal.
   if (!alreadyLinked) {
+    const ctx = await recordingLessonContext(admin, {
+      sessionId: opts.sessionId ?? null,
+      coachId: recording.coach_id,
+      fallbackAt: recording.drive_created_at,
+    });
+    const rendered = recordingReady({
+      firstName: firstNameOf(student.name),
+      coachFirstName: ctx.coachFirstName,
+      lessonLabel: "Private Coaching Session",
+      isGroup: false,
+      lessonDate: ctx.lessonDate,
+      lessonTime: ctx.lessonTime,
+    });
     await notifyStudent(admin, {
       studentId,
       email: student.email,
@@ -228,10 +243,10 @@ export async function attachRecordingToStudent(
       group: "alerts",
       kind: "recording_ready",
       dedupKey: `student:${studentId}:recording_ready:${recordingId}`,
-      title: "Your recording is ready",
-      body: "Your session recording has been added to your shared folder.",
+      title: rendered.bellTitle,
+      body: rendered.bellBody,
       linkUrl: "/student/dashboard",
-      ghlData: { recordingId },
+      ghlData: { recordingId, ...rendered },
       channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
     });
   }
@@ -295,6 +310,7 @@ export async function attachRecordingToGroupLesson(
 
   let notified = 0;
   const skipped: string[] = [];
+  const groupCtx = await groupLessonContext(admin, groupLessonId);
 
   for (const row of rows) {
     const student = row.students;
@@ -318,6 +334,14 @@ export async function attachRecordingToGroupLesson(
         continue;
       }
 
+      const rendered = recordingReady({
+        firstName: firstNameOf(student.name),
+        coachFirstName: groupCtx.coachFirstName,
+        lessonLabel: groupCtx.topic,
+        isGroup: true,
+        lessonDate: groupCtx.lessonDate,
+        lessonTime: groupCtx.lessonTime,
+      });
       await notifyStudent(admin, {
         studentId: student.id,
         email: student.email,
@@ -325,10 +349,10 @@ export async function attachRecordingToGroupLesson(
         group: "alerts",
         kind: "recording_ready",
         dedupKey: `student:${student.id}:recording_ready:${recordingId}`,
-        title: "Your recording is ready",
-        body: "Your group class recording has been added to your shared folder.",
+        title: rendered.bellTitle,
+        body: rendered.bellBody,
         linkUrl: "/student/dashboard",
-        ghlData: { recordingId },
+        ghlData: { recordingId, ...rendered },
         channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
       });
     }
@@ -877,4 +901,64 @@ export async function runDayMatching(admin: SupabaseClient): Promise<{ autoMatch
   }
 
   return { autoMatched };
+}
+
+
+// Who/when for the "recording ready" copy. Prefers the matched session's
+// own time + coach; falls back to the recording's coach and Drive
+// timestamp when a name-match has no specific session.
+async function recordingLessonContext(
+  admin: SupabaseClient,
+  opts: { sessionId: string | null; coachId: string | null; fallbackAt: string | null },
+): Promise<{ coachFirstName: string; lessonDate: string; lessonTime: string }> {
+  let at = opts.fallbackAt;
+  let coach: { name: string; timezone: string } | null = null;
+  if (opts.sessionId) {
+    const { data } = await admin
+      .from("sessions")
+      .select("scheduled_at, coaches:actual_coach_id(name, timezone)")
+      .eq("id", opts.sessionId)
+      .maybeSingle();
+    if (data) {
+      at = data.scheduled_at;
+      coach = unwrapOne(data.coaches as unknown as { name: string; timezone: string } | null);
+    }
+  }
+  if (!coach && opts.coachId) {
+    const { data } = await admin.from("coaches").select("name, timezone").eq("id", opts.coachId).maybeSingle();
+    coach = data;
+  }
+  const when = lessonTimeFields(at ?? new Date().toISOString(), coach?.timezone);
+  return { coachFirstName: firstNameOf(coach?.name), lessonDate: when.lessonDate, lessonTime: when.lessonTime };
+}
+
+async function groupLessonContext(
+  admin: SupabaseClient,
+  groupLessonId: string,
+): Promise<{ topic: string; coachFirstName: string; lessonDate: string; lessonTime: string }> {
+  const { data } = await admin
+    .from("group_lessons")
+    .select("topic, scheduled_at, coaches(name, timezone)")
+    .eq("id", groupLessonId)
+    .maybeSingle();
+  const coach = unwrapOne(data?.coaches as unknown as { name: string; timezone: string } | null);
+  const when = lessonTimeFields(data?.scheduled_at ?? new Date().toISOString(), coach?.timezone);
+  return {
+    topic: cleanGroupTopic(data?.topic),
+    coachFirstName: firstNameOf(coach?.name),
+    lessonDate: when.lessonDate,
+    lessonTime: when.lessonTime,
+  };
+}
+
+// Studio topics carry scheduling hints for admins ("Semi-Private Vocal
+// Group Class - Coach Nikki | Wednesday"); student copy already names the
+// coach separately, so keep just the class name.
+export function cleanGroupTopic(topic: string | null | undefined): string {
+  const t = (topic ?? "").split(" | ")[0].replace(/\s+-\s+Coach\b.*$/i, "").trim();
+  return t || "Group Class";
+}
+
+function unwrapOne<T>(v: T | T[] | null | undefined): T | null {
+  return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
 }
