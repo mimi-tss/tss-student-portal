@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
+import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import { sessionReminder24h, type RenderedNotification } from "@/lib/email/templates/session-reminder";
 import styles from "../../admin.module.css";
 
@@ -32,10 +32,9 @@ async function sampleReminder(offset: number): Promise<{ label: string; n: Rende
     label: `${student?.name ?? "?"} with ${coach?.name ?? "?"}`,
     n: sessionReminder24h({
       firstName: firstNameOf(student?.name),
-      coachName: coach?.name ?? "your coach",
+      coachFirstName: firstNameOf(coach?.name),
       ...lessonTimeFields(s.scheduled_at, coach?.timezone),
       durationMinutes: s.duration_minutes,
-      portalUrl: portalUrl("/student/dashboard"),
     }),
   };
 }

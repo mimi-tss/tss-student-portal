@@ -1,4 +1,5 @@
 import { renderEmail, smsText } from "@/lib/email/layout";
+import { STUDENT_APP_SHORT, STUDENT_APP_URL } from "@/lib/email/links";
 
 export interface RenderedNotification {
   subject: string;
@@ -10,42 +11,40 @@ export interface RenderedNotification {
 
 export interface SessionReminderInput {
   firstName: string;
-  coachName: string;
+  coachFirstName: string; // "Celine" — shown as "Coach Celine"
   lessonDate: string; // "Tuesday, Sep 23"
-  lessonDay: string; // "Tue"
   lessonTime: string; // "4:00 PM ET"
   durationMinutes: number;
-  portalUrl: string;
 }
 
-// 24h-before lesson reminder (session_reminder_24h).
+// 24h-before lesson reminder (session_reminder_24h). Copy approved by the
+// studio 2026-09-26.
 export function sessionReminder24h(i: SessionReminderInput): RenderedNotification {
-  const subject = `Your lesson with ${i.coachName} is tomorrow`;
+  const coach = `Coach ${i.coachFirstName}`;
+  const subject = `Your Private Coaching Session with ${coach} is tomorrow`;
   const preheader = `${i.lessonDate} at ${i.lessonTime} — here's everything you need.`;
 
   const { html, text } = renderEmail({
     preheader,
     heading: `See you tomorrow, ${i.firstName}!`,
     blocks: [
-      { type: "p", text: `Just a reminder: your voice lesson with **${i.coachName}** is coming up tomorrow.` },
+      { type: "p", text: `Just a reminder: your 1:1 Private Coaching Session with **${coach}** is coming up tomorrow.` },
       {
         type: "card",
         title: "Your lesson",
-        lines: [`${i.lessonDate} · ${i.lessonTime}`, `${i.durationMinutes} minutes with ${i.coachName}`],
+        lines: [`${i.lessonDate} · ${i.lessonTime}`, `${i.durationMinutes} minutes with ${coach}`],
       },
-      { type: "button", label: "View my lesson", url: i.portalUrl },
-      {
-        type: "note",
-        text: "Your Google Meet link will pop up in your portal chat 10 minutes before we start. Have some water nearby and give yourself a few minutes to warm up.",
-      },
+      { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
+      { type: "p", text: "Your Google Meet link will pop up in your portal chat 10 minutes before we start." },
+      { type: "p", text: "You will be in the Waiting Room; please wait for your Coach to let you in." },
+      { type: "note", text: "Have some water nearby and give yourself a few minutes to warm up." },
     ],
     reason: "You're getting this because lesson reminders are on.",
   });
 
-  // No "https://" — phones auto-link it anyway, and it keeps the text
-  // inside one 160-char segment.
-  const shortLink = i.portalUrl.replace(/^https?:\/\//, "");
-  const sms = smsText(`reminder, your lesson with ${i.coachName} is tomorrow at ${i.lessonTime}. ${shortLink}`);
+  const sms = smsText(
+    `reminder, your Private Coaching Session with ${coach} is tomorrow at ${i.lessonTime}. ${STUDENT_APP_SHORT}`,
+  );
 
   return { subject, preheader, html, text, sms };
 }
