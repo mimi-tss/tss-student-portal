@@ -58,6 +58,7 @@ export default async function AdminBookStudentPage({
       <BookingClient
         studentId={student.id}
         mode="full"
+        adminMode
         coachId={student.assigned_coach_id}
         credits={credits ?? []}
         initialCreditId={creditId}

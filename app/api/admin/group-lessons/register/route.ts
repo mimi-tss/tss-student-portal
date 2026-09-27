@@ -1,3 +1,4 @@
+import { notifyStudentGroupBooked } from "@/lib/notifications/booking-events";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,7 +18,7 @@ import {
 // to this student, unused, unexpired, topic matches this lesson) as that
 // route, just triggered by admin instead of the student.
 export async function POST(req: NextRequest) {
-  const { groupLessonId, studentId, stripeReference, creditId } = await req.json();
+  const { groupLessonId, studentId, stripeReference, creditId, notifyStudent = true } = await req.json();
 
   if (!groupLessonId || !studentId) {
     return NextResponse.json({ error: "groupLessonId and studentId required" }, { status: 400 });
@@ -83,6 +84,8 @@ export async function POST(req: NextRequest) {
       console.error(`group lesson signup notification failed for lesson ${groupLessonId}`, err),
     );
   }
+
+  if (notifyStudent !== false) void notifyStudentGroupBooked(studentId, [groupLessonId]);
 
   return NextResponse.json({ success: true });
 }

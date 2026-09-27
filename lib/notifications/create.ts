@@ -11,7 +11,10 @@ type NotificationKind =
   | "makeup_credit_needs_scheduling"
   | "weekly_digest"
   | "group_lesson_cancelled"
-  | "chat_message";
+  | "chat_message"
+  | "session_booked"
+  | "group_session_booked"
+  | "session_cancelled";
 
 // The only notifications that may go out by text, and only when the
 // student turned on Alerts → Text (studio call 2026-09-26). Coach
@@ -22,6 +25,9 @@ const SMS_KINDS: ReadonlySet<NotificationKind> = new Set([
   "session_starting_soon",
   "makeup_credit_needs_scheduling",
   "group_lesson_cancelled",
+  "session_booked",
+  "group_session_booked",
+  "session_cancelled",
 ]);
 
 // Claims a dedup_key in notification_log — returns false (already sent)

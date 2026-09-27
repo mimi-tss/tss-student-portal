@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
 import { creditMatchesLesson } from "@/lib/group-lesson-topic";
+import { notifyStudentGroupBooked } from "@/lib/notifications/booking-events";
 
 // Redeems a group_lesson_credit (migration 0086) into a real
 // group_lesson_registrations row — the student's own self-service
@@ -96,6 +97,8 @@ export async function POST(req: NextRequest) {
     studentId: student.id,
     studentName: student.name,
   }).catch((err) => console.error(`group lesson signup notification failed for lesson ${groupLessonId}`, err));
+
+  void notifyStudentGroupBooked(student.id, [groupLessonId]);
 
   return NextResponse.json({ success: true });
 }

@@ -5,6 +5,7 @@ import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/canc
 import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
+import { notifyStudentSessionCancelled } from "@/lib/notifications/booking-events";
 
 // Self-service cancellation (spec section 5/6) — see
 // lib/booking/cancel-session.ts for the actual notice/credit rules,
@@ -83,6 +84,8 @@ export async function POST(req: NextRequest) {
   if (!outcome.creditGranted) {
     await flagConsecutiveMisses(createAdminClient(), student.id, student.name, sessionId);
   }
+
+  void notifyStudentSessionCancelled(session.id, outcome.creditGranted ? "credit" : "no_credit", outcome.creditExpiresAt);
 
   notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
     console.error(`cancellation notification failed for session ${session.id}`, err),

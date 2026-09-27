@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
+import { notifyStudentSessionCancelled } from "@/lib/notifications/booking-events";
 
 // Staff-initiated cancellation — studio-side reasons (coach emergency,
 // scheduling error, goodwill), not the student's fault: by default issues
@@ -22,7 +23,7 @@ import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 // for it. Logged with a distinct override_type so the two cases stay
 // separately auditable.
 export async function POST(req: NextRequest) {
-  const { sessionId, reason, issueCredit = true } = await req.json();
+  const { sessionId, reason, issueCredit = true, notifyStudent = true } = await req.json();
 
   if (!sessionId || !reason || !reason.trim()) {
     return NextResponse.json(
@@ -106,6 +107,13 @@ export async function POST(req: NextRequest) {
       { error: `session cancelled but the audit log entry failed: ${overrideError.message}` },
       { status: 500 },
     );
+  }
+
+  // Studio-side cancel: tell the student only when they got a credit — a
+  // no-credit staff cancel (e.g. unpaid) is handled personally, never by
+  // an automated email (studio call 2026-09-26).
+  if (notifyStudent !== false && (creditGranted || creditReinstated)) {
+    void notifyStudentSessionCancelled(session.id, "studio", creditExpiresAt);
   }
 
   notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>

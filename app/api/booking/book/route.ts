@@ -4,6 +4,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 import { canBookLessons } from "@/lib/billing/subscription-gate";
+import { notifyStudentSessionBooked } from "@/lib/notifications/booking-events";
 
 // Booking a slot — a session-credit booking against the student's own
 // assigned coach, or the one exception, a Suite-tier student's one-time
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
     makeupCreditId,
     trial,
     coachId: requestedCoachId,
+    notifyStudent: notifyRequested = true,
   } = await req.json();
 
   if (!studentId || !slotStart) {
@@ -289,6 +291,10 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Self-service always confirms; an admin booking on someone's behalf can
+  // untick "Notify student" (e.g. fixing a mistake) — lib/notifications/booking-events.ts.
+  if (!isAdmin || notifyRequested !== false) void notifyStudentSessionBooked(session.id);
 
   notifyCoachSessionEvent(session.id, "session_booked").catch((err) =>
     console.error(`booking notification failed for session ${session.id}`, err),

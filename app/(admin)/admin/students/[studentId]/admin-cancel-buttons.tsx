@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormattedDateTime } from "@/components/formatted-time";
 import { MONTHLY_CAP, YEARLY_CAP } from "@/lib/booking/cancellation-caps";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 import styles from "../../../admin.module.css";
 
 export default function AdminCancelButtons({
@@ -38,6 +39,9 @@ export default function AdminCancelButtons({
   // monitor for this, so this is just "staff cancel, but they don't get
   // a credit for a session they didn't pay for."
   const [issueCredit, setIssueCredit] = useState(true);
+  // A reschedule defaults OFF: the new booking sends its own confirmation,
+  // so a "cancelled" email in between would just confuse the student.
+  const [notify, setNotify] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +54,7 @@ export default function AdminCancelButtons({
     const res = await fetch("/api/admin/cancel-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, reason: reason.trim() }),
+      body: JSON.stringify({ sessionId, reason: reason.trim(), notifyStudent: notify }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -82,7 +86,7 @@ export default function AdminCancelButtons({
     const res = await fetch("/api/admin/staff-cancel-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, reason, issueCredit }),
+      body: JSON.stringify({ sessionId, reason, issueCredit, notifyStudent: notify }),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -124,6 +128,7 @@ export default function AdminCancelButtons({
           />
           Issue a session credit
         </label>
+        {issueCredit && <NotifyStudentCheckbox checked={notify} onChange={setNotify} className={styles.mutedText} />}
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -177,6 +182,7 @@ export default function AdminCancelButtons({
             {yearlyRemaining}/{YEARLY_CAP} this year
           </p>
         )}
+        <NotifyStudentCheckbox checked={notify} onChange={setNotify} className={styles.mutedText} />
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -215,6 +221,7 @@ export default function AdminCancelButtons({
         <button
           onClick={() => {
             setIntent("reschedule");
+            setNotify(false);
             setMode("confirm-regular");
           }}
           className={styles.linkBtnSmall}
@@ -224,13 +231,20 @@ export default function AdminCancelButtons({
         <button
           onClick={() => {
             setIntent("cancel");
+            setNotify(true);
             setMode("confirm-regular");
           }}
           className={styles.linkBtnSmall}
         >
           Cancel
         </button>
-        <button onClick={() => setMode("staff-reason")} className={styles.dangerLink}>
+        <button
+          onClick={() => {
+            setNotify(true);
+            setMode("staff-reason");
+          }}
+          className={styles.dangerLink}
+        >
           Staff cancel
         </button>
       </div>

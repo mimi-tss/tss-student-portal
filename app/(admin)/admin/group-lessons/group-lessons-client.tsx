@@ -7,6 +7,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { formatTimeInZone } from "@/lib/timezone";
 import { useTimeZone } from "@/components/timezone-context";
 import { FormattedDateTime } from "@/components/formatted-time";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 import styles from "../../admin.module.css";
 import { creditMatchesLesson } from "@/lib/group-lesson-topic";
 
@@ -604,6 +605,7 @@ function SeriesRegisterControl({
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const [stripeReference, setStripeReference] = useState("");
   const [registering, setRegistering] = useState(false);
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
 
@@ -645,7 +647,7 @@ function SeriesRegisterControl({
     const res = await fetch("/api/admin/group-lessons/register-series", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ seriesId, studentId, stripeReference: stripeReference.trim() || null }),
+      body: JSON.stringify({ seriesId, studentId, stripeReference: stripeReference.trim() || null, notifyStudent }),
     });
     const body = await res.json().catch(() => ({}));
     setRegistering(false);
@@ -713,6 +715,7 @@ function SeriesRegisterControl({
             placeholder="Stripe payment reference (optional)"
             className={styles.inputSmall}
           />
+          <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} className={styles.mutedText} />
           <button onClick={handleRegister} disabled={registering} className={styles.ctaSmall}>
             {registering ? "Registering…" : "Register for series"}
           </button>
@@ -742,6 +745,7 @@ function GroupLessonCard({
   const [stripeReference, setStripeReference] = useState("");
   const [useCredit, setUseCredit] = useState(true);
   const [registering, setRegistering] = useState(false);
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
@@ -772,6 +776,7 @@ function GroupLessonCard({
         studentId,
         stripeReference: creditId ? null : stripeReference.trim() || null,
         creditId,
+        notifyStudent,
       }),
     });
     setRegistering(false);
@@ -867,6 +872,7 @@ function GroupLessonCard({
               className={styles.inputSmall}
             />
           )}
+          <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} className={styles.mutedText} />
           <button
             onClick={handleRegister}
             disabled={registering}

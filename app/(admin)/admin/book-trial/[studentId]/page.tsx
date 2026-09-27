@@ -41,7 +41,7 @@ export default async function AdminBookTrialPage({
       {/* Same coach-lock as the student's own booking page (migration
           0093) — if this trial was granted for a specific coach, admin
           books against that same coach too, straight to date/time. */}
-      <BookingClient studentId={studentId} mode="trial" coachId={entitlement.coach_id} />
+      <BookingClient studentId={studentId} mode="trial" coachId={entitlement.coach_id} adminMode />
     </div>
   );
 }

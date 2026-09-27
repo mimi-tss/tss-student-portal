@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyCoach } from "@/lib/notifications/create";
 import { registerStudentInRecurringSeries, unregisterStudentFromRecurringSeries } from "@/lib/group-lessons";
+import { notifyStudentGroupBooked } from "@/lib/notifications/booking-events";
 
 function unwrapJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -14,7 +15,7 @@ function unwrapJoin<T>(value: T | T[] | null): T | null {
 // drop-in). Same admin-confirms-payment-manually posture, no live Stripe
 // integration.
 export async function POST(req: NextRequest) {
-  const { seriesId, studentId, stripeReference } = await req.json();
+  const { seriesId, studentId, stripeReference, notifyStudent = true } = await req.json();
 
   if (!seriesId || !studentId) {
     return NextResponse.json({ error: "seriesId and studentId required" }, { status: 400 });
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
         }).catch((err) => console.error(`group lesson series signup notification failed for series ${seriesId}`, err));
       }
     }
+
+    // One confirmation listing every class, not one per occurrence.
+    if (notifyStudent !== false) void notifyStudentGroupBooked(studentId, result.registeredLessonIds);
 
     return NextResponse.json({ success: true, ...result });
   } catch (err) {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { AttentionItem, AttentionKind, AttentionStatus } from "@/lib/admin/attention-items";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 import styles from "../admin.module.css";
 
 // Single source of truth for kind labels/colors — was duplicated
@@ -83,6 +84,7 @@ export function AttentionItemRow({
   const [note, setNote] = useState(item.adminNote ?? "");
   const [saving, setSaving] = useState<AttentionStatus | "note" | "deny" | null>(null);
   const [addingLesson, setAddingLesson] = useState(false);
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [addError, setAddError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -110,6 +112,7 @@ export function AttentionItemRow({
         studentId: item.studentId,
         slotStart: item.occurrenceAt,
         coachId: item.coachId,
+        notifyStudent,
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -177,6 +180,7 @@ export function AttentionItemRow({
         )}
         {item.kind === "fifth_week_available" && item.status !== "resolved" && (
           <div style={{ marginTop: 8 }}>
+            <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} className={styles.mutedText} />
             <button className={styles.linkBtnSmall} disabled={addingLesson} onClick={addFifthWeekLesson}>
               {addingLesson ? "Adding…" : "Add lesson"}
             </button>

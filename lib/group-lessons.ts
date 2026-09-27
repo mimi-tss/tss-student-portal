@@ -341,6 +341,7 @@ export async function notifyCoachOfGroupLessonSignup(
 export interface RegisterSeriesResult {
   total: number;
   registered: number;
+  registeredLessonIds: string[];
   alreadyRegistered: number;
   full: number;
   failed: number;
@@ -381,6 +382,7 @@ export async function registerStudentInRecurringSeries(
   if (error) throw new Error(error.message);
 
   let registered = 0;
+  const registeredLessonIds: string[] = [];
   let alreadyRegistered = 0;
   let full = 0;
   let failed = 0;
@@ -393,6 +395,7 @@ export async function registerStudentInRecurringSeries(
         stripeReference: params.stripeReference,
       });
       registered++;
+      registeredLessonIds.push(occurrence.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       if (message.includes("full")) {
@@ -406,7 +409,7 @@ export async function registerStudentInRecurringSeries(
     }
   }
 
-  return { total: occurrences?.length ?? 0, registered, alreadyRegistered, full, failed };
+  return { total: occurrences?.length ?? 0, registered, registeredLessonIds, alreadyRegistered, full, failed };
 }
 
 // Removes a single occurrence's registration — the per-class counterpart

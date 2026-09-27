@@ -16,7 +16,10 @@ export interface GhlEvent {
     | "makeup_credit_needs_scheduling"
     | "weekly_digest"
     | "group_lesson_cancelled"
-    | "chat_message";
+    | "chat_message"
+    | "session_booked"
+    | "group_session_booked"
+    | "session_cancelled";
   studentId: string;
   email: string;
   phone: string | null;

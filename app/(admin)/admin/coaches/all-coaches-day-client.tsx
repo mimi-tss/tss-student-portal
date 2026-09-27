@@ -21,6 +21,7 @@ import AddRecurringCoachBlockForm from "@/components/add-recurring-coach-block-f
 import CoachCalendar from "@/components/coach-calendar";
 import AdminCancelButtons from "../students/[studentId]/admin-cancel-buttons";
 import { formatPlainDate } from "@/lib/format-date";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 import styles from "../../admin.module.css";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -1827,6 +1828,7 @@ function BookWithCreditPanel({
   const [query, setQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<StudentWithCredits | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState("");
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1850,6 +1852,7 @@ function BookWithCreditPanel({
         slotStart: slotStart.toISOString(),
         makeupCreditId: selectedCreditId,
         coachId,
+        notifyStudent,
       }),
     });
     setSaving(false);
@@ -1918,6 +1921,7 @@ function BookWithCreditPanel({
               ))}
             </select>
           </div>
+          <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} className={styles.mutedText} />
           <button onClick={handleBook} disabled={saving || !selectedCreditId} className={styles.ctaSmall}>
             {saving ? "Booking…" : "Book this slot"}
           </button>

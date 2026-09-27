@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { zonedTimeToUtc, formatDateInZone, formatTimeInZone, timezoneAbbreviation } from "@/lib/timezone";
 import { useTimeZone } from "@/components/timezone-context";
 import TimeZoneSelect from "@/components/timezone-select";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 
 interface Slot {
   start: string;
@@ -60,6 +61,7 @@ export default function BookingClient({
   canBookWithoutCredit = true,
   allCoaches,
   initialCreditId,
+  adminMode = false,
 }: {
   studentId: string;
   mode: "full" | "trial";
@@ -81,8 +83,12 @@ export default function BookingClient({
   // from the URL). Students never get this — self-service always just
   // uses whichever credit is about to expire first.
   initialCreditId?: string;
+  // Admin booking on a student's behalf: shows the "Notify student"
+  // checkbox (students always get their confirmation).
+  adminMode?: boolean;
 }) {
   const router = useRouter();
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [coaches, setCoaches] = useState<Coach[]>(allCoaches ?? []);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(coachId);
 
@@ -210,6 +216,7 @@ export default function BookingClient({
           // ignores this for.
           : { coachId: selectedCoachId }),
         ...(applyCredit && selectedCredit ? { makeupCreditId: selectedCredit.id } : {}),
+        ...(adminMode ? { notifyStudent } : {}),
       }),
     });
 
@@ -373,6 +380,11 @@ export default function BookingClient({
         )}
       </div>
 
+      {adminMode && (
+        <div className="mb-4 text-sm text-[var(--text-muted)]">
+          <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} />
+        </div>
+      )}
       {errorMsg && <p className="mb-4 text-sm text-[var(--coral)]">{errorMsg}</p>}
 
       {expiryWarningSlot && (

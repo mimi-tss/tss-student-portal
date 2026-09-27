@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { applyCancellationCredit, cancellationMessage } from "@/lib/booking/cancel-session";
 import { paidThroughEnd } from "@/lib/scheduling/recurring";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
+import { notifyStudentSessionCancelled } from "@/lib/notifications/booking-events";
 
 // Admin-triggered version of the student's own self-service cancel — same
 // rules either way (see lib/booking/cancel-session.ts), just reachable
@@ -10,7 +11,7 @@ import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 // own. Distinct from "staff cancel" (see staff-cancel-session/route.ts),
 // which always grants a credit uncapped and requires a logged reason.
 export async function POST(req: NextRequest) {
-  const { sessionId, reason } = await req.json();
+  const { sessionId, reason, notifyStudent = true } = await req.json();
 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest) {
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  if (notifyStudent !== false) {
+    void notifyStudentSessionCancelled(session.id, outcome.creditGranted ? "credit" : "no_credit", outcome.creditExpiresAt);
   }
 
   notifyCoachSessionEvent(session.id, "session_cancelled").catch((err) =>
