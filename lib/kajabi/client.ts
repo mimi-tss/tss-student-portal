@@ -127,8 +127,10 @@ export async function getKajabiContactOfferIds(email: string): Promise<string[] 
 // application/vnd.api+json. The previous guess (`/contacts/{id}/offers`
 // with `{ offer_id }`) never worked — every Stripe sign-up's grant failed
 // into a kajabi_grant_failed Needs Review item.
-// Kill switch for offer grant/revoke — see grantKajabiOffer.
-const KAJABI_WRITES_ENABLED = false;
+// Kill switch for offer grant/revoke. Was off 2026-09-26 while the email
+// lookup returned the wrong contact; back on after a live test (grant Pro
+// + revoke Suite on two real students, both verified in Kajabi).
+const KAJABI_WRITES_ENABLED = true;
 
 async function findKajabiContactIdByEmail(email: string): Promise<string | null> {
   return findExactContactId(email);
@@ -175,10 +177,8 @@ async function createKajabiContact(email: string, name: string): Promise<string>
 // lead off a landing page, versus this studio's own usual manual flow
 // of adding the contact by hand first, then granting the offer).
 export async function grantKajabiOffer(email: string, offerId: string, name?: string): Promise<void> {
-  // DISABLED 2026-09-26: findKajabiContactIdByEmail's filter[email] is
-  // ignored by Kajabi (returns the same first contact for every email), so
-  // this would grant access to the WRONG person. Fails loudly into the
-  // existing kajabi_grant_failed Needs Review path until the lookup is fixed.
+  // Kill switch (see KAJABI_WRITES_ENABLED) — fails into the existing
+  // kajabi_grant_failed Needs Review path when off.
   if (!KAJABI_WRITES_ENABLED) throw new Error("Kajabi grants paused: contact lookup by email is unreliable");
   let contactId = await findKajabiContactIdByEmail(email);
   if (!contactId) {
