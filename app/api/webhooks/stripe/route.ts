@@ -295,12 +295,26 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
   // checked out a different plan → the plan-change email instead.
   const isNewMember = !existing || !priorTier || priorTier === "lite";
   if (isNewMember) {
+    // Brand-new Suite member → their First 1:1 Coaching Session is granted
+    // automatically (studio call 2026-09-26; before this an admin granted
+    // it by hand). Only for genuinely new students — returning students
+    // (any past session or trial) get neither the session nor the promise
+    // of one in the welcome email. Checked BEFORE granting, since the
+    // grant itself makes the student ineligible.
+    const firstSession = tier === "suite" && (await isFirstSessionEligible(admin, studentId));
+    if (firstSession) {
+      const { error: grantError } = await admin.from("entitlements").insert({
+        student_id: studentId,
+        perk_type: "trial_lesson",
+        recurrence: "one-time",
+      });
+      if (grantError) console.error(`auto first-session grant failed for ${studentId}`, grantError);
+    }
+
     await issueAndSendBillingWelcomeLink(studentId, email, {
       tier,
       name: session.customer_details?.name ?? null,
-      // Returning students (any past session) don't get Suite's first
-      // session, so the email mustn't promise it.
-      firstSession: tier === "suite" ? await isFirstSessionEligible(admin, studentId) : undefined,
+      firstSession: tier === "suite" ? firstSession : undefined,
     }).catch((err) => console.error("Failed to send welcome email", err));
   } else if (priorTier !== tier) {
     await notifyPlanChanged(admin, studentId, priorTier!, tier, session.id);
