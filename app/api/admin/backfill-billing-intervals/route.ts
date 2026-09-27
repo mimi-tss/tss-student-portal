@@ -112,6 +112,7 @@ export async function GET() {
   const relinked: { name: string; account: string; customerId: string; subscriptionId: string }[] = [];
   const multipleSubscriptions: { name: string; subscriptions: string[] }[] = [];
   const noSubscription: { name: string; email: string; recentCharges: Awaited<ReturnType<typeof recentCharges>> }[] = [];
+  const scheduledToStart: { name: string; startsAt: string | null }[] = [];
   const failed: { name: string; error: string }[] = [];
 
   for (const student of students ?? []) {
@@ -139,6 +140,27 @@ export async function GET() {
           .map((subscription) => ({ account, customerId: student.stripe_customer_id!, subscription }));
       }
       if (live.length === 0) live = await findLiveSubscriptions(student.email);
+
+      if (live.length === 0 && student.stripe_customer_id && student.stripe_account) {
+        // Moved to the new product mid-cycle: the current month is
+        // already paid, so the new subscription is a schedule that only
+        // becomes a Subscription at the next billing date (often next
+        // month). Not a problem — the subscription.created webhook links
+        // it the day it starts.
+        const schedules = await getStripeClient(student.stripe_account as StripeAccount).subscriptionSchedules.list({
+          customer: student.stripe_customer_id,
+          limit: 10,
+        });
+        const upcoming = schedules.data.find((sch) => sch.status === "not_started");
+        if (upcoming) {
+          const start = upcoming.phases[0]?.start_date;
+          scheduledToStart.push({
+            name: student.name,
+            startsAt: start ? new Date(start * 1000).toISOString().slice(0, 10) : null,
+          });
+          continue;
+        }
+      }
 
       if (live.length === 0) {
         noSubscription.push({ name: student.name, email: student.email, recentCharges: await recentCharges(student.email) });
@@ -198,6 +220,7 @@ export async function GET() {
     unusualPeriod,
     relinked,
     multipleSubscriptions,
+    scheduledToStart,
     noSubscription,
     failed,
   });
