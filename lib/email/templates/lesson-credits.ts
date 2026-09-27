@@ -24,9 +24,11 @@ export interface LessonCreditsInput {
 const EARLY_MORNING_MS = 6 * 60 * 60 * 1000;
 
 function fmt(iso: string, opts: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: DEFAULT_TIMEZONE, ...opts }).format(
-    new Date(new Date(iso).getTime() - EARLY_MORNING_MS),
-  );
+  const d = new Date(new Date(iso).getTime() - EARLY_MORNING_MS);
+  // Add the year when it isn't this year — a 1-year pack credit's
+  // "book by Sunday, Sep 26" would otherwise read like this weekend.
+  const needsYear = opts.day && !opts.year && d.getUTCFullYear() !== new Date().getUTCFullYear();
+  return new Intl.DateTimeFormat("en-US", { timeZone: DEFAULT_TIMEZONE, ...opts, ...(needsYear ? { year: "numeric" } : {}) }).format(d);
 }
 
 function groupCredits(credits: LessonCreditLine[]) {

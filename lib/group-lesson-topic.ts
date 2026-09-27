@@ -20,7 +20,14 @@ export function groupCreditKey(topic: string | null | undefined): string {
     .trim();
 }
 
+// A credit whose topic names no coach ("Group Coaching Session") works
+// with ANY coach's session of that class — used for a 4-Pack Group Class
+// bought before the student has a usual group coach, so they pick
+// (studio call 2026-09-26). One naming a coach stays tied to that coach.
 export function creditMatchesLesson(creditTopic: string | null | undefined, lessonTopic: string | null | undefined): boolean {
   const key = groupCreditKey(creditTopic);
-  return key !== "" && key === groupCreditKey(lessonTopic);
+  if (key === "") return false;
+  const lessonKey = groupCreditKey(lessonTopic);
+  if (key === lessonKey) return true;
+  return !key.includes(" - coach ") && lessonKey.startsWith(`${key} - coach `);
 }

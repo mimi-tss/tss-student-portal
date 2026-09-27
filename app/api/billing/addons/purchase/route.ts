@@ -8,15 +8,17 @@ import { findAddon, resolveAddonPriceId, applyCouponToAmount } from "@/lib/billi
 import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
 import { resolveTier, formatPrice } from "@/lib/stripe/tiers";
+import { fulfillAddonPurchase } from "@/lib/billing/fulfill-addon";
 
 // One-time add-ons (lib/billing/addons.ts, kind: "one_time") — a straight
 // off-session charge against the student's card on file, no ongoing
 // subscription state, repeatable by design (e.g. Spotlight, bought fresh
 // for every recital). This is the first one-time (non-subscription)
 // Stripe charge anywhere in this codebase — see that file's own header
-// comment; everything else here is subscriptions. Scheduling/fulfillment
-// for a purchased pack (which lessons, when) happens manually — admin
-// sees the Slack ping below and books it, same as every other pack.
+// comment; everything else here is subscriptions. Lesson/group packs are
+// fulfilled automatically as credits (lib/billing/fulfill-addon.ts); the
+// student books them. Anything else (Spotlight, lesson with Tara) is
+// still handled by hand from the Slack ping below.
 function resolvePaymentMethodId(subscription: Stripe.Subscription): string | null {
   const subPm = subscription.default_payment_method;
   if (subPm) return typeof subPm === "string" ? subPm : subPm.id;
@@ -148,11 +150,20 @@ export async function POST(req: NextRequest) {
     resolved_at: new Date().toISOString(),
   });
 
+  // Lesson/group packs land as credits right away + a "ready to book"
+  // notification (lib/billing/fulfill-addon.ts) — admins no longer add
+  // these by hand. The Slack note says what happened.
+  const fulfilled = await fulfillAddonPurchase(admin, {
+    studentId: billingStudent.studentId,
+    addonId: addon.id,
+    paymentReference,
+  });
+
   const priceNote = formatPrice(chargeAmount, catalogPrice.currency) ?? "—";
   await notifyStaff(admin, {
     kind: "addon_purchase",
     dedupKey: paymentReference,
-    text: `${billingStudent.name} bought ${addon.label} for ${priceNote}${resolvedCoupon ? ` (coupon ${resolvedCoupon.promotionCode.code})` : ""}.`,
+    text: `${billingStudent.name} bought ${addon.label} for ${priceNote}${resolvedCoupon ? ` (coupon ${resolvedCoupon.promotionCode.code})` : ""}.${fulfilled ? ` ${fulfilled}.` : ""}`,
   });
 
   return NextResponse.json({ success: true });

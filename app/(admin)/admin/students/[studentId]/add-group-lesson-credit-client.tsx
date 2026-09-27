@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import NotifyStudentCheckbox from "@/components/admin/notify-student-checkbox";
 import styles from "../../../admin.module.css";
 
 interface CreditLine {
@@ -51,6 +52,7 @@ export default function AddGroupLessonCreditClient({
   const [topic, setTopic] = useState("");
   const [lines, setLines] = useState<CreditLine[]>([newLine()]);
   const [saving, setSaving] = useState(false);
+  const [notifyStudent, setNotifyStudent] = useState(true);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +95,22 @@ export default function AddGroupLessonCreditClient({
         return;
       }
       addedSoFar += line.quantity;
+    }
+
+    // One combined "credits added" notification for everything above.
+    if (notifyStudent) {
+      await fetch("/api/admin/notify-credits-added", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId,
+          group: lines.map((l) => ({
+            topic: topic.trim(),
+            expiresAt: l.expiresAt ? new Date(`${l.expiresAt}T23:59:59`).toISOString() : null,
+            quantity: l.quantity,
+          })),
+        }),
+      }).catch(() => {});
     }
 
     setSaving(false);
@@ -166,6 +184,7 @@ export default function AddGroupLessonCreditClient({
         <button onClick={() => setLines((prev) => [...prev, newLine()])} className={styles.linkBtnSmall}>
           + Add another line
         </button>
+        <NotifyStudentCheckbox checked={notifyStudent} onChange={setNotifyStudent} className={styles.mutedText} />
         <button onClick={handleAdd} disabled={!canSubmit || saving} className={styles.ctaSmall}>
           {saving ? "Adding…" : "Add"}
         </button>
