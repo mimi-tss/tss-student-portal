@@ -10,6 +10,7 @@ import { notifyStaff, notifyStudent } from "@/lib/notifications/create";
 import { planChangedEmail } from "@/lib/email/templates/membership";
 import { firstNameOf } from "@/lib/ghl/fields";
 import type { StripeAccount, Tier } from "@/types/database";
+import { isFirstSessionEligible } from "@/lib/billing/first-session";
 
 // Stripe's SDK needs Node's crypto for signature verification — the
 // default Edge runtime doesn't have it.
@@ -297,6 +298,9 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
     await issueAndSendBillingWelcomeLink(studentId, email, {
       tier,
       name: session.customer_details?.name ?? null,
+      // Returning students (any past session) don't get Suite's first
+      // session, so the email mustn't promise it.
+      firstSession: tier === "suite" ? await isFirstSessionEligible(admin, studentId) : undefined,
     }).catch((err) => console.error("Failed to send welcome email", err));
   } else if (priorTier !== tier) {
     await notifyPlanChanged(admin, studentId, priorTier!, tier, session.id);

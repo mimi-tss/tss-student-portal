@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
+import { isFirstSessionEligible } from "@/lib/billing/first-session";
 
 // Direct Kajabi API/webhook integration — no Zapier — per
 // TSS_App_Spec_1.md section 1 & 3.
@@ -185,18 +186,11 @@ export async function POST(req: NextRequest) {
       }
 
       // First time reaching Suite: grant the one lifetime trial-lesson
-      // entitlement (section 2/5). Only ever granted once per student —
-      // if they later upgrade then downgrade back to Suite, this row
-      // already exists (used or not) so it's never re-granted.
+      // entitlement (section 2/5) — but only to a genuinely new student:
+      // never twice, never to anyone who has had a session with us before
+      // (returning student, or Pro/Elite downgrading to Suite).
       if (student && tier === "suite") {
-        const { data: existing } = await admin
-          .from("entitlements")
-          .select("id")
-          .eq("student_id", student.id)
-          .eq("perk_type", "trial_lesson")
-          .maybeSingle();
-
-        if (!existing) {
+        if (await isFirstSessionEligible(admin, student.id)) {
           await admin.from("entitlements").insert({
             student_id: student.id,
             perk_type: "trial_lesson",

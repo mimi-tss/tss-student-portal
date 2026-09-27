@@ -19,13 +19,13 @@ import type { Tier } from "@/types/database";
 export async function issueAndSendBillingWelcomeLink(
   studentId: string,
   email: string,
-  welcome?: { tier: Tier; name: string | null },
+  welcome?: { tier: Tier; name: string | null; firstSession?: boolean },
 ) {
   const token = await mintMagicLinkToken(studentId);
   const url = `${process.env.NEXT_PUBLIC_APP_URL}/api/billing/auth/link?token=${token}`;
 
   const msg = welcome
-    ? welcomeEmail({ firstName: firstNameOf(welcome.name), tier: welcome.tier, accountUrl: url })
+    ? welcomeEmail({ firstName: firstNameOf(welcome.name), tier: welcome.tier, accountUrl: url, firstSession: welcome.firstSession })
     : accountLinkEmail({ accountUrl: url });
   await sendEmail(email, msg.subject, msg.html, undefined, msg.text);
 

@@ -3,6 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import { isFirstSessionEligible } from "@/lib/billing/first-session";
 
 export interface ProvisionStudentInput {
   email: string;
@@ -204,7 +205,9 @@ export async function provisionStudent(
     await admin.from("students").update({ profile_id: authUser.user.id }).eq("id", student.id);
   }
 
-  if (input.grantTrial ?? tier === "suite") {
+  // An explicit admin choice wins; the Suite default only applies to a
+  // genuinely new student (lib/billing/first-session.ts).
+  if (input.grantTrial ?? (tier === "suite" && (await isFirstSessionEligible(admin, student.id)))) {
     await admin.from("entitlements").insert({
       student_id: student.id,
       perk_type: "trial_lesson",

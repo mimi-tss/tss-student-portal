@@ -18,11 +18,14 @@ const realFeatures = (tier: Tier) =>
 // plus" into the actual lower-tier perks), highest tier's own perks first.
 // Suite's one-off "first 1:1 session" bonus is dropped for Pro/Elite —
 // they have weekly lessons, so it'd read as a strange extra.
-function allFeatures(tier: Tier): string[] {
+// Also dropped for a Suite student who isn't getting one (returning
+// student, or a downgrade — lib/billing/first-session.ts).
+const isFirstSessionLine = (f: string) => /^bonus: your first 1:1/i.test(f);
+function allFeatures(tier: Tier, firstSession = tier === "suite"): string[] {
   return TIER_COPY.filter((t) => TIER_RANK[t.tier] <= TIER_RANK[tier] && t.tier !== "lite")
     .sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier])
     .flatMap((t) => realFeatures(t.tier))
-    .filter((f) => tier === "suite" || !/^bonus: your first 1:1/i.test(f));
+    .filter((f) => (tier === "suite" && firstSession) || !isFirstSessionLine(f));
 }
 
 // Welcome intro per plan — the pricing-page blurb doesn't always fit
@@ -41,6 +44,10 @@ function unlocked(from: Tier, to: Tier): string[] {
   );
 }
 
+// Suite without the first session (returning student).
+const SUITE_WELCOME_RETURNING = "Welcome back to the VIP community!";
+const SUITE_GET_STARTED_RETURNING = "Log in to the app to dive into Backstage, Tarabytes and the mini courses.";
+
 const GET_STARTED: Record<Tier, string> = {
   lite: "",
   suite: "Open **Student Access** in the app to book your First 1:1 Coaching Session with a TSS Master Coach.",
@@ -48,16 +55,20 @@ const GET_STARTED: Record<Tier, string> = {
   elite: "Open **Student Access** in the app to see your lessons, chat with your coach, and catch your recordings.",
 };
 
-export function welcomeEmail(i: { firstName: string; tier: Tier; accountUrl: string }) {
+// firstSession: false for a Suite member who isn't getting the free first
+// session (they've had sessions with us before).
+export function welcomeEmail(i: { firstName: string; tier: Tier; accountUrl: string; firstSession?: boolean }) {
   const name = planName(i.tier);
+  const returningSuite = i.tier === "suite" && i.firstSession === false;
+  const intro = returningSuite ? SUITE_WELCOME_RETURNING : WELCOME_LINE[i.tier];
   const subject = `Welcome to ${name}!`;
-  const preheader = WELCOME_LINE[i.tier] || "Here's everything you need to get started.";
+  const preheader = intro || "Here's everything you need to get started.";
   const blocks: EmailBlock[] = [
-    { type: "p", text: `We're so glad you're here. ${WELCOME_LINE[i.tier]}`.trim() },
+    { type: "p", text: `We're so glad you're here. ${intro}`.trim() },
     { type: "h2", text: "What's included" },
-    { type: "list", items: allFeatures(i.tier).map((f) => `✓ ${f}`) },
+    { type: "list", items: allFeatures(i.tier, !returningSuite).map((f) => `✓ ${f}`) },
     { type: "h2", text: "Get started" },
-    { type: "p", text: GET_STARTED[i.tier] },
+    { type: "p", text: returningSuite ? SUITE_GET_STARTED_RETURNING : GET_STARTED[i.tier] },
     { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
     { type: "link", label: "Manage your membership →", url: i.accountUrl },
     { type: "note", text: "That link logs you straight into your billing account, no password needed. Keep this email handy." },
@@ -100,7 +111,8 @@ export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier })
     : [
         { type: "p", text: `Your membership has changed from ${planName(i.from)} to **${name}**.` },
         { type: "h2", text: "Your plan includes" },
-        { type: "list", items: allFeatures(i.to).map((f) => `✓ ${f}`) },
+        // A downgrade never includes the first-session bonus.
+        { type: "list", items: allFeatures(i.to, false).map((f) => `✓ ${f}`) },
         { type: "p", text: "Want to move back up any time? You can change your plan from your account." },
         { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       ];
