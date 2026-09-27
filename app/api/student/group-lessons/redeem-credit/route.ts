@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyCoachOfGroupLessonSignup } from "@/lib/group-lessons";
+import { creditMatchesLesson } from "@/lib/group-lesson-topic";
 
 // Redeems a group_lesson_credit (migration 0086) into a real
 // group_lesson_registrations row — the student's own self-service
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (!lesson || lesson.cancelled_at || new Date(lesson.scheduled_at) <= new Date()) {
     return NextResponse.json({ error: "that group class is no longer available" }, { status: 409 });
   }
-  if (lesson.topic !== credit.topic) {
+  if (!creditMatchesLesson(credit.topic, lesson.topic)) {
     return NextResponse.json({ error: "this credit can only be used for a matching group class" }, { status: 409 });
   }
 

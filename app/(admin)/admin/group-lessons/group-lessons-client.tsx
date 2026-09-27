@@ -8,6 +8,7 @@ import { formatTimeInZone } from "@/lib/timezone";
 import { useTimeZone } from "@/components/timezone-context";
 import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../admin.module.css";
+import { creditMatchesLesson } from "@/lib/group-lesson-topic";
 
 interface Coach {
   id: string;
@@ -745,14 +746,15 @@ function GroupLessonCard({
 
   const isFull = lesson.maxStudents !== null && lesson.attendees.length >= lesson.maxStudents;
 
-  // The selected student's unused credit for THIS lesson's topic, if any
+  // The selected student's unused credit for THIS lesson's class + coach
+  // (any day, lib/group-lesson-topic.ts), if any
   // — the admin-side counterpart to the student's own self-serve
   // redeem-credit flow. Only ever one per topic per student in practice
   // (a student wouldn't be holding two credits for the same class), so
   // the first match is enough.
   const matchingCredit =
     lesson.topic && lesson.topic.trim()
-      ? credits.find((c) => c.studentId === studentId && c.topic === lesson.topic)
+      ? credits.find((c) => c.studentId === studentId && creditMatchesLesson(c.topic, lesson.topic))
       : undefined;
 
   async function handleRegister() {

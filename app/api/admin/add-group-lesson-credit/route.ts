@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 // 4-Pack Group Class add-on) gets these credits granted manually once
 // admin confirms the payment. Each credit is redeemed later through the
 // student's own self-serve panel (GroupLessonCreditPanel, matched by
-// exact topic — lib/group-lesson-credits.ts's getRedeemableGroupLessons),
+// class + coach, any day — lib/group-lesson-topic.ts),
 // same table/shape the understaffed-class cron and cancel-group-lesson
 // already grant into. `quantity` (default 1) inserts that many identical
 // rows in one call, same convention as add-credit, capped at 10 to catch

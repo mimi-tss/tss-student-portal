@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { creditMatchesLesson } from "@/lib/group-lesson-topic";
 
 function unwrapJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -44,10 +45,10 @@ export interface RedeemableGroupLesson {
   spotsLeft: number | null; // null = uncapped
 }
 
-// Future, non-cancelled occurrences of the given topic that still have
-// room and this student isn't already registered in — what a credit
-// (same topic, per the studio's own "another group class in the same
-// name" description) can actually be redeemed against. Uses the admin
+// Future, non-cancelled occurrences matching the credit's class + coach
+// (any day — see lib/group-lesson-topic.ts) that still have room and this
+// student isn't already registered in — what a credit can actually be
+// redeemed against. Uses the admin
 // client deliberately: a student has no RLS visibility into a
 // group_lessons row they aren't registered in yet (0056), and this is a
 // read of everyone else's registration counts too, not just their own —
@@ -61,13 +62,16 @@ export async function getRedeemableGroupLessons(
 ): Promise<RedeemableGroupLesson[]> {
   const { data } = await admin
     .from("group_lessons")
-    .select("id, scheduled_at, duration_minutes, max_students, coaches(name), group_lesson_registrations(student_id)")
-    .eq("topic", topic)
+    .select("id, topic, scheduled_at, duration_minutes, max_students, coaches(name), group_lesson_registrations(student_id)")
     .is("cancelled_at", null)
     .gt("scheduled_at", new Date().toISOString())
     .order("scheduled_at");
 
+  // Matched in JS, not .eq("topic"): same class + coach on ANY day
+  // counts (lib/group-lesson-topic.ts). Future group lessons are a
+  // handful of rows, so fetching them all is cheap.
   return (data ?? [])
+    .filter((l) => creditMatchesLesson(topic, l.topic))
     .map((l) => {
       const registrations = (l.group_lesson_registrations as unknown as { student_id: string }[] | null) ?? [];
       const alreadyRegistered = registrations.some((r) => r.student_id === excludeStudentId);
