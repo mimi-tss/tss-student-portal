@@ -49,13 +49,17 @@ export async function GET(req: NextRequest) {
   for (const student of students ?? []) {
     checked++;
 
-    let offerIds: string[];
+    let offerIds: string[] | null;
     try {
       offerIds = await getKajabiContactOfferIds(student.email);
     } catch (err) {
       console.error(`kajabi-sync: contact lookup failed for ${student.email}`, err);
       continue; // one bad lookup shouldn't break the whole run
     }
+    // No exact Kajabi contact for this email → we don't KNOW their
+    // offers. Never treat that as "cancelled" (that mistake marked real
+    // students cancelled and reset 60-min students to 30 — 2026-09-26).
+    if (offerIds === null) continue;
 
     const stillHasTierOffer = offerIds.some((id) => id in TIER_BY_OFFER_ID);
     const stillHasAddon60 = offerIds.includes(OFFER_IDS.ADDON_60MIN);

@@ -82,21 +82,39 @@ export async function updateKajabiContactField(
 // those (confirmed) and /v1/subscriptions, this function's previous
 // implementation, doesn't exist at all (confirmed 404, not assumed —
 // see app/api/cron/kajabi-sync).
-export async function getKajabiContactOfferIds(email: string): Promise<string[]> {
+// Kajabi has NO exact-email filter: `filter[email]` is silently ignored
+// (it returned the same first contact for every email — confirmed
+// 2026-09-26), and the list response doesn't include offer data inline
+// (only a link). So: `filter[email_contains]`, keep only the contact whose
+// email matches exactly, then read its offers from the relationships
+// endpoint. null = no contact with exactly that email — callers must treat
+// that as "unknown", never as "holds no offers".
+async function findExactContactId(email: string): Promise<string | null> {
+  const target = email.trim().toLowerCase();
   const url = new URL(`${KAJABI_API_BASE}/contacts`);
-  url.searchParams.set("filter[email]", email);
+  url.searchParams.set("filter[email_contains]", target);
+  url.searchParams.set("page[size]", "25");
 
   const res = await fetch(url, { headers: await kajabiHeaders() });
   if (!res.ok) {
     throw new Error(`Kajabi contact lookup failed (${res.status}): ${await res.text()}`);
   }
+  const body = (await res.json()) as { data: { id: string; attributes?: { email?: string } }[] };
+  const exact = body.data.filter((c) => (c.attributes?.email ?? "").trim().toLowerCase() === target);
+  return exact.length === 1 ? exact[0].id : null; // 0 or ambiguous → unknown
+}
 
-  const body = (await res.json()) as {
-    data: { relationships?: { offers?: { data?: { id: string }[] } } }[];
-  };
-
-  const offers = body.data[0]?.relationships?.offers?.data ?? [];
-  return offers.map((o) => o.id);
+export async function getKajabiContactOfferIds(email: string): Promise<string[] | null> {
+  const contactId = await findExactContactId(email);
+  if (!contactId) return null;
+  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/relationships/offers`, {
+    headers: await kajabiHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`Kajabi offers lookup failed (${res.status}): ${await res.text()}`);
+  }
+  const body = (await res.json()) as { data: { id: string }[] };
+  return (body.data ?? []).map((o) => o.id);
 }
 
 // Grants/revokes a specific offer for a contact, identified by email —
@@ -113,16 +131,7 @@ export async function getKajabiContactOfferIds(email: string): Promise<string[]>
 const KAJABI_WRITES_ENABLED = false;
 
 async function findKajabiContactIdByEmail(email: string): Promise<string | null> {
-  const url = new URL(`${KAJABI_API_BASE}/contacts`);
-  url.searchParams.set("filter[email]", email);
-
-  const res = await fetch(url, { headers: await kajabiHeaders() });
-  if (!res.ok) {
-    throw new Error(`Kajabi contact lookup failed (${res.status}): ${await res.text()}`);
-  }
-
-  const body = (await res.json()) as { data: { id: string }[] };
-  return body.data[0]?.id ?? null;
+  return findExactContactId(email);
 }
 
 // Confirmed against the real OpenAPI spec (help.kajabi.com/openapi.yaml,
