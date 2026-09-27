@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
@@ -18,10 +17,4 @@ export function nextDigestWeekKey(now: Date = new Date()): string {
   const add = dow === 1 ? (sentToday ? 7 : 0) : (8 - dow) % 7;
   const target = new Date(today.getTime() + add * 24 * 60 * 60 * 1000);
   return target.toISOString().slice(0, 10);
-}
-
-export async function getCommunityNote(admin: SupabaseClient, weekKey: string): Promise<string | null> {
-  const { data } = await admin.from("digest_community_notes").select("body").eq("week_start", weekKey).maybeSingle();
-  const body = (data?.body as string | undefined)?.trim();
-  return body || null;
 }

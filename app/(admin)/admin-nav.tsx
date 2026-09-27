@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/admin/coaches", label: "Coaches", icon: "◑" },
   { href: "/admin/needs-review", label: "Needs Review", icon: "◉", badgeKey: "needsReview" as const },
   { href: "/admin/community", label: "Backstage", icon: "◈" },
+  { href: "/admin/support", label: "Support Chat", icon: "✉" },
 ];
 
 // Below the mockup's 6-item nav — Exercises, Group Lessons, Finance, and
@@ -32,6 +33,7 @@ const LINKS = [
 const MORE_LINKS = [
   { href: "/admin/exercises", label: "Exercises", icon: "♪", financeOnly: false },
   { href: "/admin/group-lessons", label: "Group Lessons", icon: "◫", financeOnly: false },
+  { href: "/admin/weekly-email", label: "Weekly Email", icon: "✦", financeOnly: false },
   { href: "/admin/activity-log", label: "Activity Log", icon: "▤", financeOnly: false },
   { href: "/admin/recordings", label: "Recordings", icon: "●", financeOnly: false },
   { href: "/admin/billing", label: "Billing", icon: "◆", financeOnly: false },

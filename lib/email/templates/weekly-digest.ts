@@ -1,5 +1,6 @@
 import { renderEmail, type EmailBlock } from "@/lib/email/layout";
-import { STUDENT_APP_URL, STUDENT_COMMUNITY_URL } from "@/lib/email/links";
+import { STUDENT_APP_URL } from "@/lib/email/links";
+import { eventDateLabel, featureIsEmpty, type DigestEvent, type DigestFeature } from "@/lib/digest/content";
 import type { LessonCreditLine } from "@/lib/email/templates/lesson-credits";
 import { describeCredits } from "@/lib/email/templates/lesson-credits";
 
@@ -19,9 +20,9 @@ export interface WeeklyDigestInput {
   homework: { note: string; coachLabel: string } | null;
   exercisesAssigned: number;
   credits: LessonCreditLine[];
-  // The studio's "This week in Backstage" blurb (admin Backstage page);
-  // null = the standing invite line instead.
-  communityNote: string | null;
+  // Studio-written boxes and event list (admin → Weekly Email).
+  features: DigestFeature[];
+  upcoming: DigestEvent[];
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -92,17 +93,22 @@ export function weeklyDigest(i: WeeklyDigestInput) {
     blocks.push({ type: "list", items: describeCredits(i.credits) });
   }
 
-  blocks.push({ type: "h2", text: "This week in Backstage" });
-  if (i.communityNote) {
-    // One line per list item, so the studio can type a few short items.
-    blocks.push({ type: "list", items: i.communityNote.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => `• ${l}`) });
-  } else {
+  // Up to 2 studio boxes, then the "What's Coming Up" list — each hidden
+  // when empty (lib/digest/content.ts).
+  for (const f of i.features.filter((f) => !featureIsEmpty(f))) {
     blocks.push({
-      type: "p",
-      text: "Share a win, ask a question, or cheer on a fellow singer. **Join the conversation in Backstage**, our student community.",
+      type: "feature",
+      heading: f.heading,
+      body: f.body,
+      imageUrl: f.imageUrl,
+      button: f.buttonLabel && f.buttonUrl ? { label: f.buttonLabel, url: f.buttonUrl } : null,
     });
   }
-  blocks.push({ type: "link", label: "Go to Backstage →", url: STUDENT_COMMUNITY_URL });
+
+  if (i.upcoming.length) {
+    blocks.push({ type: "h2", text: "What's coming up" });
+    blocks.push({ type: "list", items: i.upcoming.map((e) => `**${eventDateLabel(e.eventDate)}** - ${e.title}`) });
+  }
 
   blocks.push({ type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL });
   blocks.push({ type: "note", text: "See you this week. Your Voice Matters!" });

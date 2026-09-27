@@ -10,6 +10,3 @@ export const STUDENT_APP_URL = "https://app.tarasimonstudios.com/products/studen
 
 // Texts: just the domain — short enough to keep a text in one segment.
 export const STUDENT_APP_SHORT = "app.tarasimonstudios.com";
-
-// Backstage, the studio's Kajabi community (same path the student nav uses).
-export const STUDENT_COMMUNITY_URL = "https://app.tarasimonstudios.com/products/communities/v2/backstagehub";

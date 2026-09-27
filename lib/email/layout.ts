@@ -29,7 +29,14 @@ export type EmailBlock =
   | { type: "note"; text: string }
   | { type: "h2"; text: string }
   | { type: "list"; items: string[] }
-  | { type: "link"; label: string; url: string };
+  | { type: "link"; label: string; url: string }
+  | {
+      type: "feature";
+      heading?: string | null;
+      body?: string | null;
+      imageUrl?: string | null;
+      button?: { label: string; url: string } | null;
+    };
 
 export interface EmailContent {
   preheader: string;
@@ -74,6 +81,21 @@ function blockHtml(b: EmailBlock): string {
       return `<p style="margin:0 0 16px;font:16px/1.55 ${FONT};color:${COLOR.text};">${rich(b.text)}</p>`;
     case "note":
       return `<p style="margin:0 0 16px;font:14px/1.5 ${FONT};color:${COLOR.muted};">${rich(b.text)}</p>`;
+    case "feature": {
+      // Studio-written box: every part optional, body keeps its line
+      // breaks. Image is full card width (496px = 560 card - 2×32 padding).
+      const parts = [
+        b.imageUrl
+          ? `<img src="${esc(b.imageUrl)}" width="496" alt="${esc(b.heading ?? "")}" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:10px;margin:0 0 16px;">`
+          : "",
+        b.heading ? `<p style="margin:0 0 8px;font:bold 20px/1.3 ${FONT};color:${COLOR.text};">${esc(b.heading)}</p>` : "",
+        b.body
+          ? `<p style="margin:0 0 16px;font:16px/1.55 ${FONT};color:${COLOR.text};">${esc(b.body).replace(/\n/g, "<br>")}</p>`
+          : "",
+        b.button ? blockHtml({ type: "button", label: b.button.label, url: b.button.url }) : "",
+      ].filter(Boolean);
+      return `<div style="margin:28px 0 8px;padding-top:24px;border-top:1px solid ${COLOR.border};">${parts.join("\n")}</div>`;
+    }
     case "link":
       return `<p style="margin:0 0 16px;font:bold 15px/1.5 ${FONT};"><a href="${esc(b.url)}" target="_blank" style="color:${COLOR.accent};text-decoration:underline;">${esc(b.label)}</a></p>`;
     case "h2":
@@ -120,6 +142,10 @@ function blockText(b: EmailBlock): string {
       return b.text.toUpperCase();
     case "link":
       return `${b.label}: ${b.url}`;
+    case "feature":
+      return [b.heading?.toUpperCase(), b.body, b.button ? `${b.button.label}: ${b.button.url}` : null]
+        .filter(Boolean)
+        .join("\n");
     case "list":
       return b.items.map((it) => `- ${plain(it)}`).join("\n");
   }
