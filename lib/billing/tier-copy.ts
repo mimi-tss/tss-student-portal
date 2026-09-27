@@ -39,7 +39,7 @@ export const TIER_COPY: {
       "Backstage Challenges & Events",
       "Tarabytes Exclusive Access",
       "12+ Mini Courses",
-      "Bonus: your first 1:1 coaching session with a TSS Master Coach",
+      "Bonus: Your First 1:1 Coaching Session with a TSS Master Coach",
     ],
   },
   {
@@ -48,7 +48,7 @@ export const TIER_COPY: {
     desc: "For the serious singer — vocal athletes and working professionals training every week.",
     features: [
       "Everything in Suite, plus",
-      "1:1 private 30-min coaching session with a TSS Master Coach (4 sessions/month)",
+      "1:1 Private 30-min Coaching Session with a TSS Master Coach (4 sessions/month)",
       "Sing Like a Superstar (8-week mastercourse)",
       "Riffs & Runs (6-week mastercourse)",
       "Access to the TSS Vocal Exercises Library",

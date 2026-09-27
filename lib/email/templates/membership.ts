@@ -29,7 +29,7 @@ function allFeatures(tier: Tier): string[] {
 // someone who has already joined (Elite's says "by application only").
 const WELCOME_LINE: Record<Tier, string> = {
   lite: "",
-  suite: "You're in the VIP community now, plus a first taste of 1:1 coaching with a TSS Master Coach.",
+  suite: "You're in the VIP community now, plus your first 1:1 Private Coaching Session with a TSS Master Coach.",
   pro: "You're training every week now with a TSS Master Coach, plus our full course and exercise library.",
   elite: "You're in! Get ready to go all-in on your singing career with Tara and the team.",
 };
@@ -43,7 +43,7 @@ function unlocked(from: Tier, to: Tier): string[] {
 
 const GET_STARTED: Record<Tier, string> = {
   lite: "",
-  suite: "Open **Student Access** in the app to book your bonus first 1:1 coaching session with a TSS Master Coach.",
+  suite: "Open **Student Access** in the app to book your First 1:1 Coaching Session with a TSS Master Coach.",
   pro: "Open **Student Access** in the app to see your lessons, chat with your coach, and catch your recordings.",
   elite: "Open **Student Access** in the app to see your lessons, chat with your coach, and catch your recordings.",
 };
