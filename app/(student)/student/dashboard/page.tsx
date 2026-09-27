@@ -248,7 +248,7 @@ export default async function StudentDashboardPage() {
       ? await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])
       : []
   ).filter(
-    (o) => o.occurrenceAt.getTime() - now.getTime() >= 6 * 60 * 60 * 1000,
+    (o) => !o.noBonusLesson && o.occurrenceAt.getTime() - now.getTime() >= 6 * 60 * 60 * 1000,
   );
   const bonusPrice = bonus ? await fifthWeekPrice(bonus.durationMinutes) : null;
   const bonusWhen = bonus ? lessonTimeFields(bonus.occurrenceAt.toISOString(), bonus.coachTimezone) : null;

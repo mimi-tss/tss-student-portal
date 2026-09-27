@@ -31,6 +31,15 @@ export interface FifthWeekOpportunity {
   coachTimezone: string;
   occurrenceAt: Date;
   durationMinutes: number;
+  // Tara's own students never get a bonus lesson — they just get a
+  // "no lesson that week" heads-up (studio call 2026-09-26).
+  noBonusLesson: boolean;
+}
+
+// Tara's weekly students: no 5th-week lesson, ever. Matched by name —
+// there's one Tara on staff and no coach flag for this.
+export function isTaraCoach(coachName: string | null | undefined): boolean {
+  return /^tara\b/i.test((coachName ?? "").trim());
 }
 
 type One<T> = T | T[] | null;
@@ -100,6 +109,7 @@ export async function findFifthWeekOpportunities(
       coachTimezone: tz,
       occurrenceAt,
       durationMinutes: st.session_duration_minutes ?? 30,
+      noBonusLesson: isTaraCoach(coach?.name),
     });
   }
   if (!found.length) return [];

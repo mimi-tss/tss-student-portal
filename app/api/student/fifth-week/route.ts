@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   const [offer] = (await findFifthWeekOpportunities(admin, { studentId: billing.studentId })).filter(
     (o) => o.occurrenceAt.toISOString() === new Date(occurrenceAt).toISOString(),
   );
-  if (!offer) return NextResponse.json({ error: "This bonus lesson isn't available anymore." }, { status: 409 });
+  if (!offer || offer.noBonusLesson) return NextResponse.json({ error: "This bonus lesson isn't available anymore." }, { status: 409 });
   if (offer.occurrenceAt.getTime() - Date.now() < CUTOFF_MS) {
     return NextResponse.json({ error: "It's too close to the lesson to add it now." }, { status: 409 });
   }

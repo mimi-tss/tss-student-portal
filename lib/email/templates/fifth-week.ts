@@ -63,3 +63,45 @@ export function fifthWeekOffer(i: {
     bellBody: `${i.lessonDay}, ${i.lessonShortDate} · ${i.lessonTime} with ${coach}${price}`,
   };
 }
+
+// Tara's students: no bonus lesson that week, just a heads-up so they
+// don't show up expecting one (studio call 2026-09-26). Sent once, 7 days
+// ahead.
+export function fifthWeekNoLesson(i: {
+  firstName: string;
+  coachFirstName: string;
+  lessonDate: string;
+  lessonShortDate: string;
+  lessonDay: string;
+  lessonWeekday: string;
+}) {
+  const coach = `Coach ${i.coachFirstName}`;
+  const subject = `No lesson on ${i.lessonDay}, ${i.lessonShortDate}`;
+  const preheader = `Your billing cycle has an extra ${i.lessonWeekday}. See you the week after!`;
+  const { html, text } = renderEmail({
+    preheader,
+    heading: `Quick heads-up, ${i.firstName}`,
+    blocks: [
+      {
+        type: "p",
+        text: `This billing cycle has an extra ${i.lessonWeekday}, and your plan covers 4 lessons per cycle, so there's **no lesson with ${coach} on ${i.lessonDate}**.`,
+      },
+      { type: "p", text: "We'll see you the following week at your usual time. Keep practicing in the meantime!" },
+      { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
+    ],
+    reason: "You're getting this because lesson alerts are on.",
+  });
+  const sms = smsText(
+    `Hi ${i.firstName}, heads-up: no lesson with ${coach} on ${i.lessonDay}, ${i.lessonShortDate} (extra week in your billing cycle). See you the week after!`,
+    { brandPrefix: false },
+  );
+  return {
+    subject,
+    preheader,
+    html,
+    text,
+    sms,
+    bellTitle: `No lesson on ${i.lessonShortDate}`,
+    bellBody: `Extra ${i.lessonWeekday} in your billing cycle · see you the week after`,
+  };
+}

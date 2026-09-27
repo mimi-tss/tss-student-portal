@@ -2,6 +2,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { fifthWeekOccurrence } from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
+import { isTaraCoach } from "@/lib/scheduling/fifth-week-offers";
 import { getStripeClient } from "@/lib/stripe/client";
 import { STRIPE_PRICE_BY_TIER, type BillingInterval } from "@/lib/stripe/tiers";
 import type { StripeAccount, Tier } from "@/types/database";
@@ -403,7 +404,7 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
   const { data: schedules } = await supabase
     .from("recurring_schedules")
     .select(
-      "student_id, coach_id, day_of_week, start_time, cadence, students(name, tier, subscription_status, billing_anniversary_date), coaches(timezone)",
+      "student_id, coach_id, day_of_week, start_time, cadence, students(name, tier, subscription_status, billing_anniversary_date), coaches(name, timezone)",
     )
     .eq("active", true)
     .eq("cadence", "weekly");
@@ -421,7 +422,9 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
     if (student.tier !== "pro" && student.tier !== "elite") continue;
     if (student.subscription_status !== "active") continue;
 
-    const coach = (Array.isArray(s.coaches) ? s.coaches[0] : s.coaches) as { timezone: string } | null;
+    const coach = (Array.isArray(s.coaches) ? s.coaches[0] : s.coaches) as { name: string; timezone: string } | null;
+    // Tara's students never get a 5th-week lesson (lib/scheduling/fifth-week-offers.ts).
+    if (isTaraCoach(coach?.name)) continue;
     const occurrenceAt = fifthWeekOccurrence(
       s.day_of_week,
       s.start_time,
