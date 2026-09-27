@@ -16,7 +16,7 @@ import { firstNameOf } from "@/lib/ghl/fields";
 //   - "expiring": a credit expiring within 7 days that hasn't had its
 //     expiry reminder yet. Wins over "new" if both apply in one run.
 // Expired credits are excluded upstream (getUnscheduledMakeupCredits).
-// Email + bell only, no SMS.
+// Email, text and bell each follow the student's Alerts settings.
 const NEW_MAX_AGE_DAYS = 14;
 const EXPIRING_WITHIN_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   const { data: students } = await admin
     .from("students")
-    .select("id, notify_alerts_email, notify_alerts_inapp")
+    .select("id, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
     .in("id", [...byStudent.keys()]);
   const prefsById = new Map((students ?? []).map((s) => [s.id as string, s]));
 
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
       body: rendered.bellBody,
       linkUrl: "/student/book",
       ghlData: { ...rendered, reminder: expiring ? "expiring" : "new", creditCount: all.length },
-      channels: { email: prefs.notify_alerts_email, sms: false, inApp: prefs.notify_alerts_inapp },
+      channels: { email: prefs.notify_alerts_email, sms: prefs.notify_alerts_sms, inApp: prefs.notify_alerts_inapp },
     });
 
     // Per-credit markers so each credit gets each reminder at most once.

@@ -12,12 +12,21 @@ export interface NotificationPrefs {
   notify_alerts_inapp: boolean;
 }
 
-const GROUPS: { key: "digest" | "alerts"; label: string; description: string }[] = [
-  { key: "digest", label: "Weekly digest", description: "Your week ahead — upcoming sessions, group lessons, credits." },
+// `channels` limits which switches a group shows — the weekly digest is
+// too long for a text, so it's email + in-app only (studio call
+// 2026-09-26).
+const GROUPS: { key: "digest" | "alerts"; label: string; description: string; channels: ("email" | "sms" | "inapp")[] }[] = [
+  {
+    key: "digest",
+    label: "Weekly digest",
+    description: "Your week ahead — upcoming lessons, group sessions, credits.",
+    channels: ["email", "inapp"],
+  },
   {
     key: "alerts",
     label: "Alerts",
-    description: "Session starting soon, 24hr reminders, recording ready, unscheduled makeup credits.",
+    description: "Lesson reminders, messages from your coach, recordings, class changes, and lesson credits.",
+    channels: ["email", "sms", "inapp"],
   },
 ];
 
@@ -67,7 +76,7 @@ export default function NotificationPreferencesClient({ initial }: { initial: No
             {g.description}
           </p>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {CHANNELS.map((c) => {
+            {CHANNELS.filter((c) => g.channels.includes(c.key)).map((c) => {
               const key = `notify_${g.key}_${c.key}` as keyof NotificationPrefs;
               return (
                 <label key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>

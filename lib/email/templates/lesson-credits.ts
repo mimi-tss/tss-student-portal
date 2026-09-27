@@ -1,5 +1,5 @@
-import { renderEmail } from "@/lib/email/layout";
-import { STUDENT_APP_URL } from "@/lib/email/links";
+import { renderEmail, smsText } from "@/lib/email/layout";
+import { STUDENT_APP_SHORT, STUDENT_APP_URL } from "@/lib/email/links";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 export interface LessonCreditLine {
@@ -48,7 +48,8 @@ function soonest(credits: LessonCreditLine[]): string | null {
 
 // Unbooked lesson credits (makeup_credit_needs_scheduling). Students see
 // "lesson credit", never the internal credit type — most are purchased
-// add-on lessons, not makeups. Email + bell only, no SMS (studio call).
+// add-on lessons, not makeups. Text follows the student's Alerts → Text
+// setting like every other alert.
 // Copy approved by the studio 2026-09-26.
 export function lessonCredits(i: LessonCreditsInput) {
   const n = i.credits.length;
@@ -103,7 +104,13 @@ export function lessonCredits(i: LessonCreditsInput) {
     preheader,
     html,
     text,
-    sms: "", // email + bell only
+    // Sent only if the student turned on Alerts → Text.
+    sms: smsText(
+      i.expiring
+        ? `Hi ${i.firstName}, your ${noun} ${n === 1 ? "expires" : "start expiring"} ${firstShort}. Book before you lose ${n === 1 ? "it" : "them"}: ${STUDENT_APP_SHORT}`
+        : `Hi ${i.firstName}, you have ${n === 1 ? "a lesson credit" : `${n} lesson credits`} waiting to be booked${firstShort ? ` (book by ${firstShort})` : ""}. Log in: ${STUDENT_APP_SHORT}`,
+      { brandPrefix: false },
+    ),
     bellTitle: i.expiring ? (n === 1 ? "Lesson credit expiring" : "Lesson credits expiring") : n === 1 ? "Lesson credit to book" : "Lesson credits to book",
     bellBody: `${n} × ${minutes} min${firstShort ? ` · book by ${firstShort}` : ""}`,
   };
