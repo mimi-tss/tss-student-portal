@@ -8,6 +8,8 @@ export interface UnscheduledCredit {
   studentName: string;
   type: string;
   createdAt: string;
+  expiresAt: string | null;
+  durationMinutes: number;
 }
 
 // Unused, unscheduled makeup credits, any type (including non-expiring
@@ -16,7 +18,7 @@ export interface UnscheduledCredit {
 // student-fault only, expiry-gated). "Idle" = created at least
 // minAgeDays ago, so a credit issued minutes ago from a just-cancelled
 // session doesn't get nudged before the student's had a chance to book
-// it themselves.
+// it themselves. Already-expired credits are excluded — nothing to book.
 export async function getUnscheduledMakeupCredits(
   admin: SupabaseClient,
   minAgeDays = 3,
@@ -25,9 +27,10 @@ export async function getUnscheduledMakeupCredits(
 
   const { data } = await admin
     .from("makeup_credits")
-    .select("id, student_id, type, created_at, students(id, name, email, phone, archived)")
+    .select("id, student_id, type, created_at, expires_at, duration_minutes, students(id, name, email, phone, archived)")
     .eq("used", false)
     .is("used_session_id", null)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
     .lte("created_at", cutoff.toISOString());
 
   return (data ?? [])
@@ -44,6 +47,8 @@ export async function getUnscheduledMakeupCredits(
         studentName: student.name,
         type: c.type as string,
         createdAt: c.created_at as string,
+        expiresAt: (c.expires_at as string | null) ?? null,
+        durationMinutes: (c.duration_minutes as number | null) ?? 30,
       };
     })
     .filter((c): c is UnscheduledCredit => c !== null);
