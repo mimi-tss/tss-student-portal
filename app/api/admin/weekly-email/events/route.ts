@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminProfileId } from "@/lib/support/admin";
+import { requireAdminProfileId } from "@/lib/auth/require-admin-api";
 
 // "What's Coming Up" list for the Monday digest. Not per week — past
 // dates simply stop showing (lib/digest/content.ts).

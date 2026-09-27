@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminProfileId } from "@/lib/support/admin";
+import { requireAdminProfileId } from "@/lib/auth/require-admin-api";
 import { weeklyDigest } from "@/lib/email/templates/weekly-digest";
 import type { DigestEvent, DigestFeature } from "@/lib/digest/content";
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminProfileId } from "@/lib/support/admin";
+import { requireAdminProfileId } from "@/lib/auth/require-admin-api";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };

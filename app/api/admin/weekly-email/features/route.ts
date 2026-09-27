@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminProfileId } from "@/lib/support/admin";
+import { requireAdminProfileId } from "@/lib/auth/require-admin-api";
 import { nextDigestWeekKey } from "@/lib/digest/week";
 
 interface FeatureInput {
