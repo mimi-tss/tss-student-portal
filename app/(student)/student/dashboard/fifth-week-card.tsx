@@ -54,8 +54,8 @@ export default function FifthWeekCard({
       ) : (
         <>
           <p style={{ margin: "6px 0 10px" }}>
-            This billing cycle has an extra lesson day, so your usual time is open: <strong>{whenLabel}</strong> with{" "}
-            {coachLabel} ({durationMinutes} min).
+            This billing cycle has an extra lesson day, so your usual time is open: a Private {durationMinutes}-min Coaching
+            Session with {coachLabel} on <strong>{whenLabel}</strong>.
           </p>
           {step === "offer" ? (
             <button type="button" className={styles.cta} onClick={() => setStep("confirm")}>

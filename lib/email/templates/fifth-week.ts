@@ -36,7 +36,7 @@ export function fifthWeekOffer(i: {
       {
         type: "card",
         title: "Bonus lesson",
-        lines: [`${i.lessonDate} · ${i.lessonTime}`, `${i.durationMinutes} minutes with ${coach}${price}`],
+        lines: [`${i.lessonDate} · ${i.lessonTime}`, `Private ${i.durationMinutes}-min Coaching Session with ${coach}${price}`],
       },
       { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       {

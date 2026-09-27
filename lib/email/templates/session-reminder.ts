@@ -32,7 +32,7 @@ export function sessionReminder24h(i: SessionReminderInput): RenderedNotificatio
       {
         type: "card",
         title: "Your lesson",
-        lines: [`${i.lessonDate} · ${i.lessonTime}`, `${i.durationMinutes} minutes with ${coach}`],
+        lines: [`${i.lessonDate} · ${i.lessonTime}`, `Private ${i.durationMinutes}-min Coaching Session with ${coach}`],
       },
       { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       { type: "p", text: "Your Google Meet link will pop up in your portal chat 10 minutes before we start." },

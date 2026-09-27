@@ -43,12 +43,12 @@ function groupCredits(credits: LessonCreditLine[]) {
   return [...groups.values()].sort((a, b) => (a.expiresAt ?? "9999").localeCompare(b.expiresAt ?? "9999"));
 }
 
-// "2 × 30-minute lessons · book by Thursday, Dec 31" — shared with the
+// "2 × Private 30-min Coaching Sessions · book by Thursday, Dec 31" — shared with the
 // weekly digest's credits section.
 export function describeCredits(credits: LessonCreditLine[]): string[] {
   return groupCredits(credits).map(
     (g) =>
-      `${g.count} × ${g.durationMinutes}-minute ${g.count === 1 ? "lesson" : "lessons"}${
+      `${g.count} × Private ${g.durationMinutes}-min Coaching ${g.count === 1 ? "Session" : "Sessions"}${
         g.expiresAt ? ` · book by ${fmt(g.expiresAt, { weekday: "long", month: "short", day: "numeric" })}` : ""
       }`,
   );
@@ -80,7 +80,7 @@ export function lessonCredits(i: LessonCreditsInput) {
 
   const summary =
     n === 1
-      ? `**1 lesson credit** (${i.credits[0].durationMinutes} min)`
+      ? `**1 lesson credit** (Private ${i.credits[0].durationMinutes}-min Coaching Session)`
       : `**${n} lesson credits**`;
 
   const { html, text } = renderEmail({
@@ -97,7 +97,7 @@ export function lessonCredits(i: LessonCreditsInput) {
         type: "card",
         title: n === 1 ? "Your credit" : "Your credits",
         // Identical credits (same length + same book-by day) collapse into
-        // one "2 × 30-minute lessons" line, soonest deadline first.
+        // one "2 × Private 30-min Coaching Sessions" line, soonest deadline first.
         lines: describeCredits(i.credits),
       },
       { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },

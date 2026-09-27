@@ -56,7 +56,12 @@ export function bookingConfirmed(i: {
       title: many ? "Your sessions" : i.isGroup ? "Your session" : "Your lesson",
       lines: many
         ? i.lessons.map((l) => `${l.lessonDate} · ${l.lessonTime}`)
-        : [`${first.lessonDate} · ${first.lessonTime}`, `${i.durationMinutes} minutes with ${coach}`],
+        : [
+            `${first.lessonDate} · ${first.lessonTime}`,
+            i.label === "Private Coaching Session"
+              ? `Private ${i.durationMinutes}-min Coaching Session with ${coach}`
+              : `${i.durationMinutes}-min ${i.label} with ${coach}`,
+          ],
     },
     { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
     { type: "p", text: MEET_NOTE },

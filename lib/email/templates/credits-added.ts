@@ -93,7 +93,7 @@ export function taraLessonPurchased(i: { firstName: string }) {
     preheader,
     heading: `Thank you, ${i.firstName}!`,
     blocks: [
-      { type: "p", text: "Your **30-minute lesson with Tara Simon** is confirmed. We'll reach out shortly to find a time that works for you." },
+      { type: "p", text: "Your **Private 30-min Coaching Session with Tara Simon** is confirmed. We'll reach out shortly to find a time that works for you." },
       { type: "note", text: "Questions in the meantime? Just reply to this email." },
     ],
     reason: "You're getting this because you made a purchase.",
