@@ -26,7 +26,10 @@ export type EmailBlock =
   | { type: "card"; title?: string; lines: string[] }
   | { type: "quote"; text: string; from: string }
   | { type: "button"; label: string; url: string }
-  | { type: "note"; text: string };
+  | { type: "note"; text: string }
+  | { type: "h2"; text: string }
+  | { type: "list"; items: string[] }
+  | { type: "link"; label: string; url: string };
 
 export interface EmailContent {
   preheader: string;
@@ -71,6 +74,14 @@ function blockHtml(b: EmailBlock): string {
       return `<p style="margin:0 0 16px;font:16px/1.55 ${FONT};color:${COLOR.text};">${rich(b.text)}</p>`;
     case "note":
       return `<p style="margin:0 0 16px;font:14px/1.5 ${FONT};color:${COLOR.muted};">${rich(b.text)}</p>`;
+    case "link":
+      return `<p style="margin:0 0 16px;font:bold 15px/1.5 ${FONT};"><a href="${esc(b.url)}" target="_blank" style="color:${COLOR.accent};text-decoration:underline;">${esc(b.label)}</a></p>`;
+    case "h2":
+      return `<p style="margin:28px 0 10px;padding-top:20px;border-top:1px solid ${COLOR.border};font:bold 12px/1.4 ${FONT};letter-spacing:1px;text-transform:uppercase;color:${COLOR.accent};">${esc(b.text)}</p>`;
+    case "list":
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
+  ${b.items.map((it) => `<tr><td style="padding:0 0 8px;font:15px/1.5 ${FONT};color:${COLOR.text};">${rich(it)}</td></tr>`).join("\n  ")}
+</table>`;
     case "card":
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 24px;">
   <tr><td style="background:${COLOR.accentSoft};border-left:4px solid ${COLOR.accent};border-radius:10px;padding:16px 20px;">
@@ -105,6 +116,12 @@ function blockText(b: EmailBlock): string {
       return `"${b.text}"\n— ${b.from}`;
     case "button":
       return `${b.label}: ${b.url}`;
+    case "h2":
+      return b.text.toUpperCase();
+    case "link":
+      return `${b.label}: ${b.url}`;
+    case "list":
+      return b.items.map((it) => `- ${plain(it)}`).join("\n");
   }
 }
 
