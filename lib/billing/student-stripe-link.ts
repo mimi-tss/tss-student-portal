@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findStripeCustomerAcrossAccounts } from "@/lib/stripe/accounts";
+import { findStripeCustomerAcrossAccounts, pickCustomerSubscriptionId } from "@/lib/stripe/accounts";
 import type { StripeAccount, Tier } from "@/types/database";
 
 export interface BillingStudent {
@@ -70,6 +70,28 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
       stripeAccount: student.stripe_account as StripeAccount,
       stripeCustomerId: student.stripe_customer_id,
       stripeSubscriptionId: student.stripe_subscription_id,
+    };
+  }
+
+  // Customer already linked (by admin, a backfill, or checkout) but no
+  // subscription recorded — fill it in from THAT customer, never re-search
+  // by email: an email search can land on a different, stale customer and
+  // silently overwrite a link admin set by hand (which is exactly how
+  // Greg Popcak / Florate Israel / Tal Zadok ended up on the wrong one).
+  if (student.stripe_customer_id && student.stripe_account) {
+    const account = student.stripe_account as StripeAccount;
+    const subscriptionId = await pickCustomerSubscriptionId(account, student.stripe_customer_id);
+    if (subscriptionId) {
+      await createAdminClient().from("students").update({ stripe_subscription_id: subscriptionId }).eq("id", student.id);
+    }
+    return {
+      studentId: student.id,
+      email: student.email,
+      name: student.name,
+      tier: student.tier as Tier,
+      stripeAccount: account,
+      stripeCustomerId: student.stripe_customer_id,
+      stripeSubscriptionId: subscriptionId,
     };
   }
 

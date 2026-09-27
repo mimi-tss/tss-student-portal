@@ -116,7 +116,21 @@ export async function GET() {
 
   for (const student of students ?? []) {
     try {
-      const live = await findLiveSubscriptions(student.email);
+      // The customer we already have linked wins (admin may have set it
+      // by hand); only search by email when it has no live subscription.
+      let live: Awaited<ReturnType<typeof findLiveSubscriptions>> = [];
+      if (student.stripe_customer_id && student.stripe_account) {
+        const account = student.stripe_account as StripeAccount;
+        const subs = await getStripeClient(account).subscriptions.list({
+          customer: student.stripe_customer_id,
+          status: "all",
+          limit: 10,
+        });
+        live = subs.data
+          .filter((s) => LIVE_STATUSES.includes(s.status))
+          .map((subscription) => ({ account, customerId: student.stripe_customer_id!, subscription }));
+      }
+      if (live.length === 0) live = await findLiveSubscriptions(student.email);
 
       if (live.length === 0) {
         noSubscription.push({ name: student.name, email: student.email, recentCharges: await recentCharges(student.email) });

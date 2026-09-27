@@ -13,13 +13,28 @@ export async function findOrCreateOwnCustomer(email: string, name: string): Prom
   return created.id;
 }
 
+const LIVE_STATUSES = ["active", "trialing", "past_due", "unpaid", "paused"];
+
+// The subscription that represents this customer's current plan: a live
+// one if any (newest first, as Stripe lists them), else the most recent
+// of any status. null if the customer has never had one.
+export async function pickCustomerSubscriptionId(account: StripeAccount, customerId: string): Promise<string | null> {
+  const client = account === "opus" ? stripeOpus : stripe;
+  const subs = await client.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
+  return (subs.data.find((s) => LIVE_STATUSES.includes(s.status)) ?? subs.data[0])?.id ?? null;
+}
+
 // Cross-account customer lookup for a student who hasn't been linked to
 // either Stripe account yet (a pre-migration Opus customer visiting
 // /billing/account for the first time — see app/api/billing/subscription/
-// route.ts's lazy link-on-first-view). Opus first, then the current
-// account, per the studio's own stated ordering — new signups only ever
-// land in "own", so a genuinely new customer will simply miss on Opus
-// and get found on the second check.
+// route.ts's lazy link-on-first-view). One email can have SEVERAL
+// customers across both accounts (confirmed live: 19 students' live
+// subscriptions sat on a different customer than the first one found,
+// and Greg Popcak / Florate Israel / Tal Zadok got linked to a stale Opus
+// customer that way) — so this checks every customer on both accounts
+// and prefers one with a live subscription. Only if none has one does it
+// fall back to the first customer found, Opus first per the studio's
+// stated ordering.
 export async function findStripeCustomerAcrossAccounts(
   email: string,
 ): Promise<{ account: StripeAccount; customerId: string; subscriptionId: string | null } | null> {
@@ -28,14 +43,16 @@ export async function findStripeCustomerAcrossAccounts(
     { account: "own", client: stripe },
   ];
 
+  let fallback: { account: StripeAccount; customerId: string; subscriptionId: string | null } | null = null;
   for (const { account, client } of accounts) {
-    const customers = await client.customers.list({ email, limit: 1 });
-    const customer = customers.data[0];
-    if (!customer) continue;
-
-    const subs = await client.subscriptions.list({ customer: customer.id, status: "all", limit: 1 });
-    return { account, customerId: customer.id, subscriptionId: subs.data[0]?.id ?? null };
+    const customers = await client.customers.list({ email, limit: 20 });
+    for (const customer of customers.data) {
+      const subs = await client.subscriptions.list({ customer: customer.id, status: "all", limit: 10 });
+      const live = subs.data.find((s) => LIVE_STATUSES.includes(s.status));
+      if (live) return { account, customerId: customer.id, subscriptionId: live.id };
+      fallback ??= { account, customerId: customer.id, subscriptionId: subs.data[0]?.id ?? null };
+    }
   }
 
-  return null;
+  return fallback;
 }
