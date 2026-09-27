@@ -40,7 +40,7 @@ export function recordingReady(i: RecordingReadyInput): RenderedNotification & {
     reason: "You're getting this because recording alerts are on.",
   });
 
-  const smsWhat = `your ${i.isGroup ? "group class" : "session"} with ${coach}`; // short: full topic names can push past one text
+  const smsWhat = `your ${i.isGroup ? i.lessonLabel : "session"} with ${coach}`; // cleaned label, e.g. "Group Coaching Session"
   const sms = smsText(`Hi ${i.firstName}, your recording from ${smsWhat} is ready. Watch it here: ${STUDENT_APP_SHORT}`, {
     brandPrefix: false,
   });

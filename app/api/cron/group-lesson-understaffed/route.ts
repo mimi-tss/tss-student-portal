@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem } from "@/lib/admin/attention-items";
 import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
 import { formatDateTimeInZone } from "@/lib/timezone";
+import { groupClassCancelled } from "@/lib/email/templates/group-class-cancelled";
+import { cleanGroupTopic } from "@/lib/admin/recording-matching";
+import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 
 // Catches a group class ~24h out with 0 or 1 registered students and
 // cancels it — a coach showing up to teach one student (or nobody) isn't
@@ -100,6 +103,17 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      const when = lessonTimeFields(lesson.scheduled_at, coach?.timezone);
+      const rendered = groupClassCancelled({
+        firstName: firstNameOf(soleStudent.name),
+        coachFirstName: firstNameOf(coach?.name),
+        classLabel: cleanGroupTopic(lesson.topic),
+        lessonDate: when.lessonDate,
+        lessonShortDate: when.lessonShortDate,
+        lessonTime: when.lessonTime,
+        creditAdded: !!lesson.topic?.trim(),
+      });
+
       await notifyStudent(admin, {
         studentId: soleStudent.id,
         email: soleStudent.email,
@@ -107,12 +121,10 @@ export async function GET(req: NextRequest) {
         group: "alerts",
         kind: "group_lesson_cancelled",
         dedupKey: `student:${soleStudent.id}:group_lesson_cancelled:${lesson.id}`,
-        title: `${topicLabel} cancelled`,
-        body: lesson.topic?.trim()
-          ? `Your "${topicLabel}" group class at ${time} was cancelled — not enough other students registered. You have a credit to join a future ${topicLabel} class.`
-          : `Your group class at ${time} was cancelled — not enough other students registered. Contact the studio to reschedule.`,
+        title: rendered.bellTitle,
+        body: rendered.bellBody,
         linkUrl: "/student/book",
-        ghlData: { groupLessonId: lesson.id, topic: lesson.topic, scheduledAt: lesson.scheduled_at },
+        ghlData: { groupLessonId: lesson.id, topic: lesson.topic, scheduledAt: lesson.scheduled_at, ...rendered },
         channels: {
           email: soleStudent.notify_alerts_email,
           sms: soleStudent.notify_alerts_sms,

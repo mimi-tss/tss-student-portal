@@ -25,6 +25,10 @@ export function lessonTimeFields(scheduledAt: string, timeZone: string | null | 
     }).format(new Date(scheduledAt)),
     // "Tue"
     lessonDay: new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(new Date(scheduledAt)),
+    // "Sep 23"
+    lessonShortDate: new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric" }).format(
+      new Date(scheduledAt),
+    ),
     // "4:00 PM ET"
     lessonTime: formatTimeInZone(scheduledAt, tz),
   };

@@ -951,12 +951,18 @@ async function groupLessonContext(
   };
 }
 
-// Studio topics carry scheduling hints for admins ("Semi-Private Vocal
-// Group Class - Coach Nikki | Wednesday"); student copy already names the
-// coach separately, so keep just the class name.
+// Student-facing name for a group class. Studio topics carry scheduling
+// hints for admins ("Semi-Private Vocal Group Class - Coach Nikki |
+// Wednesday") and student copy names the coach separately, so strip
+// those. "Semi-private" and "group" are the same product — the studio
+// calls it a "Group Coaching Session" to students (2026-09-26), matching
+// "Private Coaching Session" for 1:1s. Other names (Bootcamps) pass through.
+export const GROUP_SESSION_LABEL = "Group Coaching Session";
+
 export function cleanGroupTopic(topic: string | null | undefined): string {
   const t = (topic ?? "").split(" | ")[0].replace(/\s+-\s+Coach\b.*$/i, "").trim();
-  return t || "Group Class";
+  if (!t || /semi-?private|group class/i.test(t)) return GROUP_SESSION_LABEL;
+  return t;
 }
 
 function unwrapOne<T>(v: T | T[] | null | undefined): T | null {
