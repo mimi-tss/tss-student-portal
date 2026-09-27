@@ -25,7 +25,8 @@ const GROUPS: { key: "digest" | "alerts"; label: string; description: string; ch
   {
     key: "alerts",
     label: "Alerts",
-    description: "Lesson reminders, messages from your coach, recordings, class changes, and lesson credits.",
+    description:
+      "Lesson reminders, messages from your coach, recordings, class changes, and lesson credits. Text is only used for lesson reminders and lesson credits.",
     channels: ["email", "sms", "inapp"],
   },
 ];

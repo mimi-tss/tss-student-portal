@@ -13,6 +13,16 @@ type NotificationKind =
   | "group_lesson_cancelled"
   | "chat_message";
 
+// The only notifications that may go out by text, and only when the
+// student turned on Alerts → Text (studio call 2026-09-26). Coach
+// messages, recordings and class changes are email + in-app only, even
+// for a student with texts on. Enforced here so no call site can drift.
+const SMS_KINDS: ReadonlySet<NotificationKind> = new Set([
+  "session_reminder_24h",
+  "session_starting_soon",
+  "makeup_credit_needs_scheduling",
+]);
+
 // Claims a dedup_key in notification_log — returns false (already sent)
 // on a unique-violation, true if this call is the one that gets to send.
 // No RPC needed: notification_log's unique index is plain, not partial
@@ -75,7 +85,7 @@ export async function notifyStudent(admin: SupabaseClient, input: StudentNotifyI
 
   const channels: GhlEvent["channels"] = [];
   if (input.channels.email) channels.push("email");
-  if (input.channels.sms) channels.push("sms");
+  if (input.channels.sms && SMS_KINDS.has(input.kind)) channels.push("sms");
 
   if (channels.length > 0) {
     await notifyGhl({

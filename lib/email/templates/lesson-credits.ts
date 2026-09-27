@@ -104,7 +104,8 @@ export function lessonCredits(i: LessonCreditsInput) {
     preheader,
     html,
     text,
-    // Sent only if the student turned on Alerts → Text.
+    // Sent only if the student turned on Alerts → Text (one of the few
+    // text-eligible kinds — SMS_KINDS in lib/notifications/create.ts).
     sms: smsText(
       i.expiring
         ? `Hi ${i.firstName}, your ${noun} ${n === 1 ? "expires" : "start expiring"} ${firstShort}. Book before you lose ${n === 1 ? "it" : "them"}: ${STUDENT_APP_SHORT}`
