@@ -371,21 +371,35 @@ export async function removeStudentFolderItem(folderId: string, fileId: string):
 // it, since Meet's recording destination is per-organizer-account, not
 // per-room.
 //
-// This is the SECOND value this constant has ever held. Google silently
+// This USED to be a single hardcoded folder id. Google silently
 // restructured how Meet organizes this folder around 2026-09-10 — files
 // used to land as flat siblings directly inside one folder; confirmed
 // live it's now one subfolder PER MEETING (a dated one-off folder for a
 // single occurrence, or a persistent "<room name> (recurring)" folder
 // for a coach's own standing room), with each meeting's recording/notes/
-// transcript nested one level inside that. The OLD folder id above this
-// comment used to point at the flat layout and went completely silent
-// the moment this happened — confirmed a 12-day, every-coach blackout
-// this way before finding the new location. `listMeetRecordingsInbox`
-// below is two-level (list qualifying subfolders, then each one's own
-// files) specifically because of this — there's no guarantee Google
-// doesn't restructure this again, but at least the subfolder-per-meeting
-// shape is unlikely to flatten back out on its own.
-export const MEET_RECORDINGS_INBOX_FOLDER_ID = "1Pw6ESQMVx97jsWnoNVj6a_EhI7JnDKT4";
+// transcript nested one level inside that. The old hardcoded id pointed
+// at the flat layout and went completely silent the moment this
+// happened — confirmed a 12-day, every-coach blackout this way before
+// finding the new location.
+//
+// Then it happened AGAIN on 2026-09-22/23 — not a restructure this time,
+// just Meet (or Drive) creating a SECOND folder also named "Google Meet"
+// alongside the first one and quietly switching new recordings over to
+// it, leaving the old hardcoded id current but empty. Confirmed live:
+// 3 folders literally named "Google Meet" now exist under the admin's
+// Drive. A single hardcoded id is a permanent single point of failure
+// here, so this now discovers every "Google Meet"-named folder by name
+// each run and walks all of them — self-healing the next time this
+// happens instead of needing a manual re-diagnosis.
+async function findMeetRecordingsRootFolders(): Promise<string[]> {
+  const drive = getDriveClient();
+  const res = await drive.files.list({
+    q: "name = 'Google Meet' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+    fields: "files(id)",
+    pageSize: 20,
+  });
+  return (res.data.files ?? []).map((f) => f.id).filter((id): id is string => !!id);
+}
 
 export interface MeetRecordingFile {
   id: string;
@@ -422,11 +436,12 @@ const RECORDING_SCAN_LOOKBACK_DAYS = 3;
 // bounds how much of a recurring folder's long history gets re-walked
 // every run.
 async function listQualifyingMeetingSubfolders(
+  rootFolderId: string,
   cutoffIso: string,
 ): Promise<{ id: string; name: string }[]> {
   const drive = getDriveClient();
   const res = await drive.files.list({
-    q: `'${MEET_RECORDINGS_INBOX_FOLDER_ID}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and (createdTime > '${cutoffIso}' or name contains '(recurring)')`,
+    q: `'${rootFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and (createdTime > '${cutoffIso}' or name contains '(recurring)')`,
     pageSize: 100,
     fields: "files(id, name)",
   });
@@ -438,12 +453,12 @@ async function listQualifyingMeetingSubfolders(
 // Lists recent recordings sitting in the shared Meet-recordings inbox —
 // feeds lib/admin/recording-matching.ts's scan step, which diffs this
 // against meet_recordings.drive_file_id to find newly-arrived files.
-// Two-level: each meeting now gets its own subfolder (see
-// MEET_RECORDINGS_INBOX_FOLDER_ID's own comment for why), so this
-// finds the qualifying subfolders first, then each one's own recording
-// file(s) — a single meeting can have more than one recording (a
-// dropped/rejoined call produces "Recording", "Recording 2", etc., all
-// real, none to be silently dropped).
+// Three-level: find every "Google Meet" root folder (see
+// findMeetRecordingsRootFolders's own comment for why there can be more
+// than one), then each root's qualifying subfolders, then each
+// subfolder's own recording file(s) — a single meeting can have more
+// than one recording (a dropped/rejoined call produces "Recording",
+// "Recording 2", etc., all real, none to be silently dropped).
 //
 // `lookbackDays` defaults to the steady-state window but can be widened
 // for a one-time historical catch-up (see the cron route's own `days`
@@ -456,7 +471,9 @@ export async function listMeetRecordingsInbox(
   const drive = getDriveClient();
   const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const subfolders = await listQualifyingMeetingSubfolders(cutoff);
+  const roots = await findMeetRecordingsRootFolders();
+  const subfoldersByRoot = await Promise.all(roots.map((rootId) => listQualifyingMeetingSubfolders(rootId, cutoff)));
+  const subfolders = subfoldersByRoot.flat();
   if (!subfolders.length) return [];
 
   const perFolder = await Promise.all(
