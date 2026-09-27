@@ -22,6 +22,20 @@ const MATCH_FAIL_GRACE_HOURS = 3;
 const HEALTH_CHECK_STALE_HOURS = 4;
 const CRON_JOB_NAME = "scan-recordings";
 
+// Catches the failure mode the stale-cron check above CANNOT see: the
+// job runs successfully every 2 hours, on schedule, and genuinely finds
+// zero new files — because Drive stopped delivering them, not because
+// this job broke. Confirmed live twice now (2026-09-10, 2026-09-22/23):
+// once from a flat-to-subfolder Drive restructure, once from Meet
+// splitting recordings into a second "Google Meet" folder the old
+// hardcoded id didn't cover — both went undetected for 12-17 days
+// because "the cron ran fine" was the only thing being checked. This
+// checks the newest recording THIS APP HAS EVER SEEN (not "since last
+// run" — a brand new multi-day gap is exactly what a per-run counter
+// would miss) and alerts once daily if it's stale, independent of
+// whatever caused the gap.
+const NO_NEW_RECORDINGS_STALE_HOURS = 36;
+
 // Runs the exact same scan + auto-match pass the admin Recordings page
 // (app/api/admin/meet-recordings/route.ts) triggers on load — pulled
 // out so it can also run unattended, on a schedule, via GitHub Actions
@@ -74,6 +88,29 @@ export async function GET(req: NextRequest) {
   const lookbackDays = daysParam ? Number(daysParam) : undefined;
 
   const { inserted } = await scanForNewRecordings(admin, lookbackDays);
+
+  // Independent of `inserted` above — this looks at the newest
+  // recording this table has EVER recorded, not just what this one run
+  // found, so a gap that's already days old gets caught on the very
+  // next run instead of waiting for a fresh insert to reset a counter.
+  const { data: newestRecording } = await admin
+    .from("meet_recordings")
+    .select("drive_created_at")
+    .order("drive_created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (newestRecording) {
+    const staleCutoff = Date.now() - NO_NEW_RECORDINGS_STALE_HOURS * 60 * 60 * 1000;
+    if (new Date(newestRecording.drive_created_at).getTime() < staleCutoff) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      await notifyStaff(admin, {
+        kind: "recordings_gap",
+        dedupKey: `staff:recordings_gap:${todayStr}`,
+        text: `⚠️ No new Meet recordings found since ${newestRecording.drive_created_at} — the scan is running fine but Drive may have stopped delivering (check the Recordings folder structure).`,
+      });
+    }
+  }
+
   // Name-matching first — it doesn't depend on attendance ever being
   // marked (day+session matching does), so it resolves more real cases
   // at this studio right now. Day+session still runs after as a
