@@ -6,7 +6,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
 import { issueAndSendBillingWelcomeLink } from "@/lib/auth/billing-welcome-link";
-import { notifyStaff } from "@/lib/notifications/create";
+import { notifyStaff, notifyStudent } from "@/lib/notifications/create";
+import { planChangedEmail } from "@/lib/email/templates/membership";
+import { firstNameOf } from "@/lib/ghl/fields";
 import type { StripeAccount, Tier } from "@/types/database";
 
 // Stripe's SDK needs Node's crypto for signature verification — the
@@ -287,9 +289,18 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
     oldTier: priorTier,
   });
 
-  await issueAndSendBillingWelcomeLink(studentId, email).catch((err) =>
-    console.error("Failed to send billing welcome link", err),
-  );
+  // Brand-new member (or coming up from the free Lite tier) → branded
+  // welcome carrying their account link. An existing paid member who
+  // checked out a different plan → the plan-change email instead.
+  const isNewMember = !existing || !priorTier || priorTier === "lite";
+  if (isNewMember) {
+    await issueAndSendBillingWelcomeLink(studentId, email, {
+      tier,
+      name: session.customer_details?.name ?? null,
+    }).catch((err) => console.error("Failed to send welcome email", err));
+  } else if (priorTier !== tier) {
+    await notifyPlanChanged(admin, studentId, priorTier!, tier, session.id);
+  }
 }
 
 // A pause_collection object present on the subscription means Stripe has
@@ -372,6 +383,10 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
       studentId: student.id,
       summary: `${student.name} is now on ${tier[0].toUpperCase()}${tier.slice(1)} (Stripe)`,
     });
+  }
+
+  if (tier && priorTier && tier !== priorTier && priorTier !== "lite" && tier !== "lite") {
+    await notifyPlanChanged(admin, student.id, priorTier, tier, `${subscription.id}:${priceId ?? ""}`);
   }
 
   if (tier && tier !== priorTier) {
@@ -457,4 +472,31 @@ async function handleSubscriptionDeleted(admin: AdminClient, subscription: Strip
     dedupKey: subscription.id,
     text: `${student.name}'s subscription has now ended (Stripe).`,
   });
+}
+
+// Upgrade/downgrade email (lib/email/templates/membership.ts). Account
+// email: always emailed regardless of the student's notification settings
+// (no text, no bell), but still held by the notification pause so billing
+// cleanup in Stripe doesn't email students. Dedup on the change itself, so
+// Stripe re-delivering the same event can't send it twice.
+async function notifyPlanChanged(admin: AdminClient, studentId: string, from: Tier, to: Tier, ref: string) {
+  try {
+    const { data: s } = await admin.from("students").select("name, email, phone").eq("id", studentId).maybeSingle();
+    if (!s) return;
+    const r = planChangedEmail({ firstName: firstNameOf(s.name), from, to });
+    await notifyStudent(admin, {
+      studentId,
+      email: s.email,
+      phone: s.phone,
+      group: "alerts",
+      kind: "plan_changed",
+      dedupKey: `student:${studentId}:plan_changed:${from}->${to}:${ref}`,
+      title: r.bellTitle,
+      body: r.bellBody,
+      ghlData: { ...r, from, to },
+      channels: { email: true, sms: false, inApp: false },
+    });
+  } catch (err) {
+    console.error(`plan change email failed for ${studentId}`, err);
+  }
 }

@@ -51,7 +51,9 @@ async function loadSession(sessionId: string) {
   return { admin, session: data, student, coach };
 }
 
-export async function notifyStudentSessionBooked(sessionId: string): Promise<void> {
+// `purchase`: the booking IS a purchase (bonus-week lesson) — email
+// always goes out regardless of their settings, like every purchase.
+export async function notifyStudentSessionBooked(sessionId: string, opts: { purchase?: boolean } = {}): Promise<void> {
   try {
     const ctx = await loadSession(sessionId);
     if (!ctx) return;
@@ -75,7 +77,7 @@ export async function notifyStudentSessionBooked(sessionId: string): Promise<voi
       body: r.bellBody,
       linkUrl: "/student/dashboard",
       ghlData: { sessionId, ...r },
-      channels: channelsOf(student),
+      channels: opts.purchase ? { ...channelsOf(student), email: true } : channelsOf(student),
     });
   } catch (err) {
     console.error(`notifyStudentSessionBooked failed for ${sessionId}`, err);

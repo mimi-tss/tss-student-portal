@@ -84,7 +84,10 @@ export async function notifyStudentCreditsAdded(
       body: r.bellBody,
       linkUrl: "/student/book",
       ghlData: { ...r, reference: opts.reference },
-      channels: { email: s.notify_alerts_email, sms: s.notify_alerts_sms, inApp: s.notify_alerts_inapp },
+      // Purchase/credit emails always go out — students can't switch
+      // these off; only the text follows their Alerts → Text setting
+      // (studio call 2026-09-26).
+      channels: { email: true, sms: s.notify_alerts_sms, inApp: s.notify_alerts_inapp },
     });
   } catch (err) {
     console.error(`notifyStudentCreditsAdded failed for ${studentId}`, err);
@@ -160,7 +163,7 @@ export async function fulfillAddonPurchase(
         body: r.bellBody,
         linkUrl: "/student/dashboard",
         ghlData: { ...r, reference: opts.paymentReference },
-        channels: { email: s.notify_alerts_email, sms: false, inApp: s.notify_alerts_inapp },
+        channels: { email: true, sms: s.notify_alerts_sms, inApp: s.notify_alerts_inapp }, // purchase: email always
       }).catch((err) => console.error("tara lesson purchase notice failed", err));
     }
     return "schedule this lesson with Tara by hand (student was told we'll reach out)";

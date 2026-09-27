@@ -20,7 +20,8 @@ export interface GhlEvent {
     | "session_booked"
     | "group_session_booked"
     | "session_cancelled"
-    | "fifth_week_offer";
+    | "fifth_week_offer"
+    | "plan_changed";
   studentId: string;
   email: string;
   phone: string | null;

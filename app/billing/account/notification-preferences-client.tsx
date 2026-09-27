@@ -69,6 +69,9 @@ export default function NotificationPreferencesClient({ initial }: { initial: No
       <div className={styles.tierName} style={{ marginBottom: 12 }}>
         Notification preferences
       </div>
+      <p className={styles.statLabel} style={{ marginBottom: 12 }}>
+        Emails about purchases and your membership (receipts, credits added, welcome and plan changes) are always sent.
+      </p>
       {GROUPS.map((g) => (
         <div key={g.key} style={{ marginTop: g.key === "digest" ? 0 : 16 }}>
           <p style={{ fontWeight: 600, margin: "0 0 2px", fontSize: 14 }}>{g.label}</p>

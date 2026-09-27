@@ -15,7 +15,8 @@ type NotificationKind =
   | "session_booked"
   | "group_session_booked"
   | "session_cancelled"
-  | "fifth_week_offer";
+  | "fifth_week_offer"
+  | "plan_changed";
 
 // The only notifications that may go out by text, and only when the
 // student turned on Alerts → Text (studio call 2026-09-26). Coach

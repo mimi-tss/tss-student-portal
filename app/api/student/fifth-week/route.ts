@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
     .eq("occurrence_at", slotStart)
     .neq("status", "resolved");
 
-  void notifyStudentSessionBooked(session.id);
+  void notifyStudentSessionBooked(session.id, { purchase: true });
   notifyCoachSessionEvent(session.id, "session_booked").catch((err) =>
     console.error(`coach notification failed for bonus lesson ${session.id}`, err),
   );
