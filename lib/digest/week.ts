@@ -1,4 +1,4 @@
-import { zonedYearMonthDay } from "@/lib/timezone";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 // The digest runs Mondays 12:00 UTC (.github/workflows/weekly-digest.yml)
@@ -17,4 +17,11 @@ export function nextDigestWeekKey(now: Date = new Date()): string {
   const add = dow === 1 ? (sentToday ? 7 : 0) : (8 - dow) % 7;
   const target = new Date(today.getTime() + add * 24 * 60 * 60 * 1000);
   return target.toISOString().slice(0, 10);
+}
+
+// Midnight ET at the start of a digest week ("2026-09-28" → that Monday
+// 00:00 America/New_York) — the same instant the cron uses.
+export function weekStartInstant(weekKey: string): Date {
+  const [y, m, d] = weekKey.split("-").map(Number);
+  return zonedTimeToUtc(y, m, d, 0, 0, DEFAULT_TIMEZONE);
 }

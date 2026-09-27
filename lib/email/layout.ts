@@ -114,7 +114,7 @@ function blockHtml(b: EmailBlock): string {
     case "quote":
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 24px;">
   <tr><td style="background:${COLOR.accentSoft};border-radius:10px;padding:16px 20px;">
-    <p style="margin:0 0 8px;font:italic 16px/1.55 ${FONT};color:${COLOR.text};">&ldquo;${esc(b.text)}&rdquo;</p>
+    <p style="margin:0 0 8px;font:italic 16px/1.55 ${FONT};color:${COLOR.text};">&ldquo;${esc(b.text.trim()).replace(/\s*\n\s*/g, "<br>")}&rdquo;</p>
     <p style="margin:0;font:13px/1.4 ${FONT};color:${COLOR.muted};">&mdash; ${esc(b.from)}</p>
   </td></tr>
 </table>`;

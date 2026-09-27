@@ -13,14 +13,13 @@ export interface NotificationPrefs {
 }
 
 // `channels` limits which switches a group shows — the weekly digest is
-// too long for a text, so it's email + in-app only (studio call
-// 2026-09-26).
+// email only (studio call 2026-09-26).
 const GROUPS: { key: "digest" | "alerts"; label: string; description: string; channels: ("email" | "sms" | "inapp")[] }[] = [
   {
     key: "digest",
     label: "Weekly digest",
-    description: "Your week ahead — upcoming lessons, group sessions, credits.",
-    channels: ["email", "inapp"],
+    description: "A Monday email with your week ahead — upcoming lessons, group sessions, credits, and studio news.",
+    channels: ["email"],
   },
   {
     key: "alerts",

@@ -14,9 +14,11 @@ export default async function WeeklyEmailPage() {
   const weekKey = nextDigestWeekKey();
   const today = new Date().toISOString().slice(0, 10);
   // Tables arrive in migration 0112 — until it's applied these come back empty.
-  const [features, events] = await Promise.all([
+  const [features, events, { data: students }] = await Promise.all([
     getDigestFeatures(admin, weekKey).catch(() => []),
     getUpcomingEvents(admin, today, 100).catch(() => []),
+    // Same audience as the Monday send (lib/digest/build.ts).
+    admin.from("students").select("id, name").eq("archived", false).neq("tier", "lite").order("name"),
   ]);
   const weekLabel = new Date(`${weekKey}T12:00:00Z`).toLocaleDateString("en-US", {
     weekday: "long",
@@ -28,7 +30,12 @@ export default async function WeeklyEmailPage() {
   return (
     <main className={styles.wrap}>
       <h1 className={styles.pageTitle}>Weekly Email</h1>
-      <WeeklyEmailEditor weekLabel={weekLabel} initialFeatures={features} initialEvents={events} />
+      <WeeklyEmailEditor
+        weekLabel={weekLabel}
+        initialFeatures={features}
+        initialEvents={events}
+        students={(students ?? []) as { id: string; name: string }[]}
+      />
     </main>
   );
 }

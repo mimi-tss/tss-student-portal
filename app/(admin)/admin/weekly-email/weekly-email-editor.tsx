@@ -30,10 +30,12 @@ export default function WeeklyEmailEditor({
   weekLabel,
   initialFeatures,
   initialEvents,
+  students,
 }: {
   weekLabel: string;
   initialFeatures: DigestFeature[];
   initialEvents: DigestEvent[];
+  students: { id: string; name: string }[];
 }) {
   const [boxes, setBoxes] = useState<Draft[]>([
     toDraft(1, initialFeatures.find((f) => f.position === 1)),
@@ -45,6 +47,8 @@ export default function WeeklyEmailEditor({
   const [status, setStatus] = useState("");
   const [uploading, setUploading] = useState<number | null>(null);
   const [preview, setPreview] = useState("");
+  const [previewSubject, setPreviewSubject] = useState("");
+  const [previewAs, setPreviewAs] = useState(""); // "" = sample student
 
   function update(position: 1 | 2, patch: Partial<Draft>) {
     setBoxes((prev) => prev.map((b) => (b.position === position ? { ...b, ...patch } : b)));
@@ -57,12 +61,16 @@ export default function WeeklyEmailEditor({
       const res = await fetch("/api/admin/weekly-email/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ features: boxes, upcoming: events }),
+        body: JSON.stringify({ features: boxes, upcoming: events, studentId: previewAs || undefined }),
       });
-      if (res.ok) setPreview((await res.json()).html);
+      if (res.ok) {
+        const body = await res.json();
+        setPreview(body.html);
+        setPreviewSubject(body.subject);
+      }
     }, 400);
     return () => clearTimeout(t);
-  }, [boxes, events]);
+  }, [boxes, events, previewAs]);
 
   async function save() {
     setStatus("Saving…");
@@ -199,7 +207,20 @@ export default function WeeklyEmailEditor({
       </div>
 
       <div style={{ flex: "1 1 420px", minWidth: 320, position: "sticky", top: 16 }}>
-        <p className={styles.panelText} style={{ fontWeight: 700 }}>Preview (sample student)</p>
+        <label className={styles.panelText} style={{ fontWeight: 700, display: "block" }}>
+          Preview as{" "}
+          <select value={previewAs} onChange={(e) => setPreviewAs(e.target.value)} style={{ marginLeft: 6, padding: 4, borderRadius: 6, font: "inherit", fontWeight: 400 }}>
+            <option value="">Sample student</option>
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className={styles.panelText} style={{ margin: "6px 0" }}>
+          Subject: <strong>{previewSubject}</strong>
+        </p>
         <iframe title="Weekly email preview" srcDoc={preview} style={{ width: "100%", height: 900, border: "1px solid #ccc", borderRadius: 8, background: "#fff" }} />
       </div>
     </div>
