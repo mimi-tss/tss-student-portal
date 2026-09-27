@@ -109,6 +109,9 @@ export async function getKajabiContactOfferIds(email: string): Promise<string[]>
 // application/vnd.api+json. The previous guess (`/contacts/{id}/offers`
 // with `{ offer_id }`) never worked — every Stripe sign-up's grant failed
 // into a kajabi_grant_failed Needs Review item.
+// Kill switch for offer grant/revoke — see grantKajabiOffer.
+const KAJABI_WRITES_ENABLED = false;
+
 async function findKajabiContactIdByEmail(email: string): Promise<string | null> {
   const url = new URL(`${KAJABI_API_BASE}/contacts`);
   url.searchParams.set("filter[email]", email);
@@ -163,6 +166,11 @@ async function createKajabiContact(email: string, name: string): Promise<string>
 // lead off a landing page, versus this studio's own usual manual flow
 // of adding the contact by hand first, then granting the offer).
 export async function grantKajabiOffer(email: string, offerId: string, name?: string): Promise<void> {
+  // DISABLED 2026-09-26: findKajabiContactIdByEmail's filter[email] is
+  // ignored by Kajabi (returns the same first contact for every email), so
+  // this would grant access to the WRONG person. Fails loudly into the
+  // existing kajabi_grant_failed Needs Review path until the lookup is fixed.
+  if (!KAJABI_WRITES_ENABLED) throw new Error("Kajabi grants paused: contact lookup by email is unreliable");
   let contactId = await findKajabiContactIdByEmail(email);
   if (!contactId) {
     contactId = await createKajabiContact(email, name?.trim() || email);
@@ -182,6 +190,7 @@ export async function grantKajabiOffer(email: string, offerId: string, name?: st
 }
 
 export async function revokeKajabiOffer(email: string, offerId: string): Promise<void> {
+  if (!KAJABI_WRITES_ENABLED) throw new Error("Kajabi revokes paused: contact lookup by email is unreliable");
   const contactId = await findKajabiContactIdByEmail(email);
   if (!contactId) {
     throw new Error(`No Kajabi contact found for ${email} — can't revoke offer ${offerId}`);
