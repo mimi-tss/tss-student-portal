@@ -86,11 +86,10 @@ export async function POST(req: NextRequest) {
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
       if (customerId) {
-        await admin
-          .from("students")
-          .update({ payment_status: "dnc" })
-          .eq("stripe_customer_id", customerId)
-          .eq("stripe_account", account);
+        const studentIds = await studentIdsForInvoice(admin, invoice, customerId, account);
+        if (studentIds.length > 0) {
+          await admin.from("students").update({ payment_status: "dnc" }).in("id", studentIds);
+        }
       }
       break;
     }
@@ -99,11 +98,10 @@ export async function POST(req: NextRequest) {
       const invoice = event.data.object as Stripe.Invoice;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
       if (customerId) {
-        await admin
-          .from("students")
-          .update({ payment_status: "ok" })
-          .eq("stripe_customer_id", customerId)
-          .eq("stripe_account", account);
+        const studentIds = await studentIdsForInvoice(admin, invoice, customerId, account);
+        if (studentIds.length > 0) {
+          await admin.from("students").update({ payment_status: "ok" }).in("id", studentIds);
+        }
       }
       break;
     }
@@ -118,6 +116,70 @@ export async function POST(req: NextRequest) {
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
+
+// One Stripe customer can pay for more than one student (confirmed live:
+// a mother and daughter, Cassi and Michele Garabedian, on one Opus
+// customer — migration 0113 dropped the unique constraint for this). So
+// a subscription event is matched to its student by SUBSCRIPTION first.
+// Only a subscription we haven't recorded yet falls back to the
+// customer, and then only to a student on that customer who doesn't
+// already have a different subscription — if that's still ambiguous,
+// nothing is guessed (logged instead).
+async function findStudentForSubscription(
+  admin: AdminClient,
+  subscriptionId: string,
+  customerId: string,
+  account: StripeAccount,
+): Promise<{ id: string; name: string; email: string; tier: string } | null> {
+  const { data: bySubscription } = await admin
+    .from("students")
+    .select("id, name, email, tier")
+    .eq("stripe_subscription_id", subscriptionId)
+    .eq("stripe_account", account)
+    .limit(1);
+  if (bySubscription?.[0]) return bySubscription[0];
+
+  const { data: byCustomer } = await admin
+    .from("students")
+    .select("id, name, email, tier, stripe_subscription_id")
+    .eq("stripe_customer_id", customerId)
+    .eq("stripe_account", account);
+  if (!byCustomer || byCustomer.length === 0) return null;
+  if (byCustomer.length === 1) return byCustomer[0];
+
+  const unassigned = byCustomer.filter((s) => !s.stripe_subscription_id);
+  if (unassigned.length === 1) return unassigned[0];
+  console.error("subscription event matches several students on one customer", subscriptionId, customerId, account);
+  return null;
+}
+
+// The student(s) an invoice's payment status applies to — the one on the
+// invoice's own subscription when there is one (so a shared customer's
+// failed payment for one student doesn't flag the other), else everyone
+// on that customer, as before.
+async function studentIdsForInvoice(
+  admin: AdminClient,
+  invoice: Stripe.Invoice,
+  customerId: string,
+  account: StripeAccount,
+): Promise<string[]> {
+  const sub = invoice.parent?.subscription_details?.subscription;
+  const subscriptionId = typeof sub === "string" ? sub : sub?.id;
+  if (subscriptionId) {
+    const { data } = await admin
+      .from("students")
+      .select("id")
+      .eq("stripe_subscription_id", subscriptionId)
+      .eq("stripe_account", account);
+    if (data && data.length > 0) return data.map((s) => s.id);
+  }
+  const { data } = await admin
+    .from("students")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .eq("stripe_account", account);
+  return (data ?? []).map((s) => s.id);
+}
 
 // One-time fulfillment for a new signup — mirrors
 // app/api/webhooks/kajabi/route.ts's purchase.created block (student
@@ -270,12 +332,7 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
   // 6-month/yearly subscriber has prepaid their whole term.
   const billingInterval = billingIntervalFromPrice(price);
 
-  const { data: student } = await admin
-    .from("students")
-    .select("id, name, email, tier")
-    .eq("stripe_customer_id", customerId)
-    .eq("stripe_account", account)
-    .maybeSingle();
+  const student = await findStudentForSubscription(admin, subscription.id, customerId, account);
 
   if (!student) {
     // Subscription events can arrive before checkout.session.completed's
@@ -382,12 +439,7 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
 async function handleSubscriptionDeleted(admin: AdminClient, subscription: Stripe.Subscription, account: StripeAccount) {
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
 
-  const { data: student } = await admin
-    .from("students")
-    .select("id, name, email, tier")
-    .eq("stripe_customer_id", customerId)
-    .eq("stripe_account", account)
-    .maybeSingle();
+  const student = await findStudentForSubscription(admin, subscription.id, customerId, account);
 
   if (!student) return;
 

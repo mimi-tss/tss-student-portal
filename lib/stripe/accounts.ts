@@ -17,11 +17,19 @@ const LIVE_STATUSES = ["active", "trialing", "past_due", "unpaid", "paused"];
 
 // The subscription that represents this customer's current plan: a live
 // one if any (newest first, as Stripe lists them), else the most recent
-// of any status. null if the customer has never had one.
-export async function pickCustomerSubscriptionId(account: StripeAccount, customerId: string): Promise<string | null> {
+// of any status. null if the customer has never had one. `exclude` =
+// subscriptions already belonging to another student on the same
+// customer (a parent paying for two students), so one never picks up
+// the other's.
+export async function pickCustomerSubscriptionId(
+  account: StripeAccount,
+  customerId: string,
+  exclude: string[] = [],
+): Promise<string | null> {
   const client = account === "opus" ? stripeOpus : stripe;
   const subs = await client.subscriptions.list({ customer: customerId, status: "all", limit: 10 });
-  return (subs.data.find((s) => LIVE_STATUSES.includes(s.status)) ?? subs.data[0])?.id ?? null;
+  const candidates = subs.data.filter((s) => !exclude.includes(s.id));
+  return (candidates.find((s) => LIVE_STATUSES.includes(s.status)) ?? candidates[0])?.id ?? null;
 }
 
 // Cross-account customer lookup for a student who hasn't been linked to

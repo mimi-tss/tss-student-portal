@@ -80,9 +80,17 @@ export async function resolveBillingStudent(): Promise<BillingStudent | null> {
   // Greg Popcak / Florate Israel / Tal Zadok ended up on the wrong one).
   if (student.stripe_customer_id && student.stripe_account) {
     const account = student.stripe_account as StripeAccount;
-    const subscriptionId = await pickCustomerSubscriptionId(account, student.stripe_customer_id);
+    const admin = createAdminClient();
+    const { data: siblings } = await admin
+      .from("students")
+      .select("stripe_subscription_id")
+      .eq("stripe_customer_id", student.stripe_customer_id)
+      .eq("stripe_account", account)
+      .neq("id", student.id);
+    const taken = (siblings ?? []).map((s) => s.stripe_subscription_id).filter((id): id is string => !!id);
+    const subscriptionId = await pickCustomerSubscriptionId(account, student.stripe_customer_id, taken);
     if (subscriptionId) {
-      await createAdminClient().from("students").update({ stripe_subscription_id: subscriptionId }).eq("id", student.id);
+      await admin.from("students").update({ stripe_subscription_id: subscriptionId }).eq("id", student.id);
     }
     return {
       studentId: student.id,

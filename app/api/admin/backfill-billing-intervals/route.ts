@@ -126,8 +126,16 @@ export async function GET() {
           status: "all",
           limit: 10,
         });
+        // Skip a subscription another student on this same customer
+        // already has (a parent paying for two students).
+        const taken = new Set(
+          (students ?? [])
+            .filter((o) => o.id !== student.id && o.stripe_customer_id === student.stripe_customer_id)
+            .map((o) => o.stripe_subscription_id)
+            .filter(Boolean),
+        );
         live = subs.data
-          .filter((s) => LIVE_STATUSES.includes(s.status))
+          .filter((s) => LIVE_STATUSES.includes(s.status) && !taken.has(s.id))
           .map((subscription) => ({ account, customerId: student.stripe_customer_id!, subscription }));
       }
       if (live.length === 0) live = await findLiveSubscriptions(student.email);
