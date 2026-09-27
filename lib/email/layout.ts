@@ -82,13 +82,13 @@ function blockHtml(b: EmailBlock): string {
     case "note":
       return `<p style="margin:0 0 16px;font:14px/1.5 ${FONT};color:${COLOR.muted};">${rich(b.text)}</p>`;
     case "feature": {
-      // Studio-written box: every part optional, body keeps its line
-      // breaks. Image is full card width (496px = 560 card - 2×32 padding).
+      // Studio-written box: heading, then the image as a thumbnail, then
+      // body (line breaks kept), then button. Every part optional.
       const parts = [
+        b.heading ? `<p style="margin:0 0 12px;font:bold 20px/1.3 ${FONT};color:${COLOR.text};">${esc(b.heading)}</p>` : "",
         b.imageUrl
-          ? `<img src="${esc(b.imageUrl)}" width="496" alt="${esc(b.heading ?? "")}" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:10px;margin:0 0 16px;">`
+          ? `<img src="${esc(b.imageUrl)}" width="240" alt="${esc(b.heading ?? "")}" style="display:block;width:240px;max-width:100%;height:auto;border:0;border-radius:10px;margin:0 0 14px;">`
           : "",
-        b.heading ? `<p style="margin:0 0 8px;font:bold 20px/1.3 ${FONT};color:${COLOR.text};">${esc(b.heading)}</p>` : "",
         b.body
           ? `<p style="margin:0 0 16px;font:16px/1.55 ${FONT};color:${COLOR.text};">${esc(b.body).replace(/\n/g, "<br>")}</p>`
           : "",
