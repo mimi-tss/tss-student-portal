@@ -13,6 +13,10 @@ import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
+import FifthWeekCard from "./fifth-week-card";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import styles from "../../student.module.css";
 
 const TIER_LABEL: Record<string, string> = {
@@ -235,8 +239,27 @@ export default async function StudentDashboardPage() {
     (c) => c.expires_at && new Date(c.expires_at).getTime() <= fourteenDaysFromNow.getTime(),
   );
 
+  // "Bonus week" (5th-week) lesson they can add themselves — needs the
+  // service-role client (reads schedule + billing fields across tables);
+  // the buy route re-checks everything before charging. Hidden within 6h
+  // of the lesson, same cutoff as the offer emails.
+  const [bonus] = (await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])).filter(
+    (o) => o.occurrenceAt.getTime() - now.getTime() >= 6 * 60 * 60 * 1000,
+  );
+  const bonusPrice = bonus ? await fifthWeekPrice(bonus.durationMinutes) : null;
+  const bonusWhen = bonus ? lessonTimeFields(bonus.occurrenceAt.toISOString(), bonus.coachTimezone) : null;
+
   return (
     <div className={styles.wrap}>
+      {bonus && bonusPrice && bonusWhen && (
+        <FifthWeekCard
+          occurrenceAt={bonus.occurrenceAt.toISOString()}
+          whenLabel={`${bonusWhen.lessonDate} · ${bonusWhen.lessonTime}`}
+          coachLabel={`Coach ${firstNameOf(bonus.coachName)}`}
+          durationMinutes={bonus.durationMinutes}
+          priceLabel={bonusPrice.label}
+        />
+      )}
       <div className={styles.hero}>
         <div className={styles.heroLeft}>
           <div className={styles.eyebrow}>Welcome back</div>

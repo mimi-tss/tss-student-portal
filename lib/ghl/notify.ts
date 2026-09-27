@@ -19,7 +19,8 @@ export interface GhlEvent {
     | "chat_message"
     | "session_booked"
     | "group_session_booked"
-    | "session_cancelled";
+    | "session_cancelled"
+    | "fifth_week_offer";
   studentId: string;
   email: string;
   phone: string | null;

@@ -1,4 +1,5 @@
--- Bell rows for the student booking confirmation / cancellation
+-- Bell rows for the student booking confirmation / cancellation and the
+-- "bonus week" (5th-week) offer
 -- notifications (lib/notifications/booking-events.ts). notifications.kind
 -- is a closed list, so the new kinds have to be added before any of these
 -- can land in the bell — without this, the insert fails (logged, not
@@ -13,5 +14,6 @@ alter table notifications add constraint notifications_kind_check check (kind in
   'group_lesson_cancelled',
   'session_booked',
   'group_session_booked',
-  'session_cancelled'
+  'session_cancelled',
+  'fifth_week_offer'
 ));

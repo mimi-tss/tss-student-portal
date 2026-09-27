@@ -1,0 +1,20 @@
+name: Fifth-week (bonus lesson) offers
+
+# Daily: offers a student their billing cycle's extra ("5th week") lesson
+# 7 days ahead, with one reminder 2 days ahead — see
+# app/api/cron/fifth-week-offers/route.ts. Runs via GitHub Actions for
+# the same reason as kajabi-sync — see that workflow's comment.
+
+on:
+  schedule:
+    - cron: "0 14 * * *" # 14:00 UTC daily (~10am ET)
+  workflow_dispatch: {}
+
+jobs:
+  offer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call fifth-week-offers endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/fifth-week-offers" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
