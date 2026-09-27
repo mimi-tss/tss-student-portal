@@ -101,15 +101,14 @@ export async function getKajabiContactOfferIds(email: string): Promise<string[]>
 
 // Grants/revokes a specific offer for a contact, identified by email —
 // used to keep Kajabi course/content access in sync with a student's
-// Stripe-billed tier (see lib/kajabi/sync.ts). NOT confirmed against
-// Kajabi's real API docs the way updateKajabiContactField/
-// getKajabiContactOfferIds above were (both verified via actual test
-// purchases) — Kajabi's public API is assumed offer-grant based, mirrored
-// on how offers show up in relationships.offers.data (read side, already
-// confirmed). Verify the real endpoint path/shape against
-// help.kajabi.com/api-reference before relying on this in production;
-// callers already wrap both of these in try/catch (lib/kajabi/sync.ts)
-// specifically because this is the one unverified piece.
+// Stripe-billed tier (see lib/kajabi/sync.ts). Verified against Kajabi's
+// API reference on 2026-09-26 (help.kajabi.com/api-reference/contacts/
+// grant-offer-to-contact + revoke-offer-from-contact): JSON:API
+// relationship endpoints, `POST|DELETE /v1/contacts/{id}/relationships/
+// offers` with `{ data: [{ type: "offers", id }] }` and Content-Type
+// application/vnd.api+json. The previous guess (`/contacts/{id}/offers`
+// with `{ offer_id }`) never worked — every Stripe sign-up's grant failed
+// into a kajabi_grant_failed Needs Review item.
 async function findKajabiContactIdByEmail(email: string): Promise<string | null> {
   const url = new URL(`${KAJABI_API_BASE}/contacts`);
   url.searchParams.set("filter[email]", email);
@@ -169,10 +168,12 @@ export async function grantKajabiOffer(email: string, offerId: string, name?: st
     contactId = await createKajabiContact(email, name?.trim() || email);
   }
 
-  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/offers`, {
+  // Kajabi's own welcome email stays ON (its default): for a brand-new
+  // member it's how they set up their Kajabi login for the app.
+  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/relationships/offers`, {
     method: "POST",
-    headers: await kajabiHeaders(),
-    body: JSON.stringify({ offer_id: offerId }),
+    headers: { ...(await kajabiHeaders()), "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({ data: [{ type: "offers", id: offerId }] }),
   });
 
   if (!res.ok) {
@@ -186,9 +187,10 @@ export async function revokeKajabiOffer(email: string, offerId: string): Promise
     throw new Error(`No Kajabi contact found for ${email} — can't revoke offer ${offerId}`);
   }
 
-  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/offers/${offerId}`, {
+  const res = await fetch(`${KAJABI_API_BASE}/contacts/${contactId}/relationships/offers`, {
     method: "DELETE",
-    headers: await kajabiHeaders(),
+    headers: { ...(await kajabiHeaders()), "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({ data: [{ type: "offers", id: offerId }] }),
   });
 
   if (!res.ok) {
