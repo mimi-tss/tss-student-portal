@@ -13,6 +13,11 @@ export interface CreateSubscriptionCheckoutInput {
   // customer_email so the hosted page arrives pre-filled; the customer
   // can still change it before paying.
   email?: string;
+  // Admin-created links only (admin → Add student → Real Stripe
+  // subscription): the admin's own "grant a trial" decision, carried to
+  // the checkout webhook. Omitted (public pricing page) = the automatic
+  // brand-new-Suite rule decides (app/api/webhooks/stripe).
+  adminTrial?: { grant: boolean; coachId?: string | null };
 }
 
 export type CreateSubscriptionCheckoutResult =
@@ -32,7 +37,7 @@ export type CreateSubscriptionCheckoutResult =
 export async function createSubscriptionCheckoutSession(
   input: CreateSubscriptionCheckoutInput,
 ): Promise<CreateSubscriptionCheckoutResult> {
-  const { tier, interval, addonIds, email } = input;
+  const { tier, interval, addonIds, email, adminTrial } = input;
 
   if (!BILLING_INTERVALS.includes(interval)) {
     return { success: false, error: "A valid interval is required", status: 400 };
@@ -72,7 +77,12 @@ export async function createSubscriptionCheckoutSession(
     line_items: lineItems,
     success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing`,
-    metadata: { tier },
+    metadata: {
+      tier,
+      ...(adminTrial
+        ? { admin_grant_trial: adminTrial.grant ? "true" : "false", ...(adminTrial.coachId ? { admin_trial_coach_id: adminTrial.coachId } : {}) }
+        : {}),
+    },
     subscription_data: { metadata: { tier } },
     ...(email ? { customer_email: email } : {}),
     // Card + Link only — both work in any currency/country, which

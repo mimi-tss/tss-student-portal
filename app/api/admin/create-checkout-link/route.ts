@@ -20,7 +20,7 @@ const VALID_TIERS: Tier[] = ["lite", "suite", "pro", "elite"];
 // of Checkout) is about the marketing page's own funnel, not a real
 // restriction admin needs to honor when setting one up directly.
 export async function POST(req: NextRequest) {
-  const { tier, interval, email, addonIds } = await req.json();
+  const { tier, interval, email, addonIds, grantTrial, trialCoachId } = await req.json();
 
   if (typeof tier !== "string" || !VALID_TIERS.includes(tier as Tier)) {
     return NextResponse.json({ error: "A valid tier is required" }, { status: 400 });
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
     interval,
     addonIds,
     email: typeof email === "string" && email.trim() ? email.trim() : undefined,
+    adminTrial: typeof grantTrial === "boolean" ? { grant: grantTrial, coachId: trialCoachId || null } : undefined,
   });
 
   if (!result.success) {

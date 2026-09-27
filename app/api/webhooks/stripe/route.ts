@@ -301,12 +301,24 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
     // (any past session or trial) get neither the session nor the promise
     // of one in the welcome email. Checked BEFORE granting, since the
     // grant itself makes the student ineligible.
-    const firstSession = tier === "suite" && (await isFirstSessionEligible(admin, studentId));
-    if (firstSession) {
+    //
+    // An admin-made checkout link carries the admin's own tick-box choice
+    // (admin_grant_trial) — that wins over the automatic rule either way.
+    const adminChoice = session.metadata?.admin_grant_trial;
+    const firstSession =
+      adminChoice === "true" ? true : adminChoice === "false" ? false : tier === "suite" && (await isFirstSessionEligible(admin, studentId));
+    const { count: existingTrials } = await admin
+      .from("entitlements")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", studentId)
+      .eq("perk_type", "trial_lesson")
+      .eq("used", false);
+    if (firstSession && !existingTrials) {
       const { error: grantError } = await admin.from("entitlements").insert({
         student_id: studentId,
         perk_type: "trial_lesson",
         recurrence: "one-time",
+        coach_id: session.metadata?.admin_trial_coach_id || null,
       });
       if (grantError) console.error(`auto first-session grant failed for ${studentId}`, grantError);
     }

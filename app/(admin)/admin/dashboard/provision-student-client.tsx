@@ -50,14 +50,11 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
   const [coachId, setCoachId] = useState("");
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(30);
   const [ambassador, setAmbassador] = useState(false);
-  // Explicit choice, independent of tier — provisionStudent() otherwise
-  // falls back to its old implicit "Suite always gets one" rule when
-  // this isn't sent at all, but this form always sends it, so this
-  // checkbox is the actual decision for anyone added here. Starts
-  // checked to match that old default (this form's own tier default is
-  // also "suite"), not auto-synced to tier after that — an admin who
-  // changes tier keeps whatever they last set here.
-  const [grantTrial, setGrantTrial] = useState(true);
+  // The admin's explicit decision for anyone added here, in BOTH billing
+  // modes (for a Stripe link it rides through checkout metadata and beats
+  // the webhook's automatic brand-new-Suite rule). Starts UNticked
+  // (studio call 2026-09-26): nothing is granted unless the admin ticks it.
+  const [grantTrial, setGrantTrial] = useState(false);
   // Locks the trial to one specific coach (e.g. a student who paid extra
   // for a trial with Tara specifically) instead of the default
   // any-coach-picker — independent of the regular `coachId` above, since
@@ -109,7 +106,13 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
       const res = await fetch("/api/admin/create-checkout-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, interval: billingInterval, email: email.trim() || undefined }),
+        body: JSON.stringify({
+          tier,
+          interval: billingInterval,
+          email: email.trim() || undefined,
+          grantTrial,
+          trialCoachId: grantTrial && trialCoachId ? trialCoachId : undefined,
+        }),
       });
       setSaving(false);
       const body = await res.json().catch(() => ({}));
@@ -296,34 +299,40 @@ export default function ProvisionStudentClient({ coaches }: { coaches: Coach[] }
                 Ambassador
               </label>
             </div>
-            <div className={styles.field}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={grantTrial}
-                  onChange={(e) => setGrantTrial(e.target.checked)}
-                />
-                Grant a free trial lesson
-              </label>
-            </div>
-            {grantTrial && (
-              <div className={styles.field}>
-                <label>Trial with{trialCoachId ? "" : " (optional)"}</label>
-                <select
-                  value={trialCoachId}
-                  onChange={(e) => setTrialCoachId(e.target.value)}
-                  className={styles.select}
-                >
-                  <option value="">Any coach</option>
-                  {coaches.map((coach) => (
-                    <option key={coach.id} value={coach.id}>
-                      {coach.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+
           </>
+        )}
+      </div>
+
+      {/* Trial choice applies to both billing modes — for a Stripe link it's
+          carried through checkout (lib/stripe/checkout.ts adminTrial). */}
+      <div className={styles.rowForm} style={{ marginTop: 10 }}>
+        <div className={styles.field}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={grantTrial}
+              onChange={(e) => setGrantTrial(e.target.checked)}
+            />
+            Grant a free First 1:1 Coaching Session (trial)
+          </label>
+        </div>
+        {grantTrial && (
+          <div className={styles.field}>
+            <label>Trial with{trialCoachId ? "" : " (optional)"}</label>
+            <select
+              value={trialCoachId}
+              onChange={(e) => setTrialCoachId(e.target.value)}
+              className={styles.select}
+            >
+              <option value="">Any coach</option>
+              {coaches.map((coach) => (
+                <option key={coach.id} value={coach.id}>
+                  {coach.name}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
