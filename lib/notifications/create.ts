@@ -15,12 +15,13 @@ type NotificationKind =
 
 // The only notifications that may go out by text, and only when the
 // student turned on Alerts → Text (studio call 2026-09-26). Coach
-// messages, recordings and class changes are email + in-app only, even
+// messages and recordings are email + in-app only, even
 // for a student with texts on. Enforced here so no call site can drift.
 const SMS_KINDS: ReadonlySet<NotificationKind> = new Set([
   "session_reminder_24h",
   "session_starting_soon",
   "makeup_credit_needs_scheduling",
+  "group_lesson_cancelled",
 ]);
 
 // Claims a dedup_key in notification_log — returns false (already sent)
