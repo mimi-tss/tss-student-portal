@@ -6,7 +6,7 @@ import { getStripeClient } from "@/lib/stripe/client";
 import { notifyStaff } from "@/lib/notifications/create";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 import { notifyStudentSessionBooked } from "@/lib/notifications/booking-events";
-import { findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import { FIFTH_WEEK_SELF_SERVE_ENABLED, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
 import { formatDateTimeInZone } from "@/lib/timezone";
 
 // Student buys their "bonus week" lesson (lib/scheduling/fifth-week-offers.ts)
@@ -32,6 +32,9 @@ function paymentMethodOf(subscription: Stripe.Subscription): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  if (!FIFTH_WEEK_SELF_SERVE_ENABLED) {
+    return NextResponse.json({ error: "Bonus lessons aren't available yet." }, { status: 403 });
+  }
   const { occurrenceAt } = (await req.json()) as { occurrenceAt?: string };
   if (!occurrenceAt) return NextResponse.json({ error: "occurrenceAt required" }, { status: 400 });
 

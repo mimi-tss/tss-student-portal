@@ -12,6 +12,12 @@ import { formatPrice } from "@/lib/stripe/tiers";
 // Used by the offer cron, the student dashboard card, and the buy route
 // (which re-checks right before charging).
 
+// Master switch for the student self-serve side (dashboard card + buy
+// route), which charges real cards. Off until the studio signs off on a
+// live test; flip to true to launch. Offer emails are separately held by
+// STUDENT_NOTIFICATIONS_PAUSED.
+export const FIFTH_WEEK_SELF_SERVE_ENABLED = false;
+
 export interface FifthWeekOpportunity {
   studentId: string;
   studentName: string;

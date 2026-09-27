@@ -15,7 +15,7 @@ import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import FifthWeekCard from "./fifth-week-card";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import { FIFTH_WEEK_SELF_SERVE_ENABLED, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import styles from "../../student.module.css";
 
@@ -243,7 +243,11 @@ export default async function StudentDashboardPage() {
   // service-role client (reads schedule + billing fields across tables);
   // the buy route re-checks everything before charging. Hidden within 6h
   // of the lesson, same cutoff as the offer emails.
-  const [bonus] = (await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])).filter(
+  const [bonus] = (
+    FIFTH_WEEK_SELF_SERVE_ENABLED
+      ? await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])
+      : []
+  ).filter(
     (o) => o.occurrenceAt.getTime() - now.getTime() >= 6 * 60 * 60 * 1000,
   );
   const bonusPrice = bonus ? await fifthWeekPrice(bonus.durationMinutes) : null;
