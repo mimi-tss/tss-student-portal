@@ -3,7 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { issueAndSendLoginLink } from "@/lib/auth/magic-link";
 import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
-import { isFirstSessionEligible } from "@/lib/billing/first-session";
+import { isFirstSessionEligible, notifyBonusFirstSession } from "@/lib/billing/first-session";
 
 export interface ProvisionStudentInput {
   email: string;
@@ -214,6 +214,7 @@ export async function provisionStudent(
       recurrence: "one-time",
       coach_id: input.trialCoachId || null,
     });
+    await notifyBonusFirstSession(admin, student.id, input.trialCoachId);
   }
 
   if (lessonType === "weekly" || lessonType === "biweekly") {

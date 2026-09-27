@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
+import { notifyBonusFirstSession } from "@/lib/billing/first-session";
 
 // Admin grants a one-time trial-lesson entitlement to an existing
 // student — the after-the-fact counterpart to provisionStudent's own
@@ -60,6 +61,8 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await notifyBonusFirstSession(admin, studentId, coachId || null);
 
   return NextResponse.json({ success: true });
 }
