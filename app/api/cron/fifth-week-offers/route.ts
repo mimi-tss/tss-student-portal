@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
-import { findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import { FIFTH_WEEK_SELF_SERVE_ENABLED, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
 import { fifthWeekNoLesson, fifthWeekOffer } from "@/lib/email/templates/fifth-week";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 
@@ -62,6 +62,11 @@ export async function GET(req: NextRequest) {
       noLessonNotices++;
       continue;
     }
+
+    // Don't offer what they can't buy yet: the dashboard card + buy route
+    // are behind FIFTH_WEEK_SELF_SERVE_ENABLED. No claim is made, so the
+    // offer still goes out once it's switched on (if still in window).
+    if (!FIFTH_WEEK_SELF_SERVE_ENABLED) continue;
 
     if (!prices.has(o.durationMinutes)) prices.set(o.durationMinutes, await fifthWeekPrice(o.durationMinutes));
     const price = prices.get(o.durationMinutes) ?? null;
