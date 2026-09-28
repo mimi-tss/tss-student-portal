@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { notifyGhl, type GhlEvent } from "@/lib/ghl/notify";
 import { notifySlack } from "@/lib/slack/notify";
+import { sendEmail } from "@/lib/email/send";
 import { STUDENT_NOTIFICATIONS_PAUSED } from "@/lib/notifications/pause";
 
 type NotificationGroup = "digest" | "alerts";
@@ -72,8 +73,8 @@ interface StudentNotifyInput {
 }
 
 // Student-facing notification: claims dedup, writes the in-app row only
-// if that channel is enabled, and fires the GHL webhook with whichever of
-// email/sms this student has turned on for the event's group. All three
+// if that channel is enabled, emails via Resend, and fires the GHL webhook
+// for SMS if the student turned texts on. All three
 // channels share one dedup claim, so a student who has both email and
 // in-app enabled still only gets one "already sent" outcome per event —
 // not a separate race per channel.
@@ -95,8 +96,23 @@ export async function notifyStudent(admin: SupabaseClient, input: StudentNotifyI
     if (error) console.error(`notifications insert failed for student ${input.studentId}`, error.message);
   }
 
+  // EMAIL goes straight out via Resend using the finished design every
+  // caller puts in ghlData (subject/html/text) — studio call 2026-09-28,
+  // so emails work without a GHL workflow. GHL is now only used for TEXT.
+  if (input.channels.email) {
+    const d = input.ghlData as { subject?: unknown; html?: unknown; text?: unknown };
+    if (typeof d.subject === "string" && typeof d.html === "string" && input.email) {
+      try {
+        await sendEmail(input.email, d.subject, d.html, undefined, typeof d.text === "string" ? d.text : undefined);
+      } catch (err) {
+        console.error(`student email failed (${input.kind}) for ${input.studentId}`, err);
+      }
+    } else {
+      console.error(`student email skipped (${input.kind}): no rendered subject/html in payload`);
+    }
+  }
+
   const channels: GhlEvent["channels"] = [];
-  if (input.channels.email) channels.push("email");
   if (input.channels.sms && SMS_KINDS.has(input.kind)) channels.push("sms");
 
   if (channels.length > 0) {
