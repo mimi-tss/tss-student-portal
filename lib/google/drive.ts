@@ -465,6 +465,12 @@ async function listQualifyingMeetingSubfolders(
 // query param) without touching this constant, which stays tight for
 // ordinary runs specifically to avoid re-walking a recurring folder's
 // entire history every 2 hours.
+// TEMP DEBUG — remove once the prod/local discovery discrepancy is
+// diagnosed. Lets the cron route surface roots/subfolders counts in its
+// own JSON response, since GitHub Actions only captures curl's stdout
+// (the response body), not Vercel's server-side console.log output.
+export let lastScanDebug: { roots: number; subfolders: number; files: number } | null = null;
+
 export async function listMeetRecordingsInbox(
   lookbackDays: number = RECORDING_SCAN_LOOKBACK_DAYS,
 ): Promise<MeetRecordingFile[]> {
@@ -495,10 +501,13 @@ export async function listMeetRecordingsInbox(
     ),
   );
 
-  return perFolder
+  const result = perFolder
     .flatMap((res) => res.data.files ?? [])
     .filter((f) => f.id && f.createdTime)
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
+
+  lastScanDebug = { roots: roots.length, subfolders: subfolders.length, files: result.length };
+  return result;
 }
 
 // A recording's own filename time (parsed separately) tells us when the
