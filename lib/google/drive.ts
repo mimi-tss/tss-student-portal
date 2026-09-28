@@ -474,10 +474,18 @@ export async function listMeetRecordingsInbox(
   const roots = await findMeetRecordingsRootFolders();
   const subfoldersByRoot = await Promise.all(roots.map((rootId) => listQualifyingMeetingSubfolders(rootId, cutoff)));
   const subfolders = subfoldersByRoot.flat();
-  if (!subfolders.length) return [];
+
+  // Staff have also been manually renaming recordings to the student's
+  // name (e.g. "claire 9_24.mp4") and dropping them loose directly in
+  // a "Google Meet" root — confirmed live, sitting as siblings of the
+  // per-meeting subfolders, not inside any of them. The subfolder walk
+  // above would never see these, so every root itself is scanned the
+  // same way a subfolder is, not just walked for its children.
+  const foldersToScan = [...roots.map((id) => ({ id })), ...subfolders];
+  if (!foldersToScan.length) return [];
 
   const perFolder = await Promise.all(
-    subfolders.map((folder) =>
+    foldersToScan.map((folder) =>
       drive.files.list({
         q: `'${folder.id}' in parents and trashed = false and mimeType = 'video/mp4' and createdTime > '${cutoff}'`,
         orderBy: "createdTime desc",
