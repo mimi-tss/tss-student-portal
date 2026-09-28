@@ -2,8 +2,8 @@ import { google } from "googleapis";
 import { getGoogleAuth, DRIVE_SCOPES } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-function getDriveClient() {
-  return google.drive({ version: "v3", auth: getGoogleAuth(DRIVE_SCOPES) });
+function getDriveClient(subject?: string) {
+  return google.drive({ version: "v3", auth: getGoogleAuth(DRIVE_SCOPES, subject) });
 }
 
 // Every student folder lives in this one shared drive. Confirmed live
@@ -391,8 +391,21 @@ export async function removeStudentFolderItem(folderId: string, fileId: string):
 // here, so this now discovers every "Google Meet"-named folder by name
 // each run and walks all of them — self-healing the next time this
 // happens instead of needing a manual re-diagnosis.
-async function findMeetRecordingsRootFolders(): Promise<string[]> {
-  const drive = getDriveClient();
+//
+// Then it happened a THIRD way on 2026-09-28: not a new folder this
+// time, but GOOGLE_ADMIN_EMAIL (mimi@) simply not having access to one
+// — confirmed live via drive.about.get that this app impersonates
+// mimi@, not info@, and every one of these folders is actually OWNED by
+// info@. mimi@ only sees a folder once someone manually shares it with
+// her, which is exactly the kind of one-off step this scan shouldn't
+// depend on. Rather than re-share by hand every time Meet creates
+// something new under an account mimi@ doesn't have standing access to,
+// listMeetRecordingsInbox now also scans as every extra identity in
+// GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS (comma-separated; currently just
+// info@) and merges the results — the studio asked to keep mimi@ as the
+// primary impersonated account rather than switch back to info@, so this
+// adds coverage instead of replacing it.
+async function findMeetRecordingsRootFolders(drive: ReturnType<typeof getDriveClient>): Promise<string[]> {
   const res = await drive.files.list({
     q: "name = 'Google Meet' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
     fields: "files(id)",
@@ -436,10 +449,10 @@ const RECORDING_SCAN_LOOKBACK_DAYS = 3;
 // bounds how much of a recurring folder's long history gets re-walked
 // every run.
 async function listQualifyingMeetingSubfolders(
+  drive: ReturnType<typeof getDriveClient>,
   rootFolderId: string,
   cutoffIso: string,
 ): Promise<{ id: string; name: string }[]> {
-  const drive = getDriveClient();
   const res = await drive.files.list({
     q: `'${rootFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder' and (createdTime > '${cutoffIso}' or name contains '(recurring)')`,
     pageSize: 100,
@@ -450,29 +463,27 @@ async function listQualifyingMeetingSubfolders(
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled" }));
 }
 
-// Lists recent recordings sitting in the shared Meet-recordings inbox —
-// feeds lib/admin/recording-matching.ts's scan step, which diffs this
-// against meet_recordings.drive_file_id to find newly-arrived files.
-// Three-level: find every "Google Meet" root folder (see
-// findMeetRecordingsRootFolders's own comment for why there can be more
-// than one), then each root's qualifying subfolders, then each
-// subfolder's own recording file(s) — a single meeting can have more
-// than one recording (a dropped/rejoined call produces "Recording",
-// "Recording 2", etc., all real, none to be silently dropped).
-//
-// `lookbackDays` defaults to the steady-state window but can be widened
-// for a one-time historical catch-up (see the cron route's own `days`
-// query param) without touching this constant, which stays tight for
-// ordinary runs specifically to avoid re-walking a recurring folder's
-// entire history every 2 hours.
-export async function listMeetRecordingsInbox(
-  lookbackDays: number = RECORDING_SCAN_LOOKBACK_DAYS,
-): Promise<MeetRecordingFile[]> {
-  const drive = getDriveClient();
-  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+// The identities to run the whole discovery walk as. GOOGLE_ADMIN_EMAIL
+// is always included (everything else in this file still impersonates
+// only that one account); GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS adds more,
+// comma-separated, for the mimi@-doesn't-see-info@'s-folders gap (see
+// findMeetRecordingsRootFolders's own comment). Deduped so a misconfigured
+// duplicate doesn't double every API call this function makes.
+function recordingsScanIdentities(): string[] {
+  const extra = (process.env.GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  return Array.from(new Set([process.env.GOOGLE_ADMIN_EMAIL!, ...extra]));
+}
 
-  const roots = await findMeetRecordingsRootFolders();
-  const subfoldersByRoot = await Promise.all(roots.map((rootId) => listQualifyingMeetingSubfolders(rootId, cutoff)));
+async function listMeetRecordingsInboxAs(subject: string, cutoff: string): Promise<MeetRecordingFile[]> {
+  const drive = getDriveClient(subject);
+
+  const roots = await findMeetRecordingsRootFolders(drive);
+  const subfoldersByRoot = await Promise.all(
+    roots.map((rootId) => listQualifyingMeetingSubfolders(drive, rootId, cutoff)),
+  );
   const subfolders = subfoldersByRoot.flat();
 
   // Staff have also been manually renaming recordings to the student's
@@ -499,6 +510,42 @@ export async function listMeetRecordingsInbox(
     .flatMap((res) => res.data.files ?? [])
     .filter((f) => f.id && f.createdTime)
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
+}
+
+// Lists recent recordings sitting in the shared Meet-recordings inbox —
+// feeds lib/admin/recording-matching.ts's scan step, which diffs this
+// against meet_recordings.drive_file_id to find newly-arrived files.
+// Runs the whole three-level walk (root folders, their qualifying
+// subfolders, each subfolder's own recording file(s) — a single meeting
+// can have more than one recording, a dropped/rejoined call produces
+// "Recording", "Recording 2", etc., all real, none to be silently
+// dropped) once per identity in recordingsScanIdentities, then merges
+// and dedupes by file id — the same folder can be visible to more than
+// one identity, and drive_file_id is unique in meet_recordings, so a
+// duplicate here would otherwise fail the insert downstream.
+//
+// `lookbackDays` defaults to the steady-state window but can be widened
+// for a one-time historical catch-up (see the cron route's own `days`
+// query param) without touching this constant, which stays tight for
+// ordinary runs specifically to avoid re-walking a recurring folder's
+// entire history every 2 hours.
+export async function listMeetRecordingsInbox(
+  lookbackDays: number = RECORDING_SCAN_LOOKBACK_DAYS,
+): Promise<MeetRecordingFile[]> {
+  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const byIdentity = await Promise.all(
+    recordingsScanIdentities().map((subject) => listMeetRecordingsInboxAs(subject, cutoff)),
+  );
+
+  const seen = new Set<string>();
+  const merged: MeetRecordingFile[] = [];
+  for (const file of byIdentity.flat()) {
+    if (seen.has(file.id)) continue;
+    seen.add(file.id);
+    merged.push(file);
+  }
+  return merged;
 }
 
 // A recording's own filename time (parsed separately) tells us when the
