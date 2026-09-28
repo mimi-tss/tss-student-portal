@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
-import { lastScanDebug, whoAmIDebug } from "@/lib/google/drive"; // TEMP DEBUG — remove with lastScanDebug itself
 import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
 
@@ -160,13 +159,5 @@ export async function GET(req: NextRequest) {
     .from("cron_heartbeats")
     .upsert({ job_name: CRON_JOB_NAME, last_run_at: new Date().toISOString() });
 
-  return NextResponse.json({
-    inserted,
-    nameMatched,
-    dayMatched,
-    autoMatched: nameMatched + dayMatched,
-    matchFailAlerted,
-    debug: lastScanDebug, // TEMP DEBUG — remove with lastScanDebug itself
-    debugWhoAmI: await whoAmIDebug().catch((e) => `error: ${e instanceof Error ? e.message : String(e)}`), // TEMP DEBUG
-  });
+  return NextResponse.json({ inserted, nameMatched, dayMatched, autoMatched: nameMatched + dayMatched, matchFailAlerted });
 }
