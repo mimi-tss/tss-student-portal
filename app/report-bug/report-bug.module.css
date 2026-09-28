@@ -1,0 +1,29 @@
+/* /report-bug — public page, outside every route group, so it composes
+   the shared tokens itself (same as /help). */
+.root {
+  composes: tokens from "../theme-tokens.module.css";
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  box-sizing: border-box;
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+@media (max-width: 640px) {
+  .root {
+    padding: 16px;
+  }
+}

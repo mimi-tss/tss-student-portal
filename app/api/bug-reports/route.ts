@@ -19,16 +19,24 @@ const EXTENSIONS: Record<string, string> = {
 // in the student + coach headers. Multipart form: email, message,
 // pageUrl, and up to 3 `screenshots` image files. Uses the service-role
 // client for the insert + storage upload (bug_reports has no non-admin
-// insert policy, and the bucket has no storage policies at all), so the
-// caller's own session is verified here first.
+// insert policy, and the bucket has no storage policies at all).
+//
+// Also backs the public /report-bug page, so a session is optional: a
+// logged-out report is matched to a student/coach by email when
+// possible. Logged-out spam guards: a honeypot field and at most
+// MAX_ANON_PER_HOUR reports per email.
+const MAX_ANON_PER_HOUR = 5;
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Please log in again." }, { status: 401 });
 
   const form = await req.formData();
+  // Honeypot filled in = bot. Pretend success so it doesn't retry.
+  if (String(form.get("website") ?? "").trim()) return NextResponse.json({ ok: true });
+
   const email = String(form.get("email") ?? "").trim();
   const message = String(form.get("message") ?? "").trim();
   const pageUrl = String(form.get("pageUrl") ?? "").slice(0, 1000);
@@ -52,15 +60,44 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (!user && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Please enter a valid email." }, { status: 400 });
+  }
+
   const admin = createAdminClient();
 
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  const role = profile?.role ?? null;
-  const nameTable = role === "coach" ? "coaches" : role === "student" ? "students" : null;
+  let profileId: string | null = user?.id ?? null;
+  let role: string | null = null;
   let reporterName: string | null = null;
-  if (nameTable) {
-    const { data } = await admin.from(nameTable).select("name").eq("profile_id", user.id).maybeSingle();
-    reporterName = data?.name ?? null;
+  if (user) {
+    const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    role = profile?.role ?? null;
+    const nameTable = role === "coach" ? "coaches" : role === "student" ? "students" : null;
+    if (nameTable) {
+      const { data } = await admin.from(nameTable).select("name").eq("profile_id", user.id).maybeSingle();
+      reporterName = data?.name ?? null;
+    }
+  } else {
+    // Escape LIKE wildcards so ilike below is a case-insensitive exact match.
+    const emailPattern = email.replace(/[\\%_]/g, "\\$&");
+    const { count } = await admin
+      .from("bug_reports")
+      .select("id", { count: "exact", head: true })
+      .ilike("email", emailPattern)
+      .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+    if ((count ?? 0) >= MAX_ANON_PER_HOUR) {
+      return NextResponse.json({ error: "Too many reports from this email. Please try again later." }, { status: 429 });
+    }
+    // Best-effort match so admin sees who it is.
+    for (const [table, r] of [["students", "student"], ["coaches", "coach"]] as const) {
+      const { data } = await admin.from(table).select("name, profile_id").ilike("email", emailPattern).limit(1).maybeSingle();
+      if (data) {
+        reporterName = data.name;
+        profileId = data.profile_id ?? null;
+        role = r;
+        break;
+      }
+    }
   }
 
   const reportId = crypto.randomUUID();
@@ -79,7 +116,7 @@ export async function POST(req: NextRequest) {
 
   const { error: insertError } = await admin.from("bug_reports").insert({
     id: reportId,
-    reporter_profile_id: user.id,
+    reporter_profile_id: profileId,
     reporter_role: role,
     reporter_name: reporterName,
     email,
