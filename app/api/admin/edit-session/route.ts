@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, student_id")
+    .select("id, student_id, status")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
       duration_minutes: durationMinutes,
       actual_coach_id: coachId,
       status,
+      // Missed-lesson email clock (2-hour grace): starts when an admin sets
+      // no-show, left alone if it already was, cleared otherwise.
+      ...(status === "no-show"
+        ? session.status === "no-show"
+          ? {}
+          : { no_show_marked_at: new Date().toISOString() }
+        : { no_show_marked_at: null }),
     })
     .eq("id", sessionId);
 

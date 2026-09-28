@@ -21,7 +21,8 @@ export interface GhlEvent {
     | "group_session_booked"
     | "session_cancelled"
     | "fifth_week_offer"
-    | "plan_changed";
+    | "plan_changed"
+    | "session_missed";
   studentId: string;
   email: string;
   phone: string | null;

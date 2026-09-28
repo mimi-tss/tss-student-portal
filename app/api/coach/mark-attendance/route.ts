@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("sessions")
-    .update({ status })
+    // Starts (or clears) the missed-lesson email's 2-hour grace clock —
+    // flipping a mis-clicked no-show back cancels the email.
+    .update({ status, no_show_marked_at: status === "no-show" ? new Date().toISOString() : null })
     .eq("id", sessionId)
     .select("id, student_id, students(name)")
     .maybeSingle();

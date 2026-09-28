@@ -14,6 +14,7 @@ import AssignedExercisesList from "@/components/assigned-exercises-list";
 import styles from "../../coach.module.css";
 import type { TodaySession, ExpiringMakeup, UpcomingBirthday, StudentSnapshot } from "@/lib/coach/dashboard-data";
 import type { CoachGroupLesson } from "@/lib/group-lessons";
+import { confirmNoShow } from "@/lib/ui/confirm-no-show";
 
 const TIER_LABEL: Record<string, string> = {
   lite: "Lite",
@@ -231,6 +232,7 @@ export default function DashboardClient({
   }
 
   async function handleMark(sessionId: string, status: "attended" | "no-show") {
+    if (status === "no-show" && !confirmNoShow(sessions.find((x) => x.id === sessionId)?.studentName)) return;
     // Same call whether this is the first mark or a correction — the
     // route just updates the row, no "already marked" restriction
     // server-side.

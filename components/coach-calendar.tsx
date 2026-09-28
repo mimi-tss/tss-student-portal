@@ -15,6 +15,7 @@ import { resolveWorkingHoursForDate, windowEndMinutes, windowEndDateParts } from
 import { isHolidayInstant } from "@/lib/scheduling/holidays";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { useTimeZone } from "./timezone-context";
+import { confirmNoShow } from "@/lib/ui/confirm-no-show";
 
 const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const SLOT_MINUTES = 30;
@@ -641,6 +642,7 @@ export default function CoachCalendar({
 
   async function handleMark(status: string) {
     if (!selectedSession) return;
+    if (status === "no-show" && !confirmNoShow(selectedSession.studentName)) return;
     setMarking(true);
 
     const res = await fetch("/api/coach/mark-attendance", {

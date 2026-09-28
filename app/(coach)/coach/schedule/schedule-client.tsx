@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import CoachCalendar from "@/components/coach-calendar";
 import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../coach.module.css";
+import { confirmNoShow } from "@/lib/ui/confirm-no-show";
 
 interface NeedsAttendanceSession {
   id: string;
@@ -52,7 +53,8 @@ export default function ScheduleClient() {
       .catch(() => {});
   }, []);
 
-  async function handleMark(sessionId: string, status: "attended" | "no-show") {
+  async function handleMark(sessionId: string, status: "attended" | "no-show", studentName?: string) {
+    if (status === "no-show" && !confirmNoShow(studentName)) return;
     setMarking(sessionId);
     const res = await fetch("/api/coach/mark-attendance", {
       method: "POST",
@@ -200,7 +202,7 @@ export default function ScheduleClient() {
                     </button>
                     <button
                       className={`${styles.quickMarkBtn} ${styles.quickMarkNo}`}
-                      onClick={() => handleMark(s.id, "no-show")}
+                      onClick={() => handleMark(s.id, "no-show", s.studentName)}
                       disabled={marking === s.id}
                       title="Mark no-show"
                     >

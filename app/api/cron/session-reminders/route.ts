@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
 import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
 import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
+import { missedLesson } from "@/lib/email/templates/missed-lesson";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -135,6 +136,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const missedSent = await sendMissedLessonEmails(admin, now);
+
   const meetLinksSent = await sendMeetLinkChatReminders(
     admin,
     new Date(now + MEET_LINK_MIN_MINUTES * 60_000),
@@ -146,5 +149,76 @@ export async function GET(req: NextRequest) {
     reminder24h: reminder24h.length,
     notified,
     meetLinksSent,
+    missedSent,
   });
+}
+
+// Missed-lesson email, sent only once a session has been marked no-show
+// for MISSED_GRACE_MS and is STILL no-show — a coach's mis-click fixed
+// within that window (the attendance routes clear no_show_marked_at)
+// never reaches the student (studio call 2026-09-28). Looks back 3 days so
+// a cron hiccup can't lose one, but never older backlog. Once per session.
+const MISSED_GRACE_MS = 2 * 60 * 60 * 1000;
+const MISSED_LOOKBACK_MS = 3 * 24 * 60 * 60 * 1000;
+
+async function sendMissedLessonEmails(admin: ReturnType<typeof createAdminClient>, now: number): Promise<number> {
+  const { data, error } = await admin
+    .from("sessions")
+    .select(
+      "id, scheduled_at, duration_minutes, no_show_marked_at, " +
+        "students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), coaches:actual_coach_id(name, timezone)",
+    )
+    .eq("status", "no-show")
+    .lte("no_show_marked_at", new Date(now - MISSED_GRACE_MS).toISOString())
+    .gte("no_show_marked_at", new Date(now - MISSED_LOOKBACK_MS).toISOString());
+  if (error) {
+    console.error("missed-lesson query failed (migration 0114 applied?)", error.message);
+    return 0;
+  }
+
+  let sent = 0;
+  for (const s of (data ?? []) as unknown as {
+    id: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    students: {
+      id: string;
+      name: string;
+      email: string;
+      phone: string | null;
+      notify_alerts_email: boolean;
+      notify_alerts_sms: boolean;
+      notify_alerts_inapp: boolean;
+    } | null;
+    coaches: { name: string; timezone: string } | null;
+  }[]) {
+    const student = unwrap(s.students);
+    const coach = unwrap(s.coaches);
+    if (!student) continue;
+    const when = lessonTimeFields(s.scheduled_at, coach?.timezone);
+    const r = missedLesson({
+      firstName: firstNameOf(student.name),
+      coachFirstName: firstNameOf(coach?.name),
+      lessonDate: when.lessonDate,
+      lessonDay: when.lessonDay,
+      lessonShortDate: when.lessonShortDate,
+      lessonTime: when.lessonTime,
+      durationMinutes: s.duration_minutes,
+    });
+    await notifyStudent(admin, {
+      studentId: student.id,
+      email: student.email,
+      phone: student.phone,
+      group: "alerts",
+      kind: "session_missed",
+      dedupKey: `student:${student.id}:session_missed:${s.id}`,
+      title: r.bellTitle,
+      body: r.bellBody,
+      linkUrl: "/student/dashboard",
+      ghlData: { sessionId: s.id, ...r },
+      channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+    });
+    sent++;
+  }
+  return sent;
 }
