@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { updateGroupAttendance } from "@/lib/group-attendance";
 
 // Per-attendee attendance marking for a group lesson — same posture as
 // app/api/coach/mark-attendance: RLS ("coaches can mark attendance on
@@ -20,12 +21,8 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("group_lesson_registrations")
-    .update({ status })
-    .eq("id", registrationId)
-    .select("id")
-    .maybeSingle();
+  // Also starts/clears the missed-session email's 2-hour grace clock.
+  const { data, error } = await updateGroupAttendance(supabase, registrationId, status);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

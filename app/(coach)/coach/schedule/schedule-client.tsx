@@ -80,7 +80,8 @@ export default function ScheduleClient() {
     }
   }
 
-  async function handleMarkGroup(registrationId: string, status: "attended" | "no-show") {
+  async function handleMarkGroup(registrationId: string, status: "attended" | "no-show", studentName?: string) {
+    if (status === "no-show" && !confirmNoShow(studentName)) return;
     setMarking(registrationId);
     const res = await fetch("/api/coach/mark-group-attendance", {
       method: "POST",
@@ -235,7 +236,7 @@ export default function ScheduleClient() {
                     </button>
                     <button
                       className={`${styles.quickMarkBtn} ${styles.quickMarkNo}`}
-                      onClick={() => handleMarkGroup(r.registrationId, "no-show")}
+                      onClick={() => handleMarkGroup(r.registrationId, "no-show", r.studentName)}
                       disabled={marking === r.registrationId}
                       title="Mark no-show"
                     >

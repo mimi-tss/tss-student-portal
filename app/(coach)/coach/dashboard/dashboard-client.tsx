@@ -201,6 +201,7 @@ export default function DashboardClient({
   }
 
   async function handleMarkGroupAttendee(registrationId: string, status: "attended" | "no-show") {
+    if (status === "no-show" && !confirmNoShow()) return;
     setMarkingGroup(true);
     const res = await fetch("/api/coach/mark-group-attendance", {
       method: "POST",

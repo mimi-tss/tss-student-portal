@@ -659,6 +659,7 @@ export default function CoachCalendar({
   }
 
   async function handleMarkGroupAttendee(registrationId: string, status: "registered" | "attended" | "no-show") {
+    if (status === "no-show" && !confirmNoShow()) return;
     setMarking(true);
 
     const res = await fetch("/api/coach/mark-group-attendance", {

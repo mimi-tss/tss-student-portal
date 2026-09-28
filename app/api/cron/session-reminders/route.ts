@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
 import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
 import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
-import { missedLesson } from "@/lib/email/templates/missed-lesson";
+import { missedGroupSession, missedLesson } from "@/lib/email/templates/missed-lesson";
+import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const missedSent = await sendMissedLessonEmails(admin, now);
+  const missedSent = (await sendMissedLessonEmails(admin, now)) + (await sendMissedGroupEmails(admin, now));
 
   const meetLinksSent = await sendMeetLinkChatReminders(
     admin,
@@ -216,6 +217,69 @@ async function sendMissedLessonEmails(admin: ReturnType<typeof createAdminClient
       body: r.bellBody,
       linkUrl: "/student/dashboard",
       ghlData: { sessionId: s.id, ...r },
+      channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+    });
+    sent++;
+  }
+  return sent;
+}
+
+// Group-session counterpart: same 2-hour grace, "no credit applied"
+// message. Quietly does nothing until migration 0115 adds the clock column.
+async function sendMissedGroupEmails(admin: ReturnType<typeof createAdminClient>, now: number): Promise<number> {
+  const { data, error } = await admin
+    .from("group_lesson_registrations")
+    .select(
+      "id, no_show_marked_at, students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
+        "group_lessons(topic, scheduled_at, coaches(name, timezone))",
+    )
+    .eq("status", "no-show")
+    .lte("no_show_marked_at", new Date(now - MISSED_GRACE_MS).toISOString())
+    .gte("no_show_marked_at", new Date(now - MISSED_LOOKBACK_MS).toISOString());
+  if (error) {
+    if (!/no_show_marked_at/.test(error.message)) console.error("missed-group query failed", error.message);
+    return 0;
+  }
+
+  let sent = 0;
+  for (const r of (data ?? []) as unknown as {
+    id: string;
+    students: {
+      id: string;
+      name: string;
+      email: string;
+      phone: string | null;
+      notify_alerts_email: boolean;
+      notify_alerts_sms: boolean;
+      notify_alerts_inapp: boolean;
+    } | null;
+    group_lessons: { topic: string | null; scheduled_at: string; coaches: { name: string; timezone: string } | null } | null;
+  }[]) {
+    const student = unwrap(r.students);
+    const lesson = unwrap(r.group_lessons);
+    if (!student || !lesson) continue;
+    const coach = unwrap(lesson.coaches);
+    const when = lessonTimeFields(lesson.scheduled_at, coach?.timezone);
+    const m = missedGroupSession({
+      firstName: firstNameOf(student.name),
+      coachFirstName: firstNameOf(coach?.name),
+      sessionLabel: cleanGroupTopic(lesson.topic),
+      lessonDate: when.lessonDate,
+      lessonDay: when.lessonDay,
+      lessonShortDate: when.lessonShortDate,
+      lessonTime: when.lessonTime,
+    });
+    await notifyStudent(admin, {
+      studentId: student.id,
+      email: student.email,
+      phone: student.phone,
+      group: "alerts",
+      kind: "session_missed",
+      dedupKey: `student:${student.id}:group_session_missed:${r.id}`,
+      title: m.bellTitle,
+      body: m.bellBody,
+      linkUrl: "/student/dashboard",
+      ghlData: { registrationId: r.id, ...m },
       channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
     });
     sent++;
