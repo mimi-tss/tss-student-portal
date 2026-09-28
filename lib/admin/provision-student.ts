@@ -86,7 +86,11 @@ export async function provisionStudent(
   admin: SupabaseClient,
   input: ProvisionStudentInput,
 ): Promise<ProvisionStudentResult> {
-  const { email, name, tier, coachId, sessionDurationMinutes, ambassador, lessonType } = input;
+  const { tier, coachId, sessionDurationMinutes, ambassador, lessonType } = input;
+  // Trimmed: a name pasted from a spreadsheet arrived as "\t Praveen
+  // Kumar" (confirmed live), which sorts and matches wrong everywhere.
+  const email = input.email.trim();
+  const name = input.name.trim();
   const durationMinutes = sessionDurationMinutes === 60 ? 60 : 30;
 
   // Validated up front, before the student row exists, so a foreseeable
