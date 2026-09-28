@@ -4,6 +4,7 @@ import { notifyStudent } from "@/lib/notifications/create";
 import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
 import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
 import { missedGroupSession, missedLesson } from "@/lib/email/templates/missed-lesson";
+import { sessionReminder24h, sessionStartingSoon } from "@/lib/email/templates/session-reminder";
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
@@ -16,8 +17,11 @@ import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 // Student-only — coaches don't get a Slack ping for these (see
 // lib/notifications/session-events.ts for what coaches actually get:
 // booked/cancelled events and chat messages, not time-based reminders).
-const STARTING_SOON_MIN_MINUTES = 15;
-const STARTING_SOON_MAX_MINUTES = 25;
+// "Starts in 15 minutes" reminder: a 10-minute-wide window centred on 15
+// (the cron runs every 10 min), so each lesson is caught once, ~10-20 min
+// before it starts.
+const STARTING_SOON_MIN_MINUTES = 10;
+const STARTING_SOON_MAX_MINUTES = 20;
 const REMINDER_24H_MIN_HOURS = 23.5;
 const REMINDER_24H_MAX_HOURS = 24.5;
 
@@ -91,9 +95,9 @@ export async function GET(req: NextRequest) {
 
   let notified = 0;
 
-  for (const [sessions, kind, title, studentBody] of [
-    [startingSoon, "session_starting_soon", "Your session starts soon", "Your session starts in about 15-25 minutes."],
-    [reminder24h, "session_reminder_24h", "Session tomorrow", "You have a session scheduled in about 24 hours."],
+  for (const [sessions, kind] of [
+    [startingSoon, "session_starting_soon"],
+    [reminder24h, "session_reminder_24h"],
   ] as const) {
     for (const s of sessions) {
       const student = unwrap(s.students);
@@ -101,16 +105,25 @@ export async function GET(req: NextRequest) {
       const coach = unwrap(s.coaches);
       const when = lessonTimeFields(s.scheduled_at, coach?.timezone);
 
-      // Bell copy for the 24h reminder mirrors the approved email
-      // (lib/email/templates/session-reminder.ts): who + when, not
-      // "in about 24 hours".
+      // Finished email/text (subject + html + sms) go to GHL in ghlData;
+      // bell copy mirrors them (lib/email/templates/session-reminder.ts).
+      const input = {
+        firstName: firstNameOf(student.name),
+        coachFirstName: firstNameOf(coach?.name),
+        lessonDate: when.lessonDate,
+        lessonDay: when.lessonDay,
+        lessonTime: when.lessonTime,
+        durationMinutes: s.duration_minutes,
+      };
+      const rendered =
+        kind === "session_reminder_24h" ? sessionReminder24h(input) : sessionStartingSoon(input);
       const bell =
         kind === "session_reminder_24h"
           ? {
               title: `Lesson tomorrow with Coach ${firstNameOf(coach?.name)}`,
               body: `${when.lessonDate} · ${when.lessonTime} · ${s.duration_minutes} min`,
             }
-          : { title, body: studentBody };
+          : { title: (rendered as ReturnType<typeof sessionStartingSoon>).bellTitle, body: (rendered as ReturnType<typeof sessionStartingSoon>).bellBody };
 
       await notifyStudent(admin, {
         studentId: student.id,
@@ -130,6 +143,7 @@ export async function GET(req: NextRequest) {
           coachName: coach?.name ?? "your coach",
           ...when,
           portalUrl: portalUrl("/student/dashboard"),
+          ...rendered,
         },
         channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
       });

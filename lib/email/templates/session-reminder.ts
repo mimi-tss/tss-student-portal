@@ -49,3 +49,43 @@ export function sessionReminder24h(i: SessionReminderInput): RenderedNotificatio
 
   return { subject, preheader, html, text, sms };
 }
+
+// ~15 minutes before a 1:1 lesson (session_starting_soon) — so they don't
+// forget (studio call 2026-09-28). Email + bell, text if Alerts → Text.
+export function sessionStartingSoon(i: SessionReminderInput & { lessonDay: string }): RenderedNotification & {
+  bellTitle: string;
+  bellBody: string;
+} {
+  const coach = `Coach ${i.coachFirstName}`;
+  const subject = `Your lesson with ${coach} starts in 15 minutes`;
+  const preheader = `${i.lessonTime} · your Meet link is on its way to your portal chat.`;
+  const { html, text } = renderEmail({
+    preheader,
+    heading: `Almost time, ${i.firstName}!`,
+    blocks: [
+      { type: "p", text: `Your 1:1 Private Coaching Session with **${coach}** starts in about **15 minutes**.` },
+      {
+        type: "card",
+        title: "Starting soon",
+        lines: [`Today · ${i.lessonTime}`, `Private ${i.durationMinutes}-min Coaching Session with ${coach}`],
+      },
+      { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
+      { type: "p", text: "Your Google Meet link will pop up in your portal chat 10 minutes before we start." },
+      { type: "note", text: "You will be in the Waiting Room; please wait for your Coach to let you in." },
+    ],
+    reason: "You're getting this because lesson reminders are on.",
+  });
+  const sms = smsText(
+    `Hi ${i.firstName}, your lesson with ${coach} starts in 15 min (${i.lessonTime}). Meet link in your portal chat: ${STUDENT_APP_SHORT}`,
+    { brandPrefix: false },
+  );
+  return {
+    subject,
+    preheader,
+    html,
+    text,
+    sms,
+    bellTitle: "Your lesson starts in 15 minutes",
+    bellBody: `${i.lessonTime} with ${coach}`,
+  };
+}
