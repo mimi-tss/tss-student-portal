@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
-import { lastScanDebug } from "@/lib/google/drive"; // TEMP DEBUG — remove with lastScanDebug itself
+import { lastScanDebug, whoAmIDebug } from "@/lib/google/drive"; // TEMP DEBUG — remove with lastScanDebug itself
 import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
 
@@ -167,5 +167,6 @@ export async function GET(req: NextRequest) {
     autoMatched: nameMatched + dayMatched,
     matchFailAlerted,
     debug: lastScanDebug, // TEMP DEBUG — remove with lastScanDebug itself
+    debugWhoAmI: await whoAmIDebug().catch((e) => `error: ${e instanceof Error ? e.message : String(e)}`), // TEMP DEBUG
   });
 }

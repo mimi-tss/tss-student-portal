@@ -471,6 +471,17 @@ async function listQualifyingMeetingSubfolders(
 // (the response body), not Vercel's server-side console.log output.
 export let lastScanDebug: { roots: number; subfolders: number; files: number } | null = null;
 
+// TEMP DEBUG — reports which account the service account is actually
+// impersonating in THIS environment (GOOGLE_ADMIN_EMAIL, indirectly —
+// Vercel has it marked Secret so nobody can just read it back out of
+// the dashboard). Cheaper and more certain than asking someone to
+// compare an unrevealable value by eye.
+export async function whoAmIDebug(): Promise<string | null> {
+  const drive = getDriveClient();
+  const res = await drive.about.get({ fields: "user" });
+  return res.data.user?.emailAddress ?? null;
+}
+
 export async function listMeetRecordingsInbox(
   lookbackDays: number = RECORDING_SCAN_LOOKBACK_DAYS,
 ): Promise<MeetRecordingFile[]> {
