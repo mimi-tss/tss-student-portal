@@ -4,6 +4,7 @@ import { TimeZoneProvider } from "@/components/timezone-context";
 import { createClient } from "@/lib/supabase/server";
 import { getOverviewStats } from "@/lib/admin/attention-items";
 import AdminNav from "./admin-nav";
+import SupportAlert from "./support-alert";
 import { Anton, Inter, Caveat } from "next/font/google";
 import styles from "./admin.module.css";
 
@@ -30,6 +31,7 @@ export default async function AdminLayout({
           <AdminNav initialNeedsReviewCount={needsActionCount} role={role} />
           <div className={styles.appMain}>{children}</div>
         </div>
+        <SupportAlert />
       </div>
     </TimeZoneProvider>
   );

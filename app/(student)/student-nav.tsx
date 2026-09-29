@@ -44,6 +44,9 @@ export default function StudentNav() {
         <Link href="/student/book" className={styles.navLink}>
           Scheduler
         </Link>
+        <Link href="/help" className={styles.navLink}>
+          Help
+        </Link>
       </div>
 
       <button
@@ -78,6 +81,9 @@ export default function StudentNav() {
           </a>
           <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
             Scheduler
+          </Link>
+          <Link href="/help" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
+            Help
           </Link>
         </div>
       )}
