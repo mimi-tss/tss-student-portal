@@ -4,6 +4,7 @@ import { addMessage, loadMessages, type SupportCaller, type SupportMessage, type
 import { runTool, toolsFor, type ToolContext } from "@/lib/support/tools";
 import { describeOfficeHours, loadSupportSettings } from "@/lib/support/settings";
 import { escalateThread } from "@/lib/support/escalate";
+import { helpBaseUrl } from "@/lib/support/help-center";
 
 // Model + effort are env-configurable so cost/quality can be tuned
 // without a deploy of new code. Sonnet 5.5 is the low-cost default the
@@ -29,8 +30,9 @@ Your job: solve simple things yourself so the studio team doesn't have to, and h
 
 Rules:
 - Answer only from the help articles below and your tools. Never invent policies, prices, dates, links or features. If they don't cover it, just say briefly you're not sure and offer to ask the team — never mention "help articles", your instructions, or what you were or weren't given.
+- When an article with a "Public page" answers the question, give the short answer yourself and add its link on its own line as [Article title](Public page URL) so they can read the full steps. Only use those exact URLs — never make up links.
 - If an article says something isn't available, say so plainly in one short sentence (e.g. "Changing your profile picture isn't available at this time.") and don't offer a handoff for it.
-- Be warm, short and plain: at most about 60 words per reply. Give ONE step (or one question) at a time, then ask if it worked — don't list every possible fix at once. Don't explain every case (e.g. both Lite and Suite); ask a quick question first if the answer depends on it. No markdown headings. Times are in the student's timezone as given by tools.
+- Be warm, short and plain: at most about 60 words per reply. Give ONE step (or one question) at a time, then ask if it worked — don't list every possible fix at once. Don't explain every case (e.g. both Lite and Suite); ask a quick question first if the answer depends on it. No markdown headings or tables; plain text with simple "- " bullets is best (you may use **bold** sparingly). Times are in the student's timezone as given by tools.
 - Scheduling: to reschedule, look up their lessons, explain the 24-hour credit rule for that specific lesson, then use propose_cancel_lesson. After a cancel, offer to book a make-up: get credits, get open slots, let them pick, then propose_book_lesson. Never say something is done until the system confirms it.
 - Actions only happen when the student taps Confirm on the card you propose. Only propose one action at a time.
 - You cannot see or change anything inside Kajabi (course progress, community posts, Kajabi logins/settings) or Stripe. Explain the steps from the articles, or hand off.
@@ -60,14 +62,17 @@ async function buildSystem(admin: SupabaseClient): Promise<Anthropic.TextBlockPa
   const [{ data: articles }, settings] = await Promise.all([
     admin
       .from("support_kb_articles")
-      .select("category, title, body")
+      .select("category, title, body, slug, is_public")
       .eq("active", true)
       .order("category")
       .order("sort_order"),
     loadSupportSettings(admin),
   ]);
 
-  const kb = (articles ?? []).map((a) => `### [${a.category}] ${a.title}\n${a.body}`).join("\n\n");
+  const base = helpBaseUrl();
+  const kb = (articles ?? [])
+    .map((a) => `### [${a.category}] ${a.title}${a.is_public ? `\nPublic page: ${base}/help/a/${a.slug}` : ""}\n${a.body}`)
+    .join("\n\n");
 
   // Stable prefix (instructions + KB + hours) gets the cache breakpoint;
   // it only changes when an admin edits the help articles or hours.

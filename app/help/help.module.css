@@ -1,13 +1,18 @@
 /* /help — the AI help chat. Outside every route group (logged-out guests
    and Lite members use it too), so it composes the shared tokens itself. */
 
-.root {
+/* Tokens + page background for everything under /help (app/help/layout.tsx). */
+.base {
   composes: tokens from "../theme-tokens.module.css";
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-inter), sans-serif;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* Centers the full-page chat (/help/chat). */
+.root {
   display: flex;
   justify-content: center;
 }

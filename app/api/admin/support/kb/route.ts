@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminProfileId } from "@/lib/support/admin";
+import { slugify } from "@/lib/support/help-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,19 @@ export async function POST(req: NextRequest) {
   if (!title || !body || !CATEGORIES.includes(category)) {
     return NextResponse.json({ error: "Title, text and a category are required." }, { status: 400 });
   }
+  const slug = slugify(String(payload.slug ?? "").trim() || title);
+  if (!slug) return NextResponse.json({ error: "Give the article a title." }, { status: 400 });
+  const { data: clash } = await admin.from("support_kb_articles").select("id").eq("slug", slug).maybeSingle();
+  if (clash && clash.id !== payload.id) {
+    return NextResponse.json({ error: `Another article already uses the address /help/a/${slug}.` }, { status: 409 });
+  }
   const row = {
     title,
     body,
     category,
+    slug,
+    summary: String(payload.summary ?? "").trim() || null,
+    is_public: payload.is_public === true,
     active: payload.active !== false,
     sort_order: Number(payload.sort_order) || 0,
     updated_at: now,

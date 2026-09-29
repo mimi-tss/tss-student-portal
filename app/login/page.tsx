@@ -47,7 +47,7 @@ export default async function LoginPage({
         <p className={styles.helpText}>You&apos;re entering the studio portal — let&apos;s verify it&apos;s really you.</p>
         <LoginForm />
         <p className={styles.helpText} style={{ textAlign: "center", marginTop: 16 }}>
-          Trouble logging in? <a href="/help" style={{ color: "inherit", textDecoration: "underline" }}>Chat with us</a>
+          Trouble logging in? <a href="/help/chat" style={{ color: "inherit", textDecoration: "underline" }}>Chat with us</a>
         </p>
       </div>
     </div>

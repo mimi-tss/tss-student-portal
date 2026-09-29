@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { SupportSettings } from "@/lib/support/settings";
 import styles from "../../../admin.module.css";
 
@@ -11,6 +11,11 @@ export interface KbArticle {
   body: string;
   active: boolean;
   sort_order: number;
+  slug: string;
+  summary: string | null;
+  is_public: boolean;
+  helpful_yes: number;
+  helpful_no: number;
 }
 
 const CATEGORIES: [string, string][] = [
@@ -32,7 +37,18 @@ const DAYS: [string, string][] = [
   ["sun", "Sun"],
 ];
 
-const EMPTY: Omit<KbArticle, "id"> = { category: "portal", title: "", body: "", active: true, sort_order: 100 };
+const EMPTY: Omit<KbArticle, "id"> = {
+  category: "portal",
+  title: "",
+  body: "",
+  active: true,
+  sort_order: 100,
+  slug: "",
+  summary: null,
+  is_public: false,
+  helpful_yes: 0,
+  helpful_no: 0,
+};
 
 async function post(payload: Record<string, unknown>) {
   const res = await fetch("/api/admin/support/kb", {
@@ -57,20 +73,72 @@ function ArticleEditor({
   onCancel?: () => void;
 }) {
   const [draft, setDraft] = useState({ ...EMPTY, ...article });
+  const [open, setOpen] = useState(!article.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   async function save() {
     setBusy(true);
     setError(null);
+    setSaved(false);
     try {
-      const { article: saved } = await post(draft);
-      onSaved(saved);
+      const { article: result } = await post(draft);
+      setDraft(result);
+      onSaved(result);
+      setSaved(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Screenshot -> help-images bucket -> Markdown image at the cursor.
+  async function uploadImage(file: File) {
+    setBusy(true);
+    setError(null);
+    const form = new FormData();
+    form.set("file", file);
+    const res = await fetch("/api/admin/support/kb/image", { method: "POST", body: form });
+    const json = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setError(json.error ?? "Upload failed.");
+      return;
+    }
+    const el = bodyRef.current;
+    const at = el?.selectionStart ?? draft.body.length;
+    const snippet = `\n![Screenshot](${json.url})\n`;
+    setDraft((d) => ({ ...d, body: d.body.slice(0, at) + snippet + d.body.slice(at) }));
+  }
+
+  if (!open) {
+    return (
+      <div className={styles.panel} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <strong>{draft.title}</strong>{" "}
+          {draft.is_public ? <span className={styles.badge}>Public</span> : <span className={styles.badgeMuted}>Mel only</span>}{" "}
+          {!draft.active && <span className={styles.badgeWarn}>Off</span>}
+          <div className={styles.mutedText} style={{ fontSize: 13, marginTop: 4 }}>
+            /help/a/{draft.slug}
+            {(draft.helpful_yes > 0 || draft.helpful_no > 0) && (
+              <>
+                {" "}
+                · 👍 {draft.helpful_yes} 👎 {draft.helpful_no}
+              </>
+            )}
+          </div>
+        </div>
+        <a href={`/help/a/${draft.slug}`} target="_blank" rel="noopener noreferrer" className={styles.linkBtnSmall}>
+          {draft.is_public ? "View" : "Preview"}
+        </a>
+        <button type="button" className={styles.btnGhost} onClick={() => setOpen(true)}>
+          Edit
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -86,40 +154,95 @@ function ArticleEditor({
         <input
           className={styles.input}
           style={{ flex: 1, minWidth: 200 }}
-          placeholder="Title (e.g. Finding your courses)"
+          placeholder="Title (e.g. Rescheduling a lesson)"
           value={draft.title}
           onChange={(e) => setDraft({ ...draft, title: e.target.value })}
         />
-        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-          <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
-          Active
-        </label>
       </div>
-      <textarea
+      <input
         className={styles.input}
-        rows={4}
-        style={{ width: "100%", resize: "vertical" }}
-        placeholder="What the bot should tell people — plain steps, exact menu names."
+        style={{ width: "100%", marginBottom: 8 }}
+        placeholder="One-line summary shown in lists and search (optional)"
+        value={draft.summary ?? ""}
+        onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+      />
+      <textarea
+        ref={bodyRef}
+        className={styles.input}
+        rows={12}
+        style={{ width: "100%", resize: "vertical", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13 }}
+        placeholder={"Plain steps with exact menu names. Formatting:\n## Heading\n1. Numbered step\n- Bullet\n**bold**\n[link text](https://...)"}
         value={draft.body}
         onChange={(e) => setDraft({ ...draft, body: e.target.value })}
       />
+      <div className={styles.mutedText} style={{ fontSize: 12, marginTop: 4 }}>
+        Formatting: <code>## Heading</code> · <code>1. Step</code> · <code>- bullet</code> · <code>**bold**</code> ·{" "}
+        <code>[text](https://link)</code> · screenshots with the button below.
+      </div>
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+        <label className={styles.ctaSmall} style={{ cursor: "pointer" }}>
+          Add screenshot
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadImage(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input type="checkbox" checked={draft.is_public} onChange={(e) => setDraft({ ...draft, is_public: e.target.checked })} />
+          Show in public help center
+        </label>
+        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
+          Active (Mel uses it)
+        </label>
+        <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          Web address /help/a/
+          <input
+            className={styles.inputSmall}
+            style={{ width: 200 }}
+            placeholder="from title"
+            value={draft.slug}
+            onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+          />
+        </label>
+      </div>
+
       {error && <p className={styles.errorText}>{error}</p>}
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" className={styles.ctaSmall} disabled={busy} onClick={save}>
-          Save
+          {busy ? "Saving…" : "Save"}
         </button>
+        {draft.id && (
+          <a href={`/help/a/${draft.slug}`} target="_blank" rel="noopener noreferrer" className={styles.linkBtnSmall}>
+            {draft.is_public ? "View page" : "Preview page"}
+          </a>
+        )}
+        {draft.id && (
+          <button type="button" className={styles.btnGhost} onClick={() => setOpen(false)}>
+            Done
+          </button>
+        )}
         {onCancel && (
           <button type="button" className={styles.btnGhost} onClick={onCancel}>
             Cancel
           </button>
         )}
+        {saved && <span className={styles.successText}>Saved.</span>}
         {onDeleted && draft.id && (
           <button
             type="button"
             className={styles.dangerLink}
+            style={{ marginLeft: "auto" }}
             disabled={busy}
             onClick={async () => {
-              if (!confirm("Delete this article?")) return;
+              if (!confirm("Delete this article? Mel and the help center will stop using it.")) return;
               await post({ op: "delete", id: draft.id });
               onDeleted();
             }}

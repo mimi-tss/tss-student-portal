@@ -45,16 +45,41 @@ function browserTimeZone() {
   }
 }
 
-function linkify(text: string): ReactNode[] {
-  return text.split(/((?:https?:\/\/)[^\s<>"]+)/gi).map((part, i) =>
-    i % 2 === 1 ? (
-      <a key={i} href={part.replace(/[.,!?;:)]+$/, "")} target="_blank" rel="noopener noreferrer">
-        {part}
-      </a>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
+// **bold** -> <strong> (Mel sometimes echoes article formatting).
+function boldify(text: string, keyPrefix: string): ReactNode[] {
+  return text
+    .split(/\*\*(.+?)\*\*/g)
+    .map((part, i) => (i % 2 === 1 ? <strong key={`${keyPrefix}-b${i}`}>{part}</strong> : <Fragment key={`${keyPrefix}-b${i}`}>{part}</Fragment>));
+}
+
+function linkifyUrls(text: string, keyPrefix: string): ReactNode[] {
+  return text.split(/((?:https?:\/\/)[^\s<>"]+)/gi).flatMap((part, i) =>
+    i % 2 === 1
+      ? [
+          <a key={`${keyPrefix}-${i}`} href={part.replace(/[.,!?;:)]+$/, "")} target="_blank" rel="noopener noreferrer">
+            {part}
+          </a>,
+        ]
+      : boldify(part, `${keyPrefix}-${i}`),
   );
+}
+
+// Mel links help-center articles as [Title](url) — shown as a tappable
+// "📖 Title" instead of a raw address. Bare URLs still get linked.
+function linkify(text: string): ReactNode[] {
+  const parts = text.split(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g);
+  const out: ReactNode[] = [];
+  for (let i = 0; i < parts.length; i += 3) {
+    out.push(...linkifyUrls(parts[i], `t${i}`));
+    if (i + 2 < parts.length) {
+      out.push(
+        <a key={`m${i}`} href={parts[i + 2]} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+          📖 {parts[i + 1]}
+        </a>,
+      );
+    }
+  }
+  return out;
 }
 
 // Name first, then email — one simple question at a time for students who
@@ -305,8 +330,13 @@ export default function HelpChat({
         </header>
       ) : (
       <header className={styles.header}>
-        <img src="/logo.png" alt="" className={styles.logo} />
-        <h1 className={styles.title}>Help</h1>
+        <a href="/help" style={{ display: "contents", color: "inherit", textDecoration: "none" }}>
+          <img src="/logo.png" alt="" className={styles.logo} />
+          <h1 className={styles.title}>Ask Mel</h1>
+        </a>
+        <a href="/help" className={styles.headerLink}>
+          Help center
+        </a>
         {isStudent ? (
           <a href="/student/dashboard" className={styles.headerLink}>
             Back to portal

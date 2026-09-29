@@ -10,13 +10,13 @@ const CLASSES =
 // Opens/closes Mel, the AI help chat, from the student header — same round
 // icon-button look as the notification bell next to it. Inside the
 // portal it toggles the docked panel (components/help-panel.tsx); without
-// the panel provider it falls back to the /help page.
+// the panel provider it falls back to the /help/chat page.
 export default function HelpAgentButton() {
   const panel = useHelpPanel();
 
   if (!panel) {
     return (
-      <Link href="/help" aria-label="Chat with Mel, the AI assistant" title="Need help? Chat with Mel" className={CLASSES}>
+      <Link href="/help/chat" aria-label="Chat with Mel, the AI assistant" title="Need help? Chat with Mel" className={CLASSES}>
         <BotMessageSquare size={18} strokeWidth={2} />
       </Link>
     );

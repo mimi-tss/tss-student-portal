@@ -12,8 +12,8 @@ import HelpChat from "@/app/help/help-chat";
 //    the corner (dot = new reply) that reopens it in one tap.
 // Lives in the (student) layout, so it stays open while the student moves
 // between portal pages; state also survives full reloads (sessionStorage).
-// /help remains the standalone page (logged-out guests, the login page
-// link, the Kajabi app menu).
+// /help/chat remains the standalone page (logged-out guests, the login page
+// link, the help center's "Ask Mel" buttons).
 
 type PanelState = "closed" | "open" | "minimized";
 const STORAGE_KEY = "tss_help_panel";
