@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
 import NotificationBell from "@/components/notification-bell";
+import HelpAgentButton from "@/components/help-agent-button";
+import { HelpPanelProvider } from "@/components/help-panel";
 import ProfileMenu from "@/components/profile-menu";
 import ThemeToggle from "@/components/theme-toggle";
 import BugReportButton from "@/components/bug-report-button";
@@ -45,6 +47,7 @@ export default async function StudentLayout({
   return (
     <TimeZoneProvider defaultZone={DEFAULT_TIMEZONE} autoDetect>
       <div className={`${anton.variable} ${inter.variable} ${caveat.variable} ${styles.root}`}>
+        <HelpPanelProvider>
         <header className={styles.header}>
           <div className={styles.logoMark}>
             <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
@@ -53,11 +56,13 @@ export default async function StudentLayout({
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <BugReportButton defaultEmail={user.email ?? ""} />
             <ThemeToggle />
+            <HelpAgentButton />
             <NotificationBell />
             <ProfileMenu initials={initials(student.name)} />
           </div>
         </header>
         {children}
+        </HelpPanelProvider>
       </div>
     </TimeZoneProvider>
   );

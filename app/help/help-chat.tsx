@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { Minus, X } from "lucide-react";
 import type { HelpView } from "@/lib/support/view";
 import styles from "./help.module.css";
 
@@ -140,7 +141,20 @@ function ContactSteps({
   );
 }
 
-export default function HelpChat() {
+export default function HelpChat({
+  variant = "page",
+  onMinimize,
+  onClose,
+  onMessageCount,
+}: {
+  // "panel" = inside the portal's side panel / mobile sheet
+  // (components/help-panel.tsx) instead of the full /help page.
+  variant?: "page" | "panel";
+  onMinimize?: () => void;
+  onClose?: () => void;
+  // Lets the panel show an unread dot on its minimized bubble.
+  onMessageCount?: (count: number) => void;
+} = {}) {
   const [view, setView] = useState<HelpView | null>(null);
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -190,6 +204,7 @@ export default function HelpChat() {
       });
     }
     lastCountRef.current = count;
+    onMessageCount?.(view?.messages.length ?? 0);
   }, [view, busy]);
 
   async function run(fn: () => Promise<Response>) {
@@ -273,7 +288,22 @@ export default function HelpChat() {
   const noMessagesYet = !view || view.messages.length === 0;
 
   return (
-    <div className={styles.shell}>
+    <div className={variant === "panel" ? styles.shellPanel : styles.shell}>
+      {variant === "panel" ? (
+        <header className={styles.panelHeader}>
+          <span className={styles.panelTitle}>Mel · AI assistant</span>
+          {onMinimize && (
+            <button type="button" className={styles.iconBtn} aria-label="Minimize chat" title="Minimize" onClick={onMinimize}>
+              <Minus size={18} />
+            </button>
+          )}
+          {onClose && (
+            <button type="button" className={styles.iconBtn} aria-label="Close chat" title="Close" onClick={onClose}>
+              <X size={18} />
+            </button>
+          )}
+        </header>
+      ) : (
       <header className={styles.header}>
         <img src="/logo.png" alt="" className={styles.logo} />
         <h1 className={styles.title}>Help</h1>
@@ -287,6 +317,7 @@ export default function HelpChat() {
           </a>
         )}
       </header>
+      )}
 
       {status === "needs_human" && view && (
         <div className={styles.banner}>
