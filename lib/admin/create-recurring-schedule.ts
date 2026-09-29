@@ -125,7 +125,8 @@ export async function createRecurringSchedule(
     .from("recurring_schedules")
     .select("id, start_time, duration_minutes, students(name)")
     .eq("coach_id", effectiveCoachId)
-    .eq("day_of_week", dayOfWeek);
+    .eq("day_of_week", dayOfWeek)
+    .eq("active", true);
 
   const [newHH, newMM] = startTime.split(":").map(Number);
   const newStartMin = newHH * 60 + newMM;

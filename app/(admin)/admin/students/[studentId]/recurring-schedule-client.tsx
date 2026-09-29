@@ -44,6 +44,7 @@ export default function RecurringScheduleClient({
   coaches,
   schedules,
   hideStartPrompt = false,
+  cancelConfirmed = false,
 }: {
   studentId: string;
   hasCoach: boolean;
@@ -60,6 +61,7 @@ export default function RecurringScheduleClient({
   // empty state so there's only one place to do that, not two. Doesn't
   // affect adding a second/third slot once at least one already exists.
   hideStartPrompt?: boolean;
+  cancelConfirmed?: boolean;
 }) {
   const router = useRouter();
   const { timeZone: viewTimeZone } = useTimeZone();
@@ -194,7 +196,9 @@ export default function RecurringScheduleClient({
       {notice && <p style={{ color: "var(--gold)", fontSize: 13, marginBottom: 8 }}>{notice}</p>}
 
       {schedules.length === 0 && editingId === null ? (
-        hideStartPrompt ? (
+        cancelConfirmed ? (
+          <p className={styles.mutedText}>No weekly schedule — cancellation confirmed.</p>
+        ) : hideStartPrompt ? (
           <p className={styles.mutedText}>Use Start above to set their first weekly session.</p>
         ) : (
           <button onClick={() => startEditing("new")} className={styles.linkBtn}>

@@ -439,6 +439,7 @@ export default async function AdminStudentPage({
           defaultCoachId={student.assigned_coach_id}
           coaches={coaches ?? []}
           hideStartPrompt={student.subscription_status === "active"}
+          cancelConfirmed={cancelRequest?.status === "approved"}
           schedules={(recurringSchedules ?? []).map((s) => ({
             id: s.id,
             dayOfWeek: s.day_of_week,

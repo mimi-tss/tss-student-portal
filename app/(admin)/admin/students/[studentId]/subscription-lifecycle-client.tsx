@@ -94,7 +94,8 @@ export default function SubscriptionLifecycleClient({
   // says exactly the same thing — "assign a coach" — with nothing
   // actionable either, by design: this Start button is meant to be the
   // one real entry point).
-  const canStart = subscriptionStatus === "active" && !hasRecurringSchedule;
+  const cancelConfirmed = cancelRequest?.status === "approved";
+  const canStart = subscriptionStatus === "active" && !hasRecurringSchedule && !cancelConfirmed;
 
   async function handleStart() {
     setSaving(true);
@@ -294,7 +295,9 @@ export default function SubscriptionLifecycleClient({
           onClick={() => toggle("start")}
           disabled={!canStart}
           title={
-            hasRecurringSchedule
+            cancelConfirmed
+              ? "Cancellation confirmed — use Mark retained first if they're staying"
+              : hasRecurringSchedule
               ? "Weekly sessions already started"
               : subscriptionStatus !== "active"
                 ? "Subscription isn't active"
@@ -530,20 +533,32 @@ export default function SubscriptionLifecycleClient({
             )}
           </label>
           {salvageNote && <p style={{ color: "var(--gold)", fontSize: 12, marginBottom: 8 }}>{salvageNote}</p>}
+          {/* Once confirmed there's nothing left to click here — showing
+              "Mark cancelled" again made a successful confirm look like
+              the button did nothing. Mark retained stays as the undo. */}
+          {cancelConfirmed && (
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              ✓ Done — no further lessons after {formatPlainDate(cancelRequest.effectiveDate)}.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button onClick={handleSalvagePause} disabled={salvaging} className={styles.linkBtnSmall}>
-              {salvaging ? "Pausing…" : "Pause (salvage attempt)"}
-            </button>
+            {!cancelConfirmed && (
+              <button onClick={handleSalvagePause} disabled={salvaging} className={styles.linkBtnSmall}>
+                {salvaging ? "Pausing…" : "Pause (salvage attempt)"}
+              </button>
+            )}
             <button onClick={handleRetain} disabled={saving || !cancelRequest.attentionItemId} className={styles.ctaSmall}>
-              Mark retained (student is staying)
+              {cancelConfirmed ? "Undo — mark retained (student is staying)" : "Mark retained (student is staying)"}
             </button>
-            <button
-              onClick={handleConfirmCancelled}
-              disabled={saving || !cancelRequest.attentionItemId}
-              className={styles.dangerBtn}
-            >
-              Mark cancelled (confirmed)
-            </button>
+            {!cancelConfirmed && (
+              <button
+                onClick={handleConfirmCancelled}
+                disabled={saving || !cancelRequest.attentionItemId}
+                className={styles.dangerBtn}
+              >
+                Mark cancelled (confirmed)
+              </button>
+            )}
             <button onClick={() => setPanel(null)} disabled={saving} className={styles.linkBtnSmall}>
               Close
             </button>

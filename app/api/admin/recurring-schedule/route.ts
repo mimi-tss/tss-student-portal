@@ -184,7 +184,8 @@ export async function POST(req: NextRequest) {
     .from("recurring_schedules")
     .select("id, start_time, duration_minutes")
     .eq("student_id", studentId)
-    .eq("day_of_week", dayOfWeek);
+    .eq("day_of_week", dayOfWeek)
+    .eq("active", true);
 
   const [newHH, newMM] = startTime.split(":").map(Number);
   const newStartMin = newHH * 60 + newMM;
@@ -214,7 +215,11 @@ export async function POST(req: NextRequest) {
     .from("recurring_schedules")
     .select("id, start_time, duration_minutes, students(name)")
     .eq("coach_id", effectiveCoachId)
-    .eq("day_of_week", dayOfWeek);
+    .eq("day_of_week", dayOfWeek)
+    // Stopped schedules (a student who left, an old slot) no longer
+    // hold the time — confirmed live: a cancelled student's inactive
+    // slot was blocking a new booking into it.
+    .eq("active", true);
 
   const coachConflict = (coachSchedules ?? []).find((other) => {
     if (scheduleId && other.id === scheduleId) return false;
