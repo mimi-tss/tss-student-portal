@@ -133,7 +133,10 @@ export async function provisionStudent(
       .from("recurring_schedules")
       .select("start_time, duration_minutes, students(name)")
       .eq("coach_id", coachId)
-      .eq("day_of_week", input.dayOfWeek);
+      .eq("day_of_week", input.dayOfWeek)
+      // Stopped schedules don't hold the time (same fix as
+      // app/api/admin/recurring-schedule's own conflict check).
+      .eq("active", true);
 
     const [newHH, newMM] = input.startTime.split(":").map(Number);
     const newStartMin = newHH * 60 + newMM;
