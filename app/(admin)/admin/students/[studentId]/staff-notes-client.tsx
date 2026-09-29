@@ -93,7 +93,7 @@ export default function StaffNotesClient({ studentId }: { studentId: string }) {
           {notes.map((n) => (
             <li key={n.id} className={styles.listItem}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", margin: 0 }}>
                   {n.pinned && <span className={styles.badge} style={{ marginRight: 6 }}>Pinned</span>}
                   {n.note}
                 </p>

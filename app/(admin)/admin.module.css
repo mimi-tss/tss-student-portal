@@ -821,7 +821,9 @@
 }
 @media (min-width: 900px) {
   .overviewGrid {
-    grid-template-columns: 1.4fr 1fr;
+    /* minmax(0, …) so one long unbreakable string (a pasted URL in a
+       staff note) can't force its column wider than its share. */
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   }
 }
 .panelHeadRow {
