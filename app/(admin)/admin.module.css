@@ -618,6 +618,12 @@
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  /* The sidebar is exactly one screen tall; with enough links the list
+     scrolls on its own so the footer (theme, Fix stuck screen,
+     Refresh, timezone) always stays on screen instead of being pushed
+     off the bottom. */
+  min-height: 0;
+  overflow-y: auto;
 }
 .appSidebarDivider {
   height: 1px;
