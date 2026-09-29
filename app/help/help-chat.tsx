@@ -53,7 +53,7 @@ function boldify(text: string, keyPrefix: string): ReactNode[] {
 }
 
 function linkifyUrls(text: string, keyPrefix: string): ReactNode[] {
-  return text.split(/((?:https?:\/\/)[^\s<>"]+)/gi).flatMap((part, i) =>
+  return text.split(/((?:https?:\/\/)[^\s<>"]+)/gi).flatMap<ReactNode>((part, i) =>
     i % 2 === 1
       ? [
           <a key={`${keyPrefix}-${i}`} href={part.replace(/[.,!?;:)]+$/, "")} target="_blank" rel="noopener noreferrer">
