@@ -188,8 +188,21 @@ export default function AccountDetailsClient({
   const row = (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
       <div className={styles.card} style={{ flex: "2 1 380px", textAlign: "left" }}>
-        <div className={styles.tierName} style={{ marginBottom: 12 }}>
-          Account details
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+          <div className={styles.tierName}>Account details</div>
+          {!editing && (
+            <button
+              type="button"
+              className={styles.cta}
+              style={{ padding: "6px 16px", fontSize: 14 }}
+              onClick={() => {
+                setEditing(true);
+                setConfirmation(null);
+              }}
+            >
+              Edit
+            </button>
+          )}
         </div>
 
         {!editing ? (
@@ -324,16 +337,6 @@ export default function AccountDetailsClient({
               {confirmation}
             </p>
           )}
-          <button
-            className={styles.cta}
-            style={{ marginTop: 16 }}
-            onClick={() => {
-              setEditing(true);
-              setConfirmation(null);
-            }}
-          >
-            Edit
-          </button>
         </div>
       )}
     </>
