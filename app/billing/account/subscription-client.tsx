@@ -57,6 +57,14 @@ export default function SubscriptionClient() {
   const [showChangePlanForm, setShowChangePlanForm] = useState(false);
 
   const [showCardForm, setShowCardForm] = useState(false);
+  const [showPlanMenu, setShowPlanMenu] = useState(false);
+
+  // Only one plan form open at a time.
+  function openPlanForm(which: "change" | "pause" | "cancel") {
+    setShowChangePlanForm((v) => (which === "change" ? !v : false));
+    setShowPauseForm((v) => (which === "pause" ? !v : false));
+    setShowCancelForm((v) => (which === "cancel" ? !v : false));
+  }
 
   async function load() {
     setLoading(true);
@@ -205,21 +213,37 @@ export default function SubscriptionClient() {
           {showCardForm ? "Close" : "Update payment method"}
         </button>
         {isActionable && (
-          <button className={styles.cta} onClick={() => setShowChangePlanForm((v) => !v)}>
-            {showChangePlanForm ? "Close" : "Change plan"}
-          </button>
-        )}
-        {isActionable && (
-          <button className={styles.cta} onClick={() => setShowPauseForm((v) => !v)}>
-            {showPauseForm ? "Close" : "Request to pause"}
-          </button>
-        )}
-        {isActionable && (
-          <button className={styles.cta} onClick={() => setShowCancelForm((v) => !v)}>
-            {showCancelForm ? "Never mind" : "Cancel"}
+          <button
+            className={styles.cta}
+            aria-expanded={showPlanMenu}
+            onClick={() => {
+              // Collapsing the menu also closes whichever plan form was open.
+              if (showPlanMenu) {
+                setShowChangePlanForm(false);
+                setShowPauseForm(false);
+                setShowCancelForm(false);
+              }
+              setShowPlanMenu((v) => !v);
+            }}
+          >
+            Update current plan {showPlanMenu ? "▴" : "▾"}
           </button>
         )}
       </div>
+
+      {isActionable && showPlanMenu && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          <button className={styles.cta} onClick={() => openPlanForm("change")}>
+            {showChangePlanForm ? "Close" : "Change plan"}
+          </button>
+          <button className={styles.cta} onClick={() => openPlanForm("pause")}>
+            {showPauseForm ? "Close" : "Pause plan"}
+          </button>
+          <button className={styles.cta} onClick={() => openPlanForm("cancel")}>
+            {showCancelForm ? "Never mind" : "Cancel plan"}
+          </button>
+        </div>
+      )}
 
       {showCancelForm && (
         <form onSubmit={submitCancel} className={`${styles.card} ${styles.form}`} style={{ maxWidth: 480, marginBottom: 16 }}>
