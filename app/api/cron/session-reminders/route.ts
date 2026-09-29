@@ -6,6 +6,7 @@ import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
 import { missedGroupSession, missedLesson } from "@/lib/email/templates/missed-lesson";
 import { sessionReminder24h, sessionStartingSoon } from "@/lib/email/templates/session-reminder";
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
+import { isCronAuthorized } from "@/lib/cron/auth";
 
 // Every 10 minutes (.github/workflows/session-reminders.yml), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -75,7 +76,7 @@ async function sessionsInWindow(admin: ReturnType<typeof createAdminClient>, win
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(authHeader)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

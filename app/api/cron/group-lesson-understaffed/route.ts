@@ -6,6 +6,7 @@ import { formatDateTimeInZone } from "@/lib/timezone";
 import { groupClassCancelled } from "@/lib/email/templates/group-class-cancelled";
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
+import { isCronAuthorized } from "@/lib/cron/auth";
 
 // Catches a group class ~24h out with 0 or 1 registered students and
 // cancels it — a coach showing up to teach one student (or nobody) isn't
@@ -48,7 +49,7 @@ function unwrap<T>(v: T | T[] | null): T | null {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(authHeader)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
