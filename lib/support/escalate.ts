@@ -109,6 +109,7 @@ export async function emailTranscript(
 
   const label: Record<string, string> = {
     student: who.name,
+    coach: who.name,
     guest: who.name,
     bot: "Mel (AI)",
     admin: "Studio",

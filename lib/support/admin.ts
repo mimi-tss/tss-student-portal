@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/auth/roles";
 import { splitSuggestions } from "@/lib/support/suggestions";
-import { isMinorBirthDate, loadMessages, signAttachmentUrls, type SupportThread } from "@/lib/support/thread";
+import { autoCloseStale, isMinorBirthDate, loadMessages, signAttachmentUrls, type SupportThread } from "@/lib/support/thread";
 
 // Admin API routes check the role explicitly (they use the service-role
 // client for writes, so RLS alone doesn't gate them).
@@ -31,6 +31,8 @@ export interface AdminThreadRow {
   createdAt: string;
   claimedByName: string | null;
   lastMessage: string | null;
+  rating: number | null;
+  resolvedBy: SupportThread["resolved_by"];
   costUsd: number;
 }
 
@@ -48,6 +50,9 @@ type ThreadWithJoins = SupportThread & {
 };
 
 export async function listAdminThreads(admin: SupabaseClient, limit = 200): Promise<AdminThreadRow[]> {
+  // Close chats nobody answered Mel on (5 min) so they don't linger in
+  // "Bot handling".
+  await autoCloseStale(admin);
   const { data } = await admin
     .from("support_threads")
     .select("*, students(name, email, tier, birth_date), coaches(name, email)")
@@ -97,6 +102,8 @@ export async function listAdminThreads(admin: SupabaseClient, limit = 200): Prom
       createdAt: t.created_at,
       claimedByName: t.claimed_by ? (names.get(t.claimed_by) ?? "Admin") : null,
       lastMessage: last.get(t.id) ?? null,
+      rating: t.rating,
+      resolvedBy: t.resolved_by,
       costUsd: estimateCostUsd(t),
     };
   });
@@ -131,6 +138,8 @@ export async function loadAdminThread(admin: SupabaseClient, threadId: string) {
       createdAt: t.created_at,
       costUsd: estimateCostUsd(t),
       botTurns: t.bot_turns,
+      rating: t.rating,
+      resolvedBy: t.resolved_by,
     },
     messages: messages.map((m) => ({
       id: m.id,

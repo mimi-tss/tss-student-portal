@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
 
     case "resolve":
-      await admin.from("support_threads").update({ status: "resolved", resolved_at: now }).eq("id", thread.id);
+      await admin.from("support_threads").update({ status: "resolved", resolved_at: now, resolved_by: "admin" }).eq("id", thread.id);
       await addMessage(admin, {
         threadId: thread.id,
         sender: "system",

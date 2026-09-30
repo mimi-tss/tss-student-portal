@@ -25,6 +25,8 @@ export interface HelpView {
     canAskForHuman: boolean;
     // Admin-promised wait (minutes left), null = use expectedWaitMinutes.
     etaMinutes: number | null;
+    rating: number | null;
+    resolvedBy: SupportThread["resolved_by"];
   } | null;
   inOfficeHours: boolean;
   officeHours: string;
@@ -72,6 +74,8 @@ export async function buildHelpView(
           queuePosition: await queuePosition(admin, thread),
           canAskForHuman: thread.status === "bot" && thread.bot_turns >= MIN_BOT_REPLIES_BEFORE_HUMAN,
           etaMinutes: etaMinutesLeft(thread),
+          rating: thread.rating,
+          resolvedBy: thread.resolved_by,
         }
       : null,
     inOfficeHours: isWithinOfficeHours(settings),

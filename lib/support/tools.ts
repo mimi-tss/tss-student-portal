@@ -139,11 +139,31 @@ const askGuestContactTool: Anthropic.Tool = {
   },
 };
 
+const lookupAccountTool: Anthropic.Tool = {
+  name: "lookup_account",
+  description:
+    "Guests only (not logged in): check the email they signed up with. Returns whether an account exists and whether it can use the portal. Ask for their email FIRST when they can't log in or ask about their own account. Max 3 checks per chat.",
+  input_schema: {
+    type: "object",
+    properties: { email: { type: "string" } },
+    required: ["email"],
+  },
+};
+
+const closeChatTool: Anthropic.Tool = {
+  name: "close_chat",
+  description:
+    "Close the chat as solved. ONLY after the person has confirmed their issue is solved (e.g. they tapped 'Yes, all sorted'). They'll be asked to rate the chat.",
+  input_schema: { type: "object", properties: {} },
+};
+
+const MAX_ACCOUNT_LOOKUPS = 3;
+
 export function toolsFor(caller: SupportCaller): Anthropic.Tool[] {
-  if (caller.kind === "student") return studentTools;
+  if (caller.kind === "student") return [...studentTools, closeChatTool];
   // Coaches: explain + hand off to the admin; no student account tools.
-  if (caller.kind === "coach") return [escalateTool];
-  return [askGuestContactTool, escalateTool];
+  if (caller.kind === "coach") return [escalateTool, closeChatTool];
+  return [lookupAccountTool, askGuestContactTool, escalateTool, closeChatTool];
 }
 
 export interface ToolContext {
@@ -188,6 +208,59 @@ async function proposeAction(ctx: ToolContext, action: Omit<SupportAction, "stat
 
 export async function runTool(name: string, input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const { caller } = ctx;
+
+  if (name === "close_chat") {
+    const now = new Date().toISOString();
+    await ctx.admin
+      .from("support_threads")
+      .update({ status: "resolved", resolved_by: "student", resolved_at: now })
+      .eq("id", ctx.thread.id)
+      .eq("status", "bot");
+    ctx.thread.status = "resolved";
+    return "Chat closed. Say a short, warm goodbye (one sentence) — they'll see a rating prompt. No options line.";
+  }
+
+  if (name === "lookup_account") {
+    if (caller.kind !== "guest") return "Error: they're logged in — you already know their account.";
+    if (ctx.thread.account_lookups >= MAX_ACCOUNT_LOOKUPS) {
+      return "Error: too many email checks in this chat. Offer to pass it to the team (ask_guest_contact).";
+    }
+    const email = String(input.email ?? "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return "Error: that doesn't look like an email address — ask them to check it.";
+    ctx.thread.account_lookups += 1;
+    await ctx.admin
+      .from("support_threads")
+      .update({ account_lookups: ctx.thread.account_lookups, guest_email: email })
+      .eq("id", ctx.thread.id);
+    ctx.thread.guest_email = email;
+    // Case-insensitive exact match: escape ilike wildcards (emails often
+    // contain "_").
+    const likeExact = email.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+    const [{ data: student }, { data: coach }] = await Promise.all([
+      ctx.admin.from("students").select("tier, subscription_status, archived").ilike("email", likeExact).maybeSingle(),
+      ctx.admin.from("coaches").select("id").ilike("email", likeExact).maybeSingle(),
+    ]);
+    const note =
+      "PRIVACY: this person isn't logged in, so you can't be sure the email is theirs. You may tell them only whether this email can log in to the portal (the login page shows that too). NEVER say the plan name, subscription status or any other account detail.";
+    if (coach) return JSON.stringify({ found: true, account_type: "coach", can_use_portal: true, note });
+    if (!student) {
+      return JSON.stringify({
+        found: false,
+        note: `${note} No account uses this email — likely a typo or a different signup email. Ask them to check the spelling or try another email they might have used.`,
+      });
+    }
+    const canUse = student.tier !== "lite" && !student.archived;
+    return JSON.stringify({
+      found: true,
+      account_type: "student",
+      can_use_portal: canUse,
+      for_your_reasoning_only: { plan: student.tier, subscription_status: student.subscription_status, archived: student.archived },
+      note: canUse
+        ? `${note} This email can use the portal — help them with the code steps (spam folder, newest code, typo, private browsing, Safari in the Kajabi app).`
+        : `${note} This email can't use the portal (Lite plans don't include it; courses and Backstage are in Kajabi). Explain gently without naming their plan, and point them to the Kajabi app. If they believe they should have portal access, offer a person.`,
+    });
+  }
 
   if (name === "ask_guest_contact") {
     if (caller.kind !== "guest") return "Error: logged-in students don't need this — use escalate_to_human.";

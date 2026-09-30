@@ -9,6 +9,7 @@ import styles from "../../../admin.module.css";
 const POLL_MS = 5000;
 const SENDER_LABEL: Record<string, string> = {
   student: "Student",
+  coach: "Coach",
   guest: "Guest",
   bot: "Mel (AI)",
   admin: "Studio",
@@ -126,6 +127,13 @@ export default function SupportThreadClient({ initial }: { initial: AdminThreadD
         )}
         <p className={styles.mutedText} style={{ fontSize: 12, margin: "8px 0 0" }}>
           {thread.botTurns} bot replies · approx. ${thread.costUsd.toFixed(3)}
+          {thread.resolvedBy && <> · closed by {thread.resolvedBy === "auto" ? "no reply (5 min)" : thread.resolvedBy === "student" ? "student (solved)" : "admin"}</>}
+          {thread.rating && (
+            <>
+              {" "}
+              · rating <span style={{ color: "var(--gold)" }}>{"★".repeat(thread.rating)}{"☆".repeat(5 - thread.rating)}</span>
+            </>
+          )}
         </p>
       </div>
 
@@ -133,7 +141,7 @@ export default function SupportThreadClient({ initial }: { initial: AdminThreadD
         {messages.map((m) => (
           <div key={m.id} style={{ marginBottom: 14 }}>
             <div className={styles.mutedText} style={{ fontSize: 12 }}>
-              <strong>{m.sender === "student" || m.sender === "guest" ? thread.who : SENDER_LABEL[m.sender]}</strong> ·{" "}
+              <strong>{m.sender === "student" || m.sender === "coach" || m.sender === "guest" ? thread.who : SENDER_LABEL[m.sender]}</strong> ·{" "}
               <FormattedDateTime value={m.createdAt} />
             </div>
             {m.body && (

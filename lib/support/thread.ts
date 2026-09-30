@@ -48,6 +48,10 @@ export interface SupportThread {
   claimed_by: string | null;
   eta_minutes: number | null;
   eta_set_at: string | null;
+  rating: number | null;
+  resolved_by: "student" | "admin" | "auto" | null;
+  resolved_at: string | null;
+  account_lookups: number;
   bot_turns: number;
   input_tokens: number;
   output_tokens: number;
@@ -132,6 +136,54 @@ export async function findLatestThread(admin: SupabaseClient, caller: SupportCal
 
   const { data } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
   return (data as SupportThread | null) ?? null;
+}
+
+// Mel asked something and nobody answered for this long -> the chat is
+// treated as solved and closed (studio rule, 2026-09-30).
+export const AUTO_CLOSE_MINUTES = 5;
+
+// Closes chats Mel is waiting on (status "bot", last word was Mel's or a
+// system notice) with no reply for AUTO_CLOSE_MINUTES. Run lazily — on
+// the student's poll and when the admin inbox loads — so no cron is
+// needed. Chats with a person (needs_human/claimed) are never touched.
+export async function autoCloseStale(admin: SupabaseClient, threadId?: string): Promise<void> {
+  const cutoff = new Date(Date.now() - AUTO_CLOSE_MINUTES * 60_000).toISOString();
+  let query = admin.from("support_threads").select("id").eq("status", "bot").lt("updated_at", cutoff).limit(50);
+  if (threadId) query = query.eq("id", threadId);
+  const { data } = await query;
+  for (const { id } of data ?? []) {
+    const { data: last } = await admin
+      .from("support_messages")
+      .select("sender")
+      .eq("thread_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (last && last.sender !== "bot" && last.sender !== "system") continue;
+    const now = new Date().toISOString();
+    const { data: closed } = await admin
+      .from("support_threads")
+      .update({ status: "resolved", resolved_by: "auto", resolved_at: now })
+      .eq("id", id)
+      .eq("status", "bot")
+      .select("id");
+    if (closed?.length) {
+      await admin.from("support_messages").insert({
+        thread_id: id,
+        sender: "system",
+        body: "This chat was closed after 5 minutes with no reply. Send a message any time to start a new chat.",
+      });
+    }
+  }
+}
+
+// What /help shows: the latest chat, unless it's a finished one the
+// person has already rated or left a while ago — then a fresh start.
+export function threadToShow(thread: SupportThread | null): SupportThread | null {
+  if (!thread || thread.status !== "resolved") return thread;
+  if (thread.rating) return null;
+  const closedAt = thread.resolved_at ? new Date(thread.resolved_at).getTime() : 0;
+  return Date.now() - closedAt > 30 * 60_000 ? null : thread;
 }
 
 export function isClosed(thread: SupportThread) {

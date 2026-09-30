@@ -287,3 +287,27 @@
   color: var(--text);
   cursor: pointer;
 }
+
+/* Star rating after a chat closes. Hovering a star lights it and every
+   star before it (row-reverse trick). */
+.stars {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.star {
+  background: none;
+  border: 0;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--border);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.star:hover,
+.star:hover ~ .star {
+  color: var(--gold);
+}

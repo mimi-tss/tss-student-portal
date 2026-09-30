@@ -82,6 +82,14 @@ export default function SupportInboxClient({ initialThreads }: { initialThreads:
               {t.isMinor && <span className={styles.badgeWarn}>Under 18</span>}{" "}
               <span className={t.status === "needs_human" ? styles.badgeWarn : styles.badgeMuted}>{STATUS_LABEL[t.status]}</span>
               {t.claimedByName && t.status === "claimed" && <span className={styles.mutedText}> · {t.claimedByName}</span>}
+              {t.resolvedBy === "auto" && <span className={styles.mutedText}> · closed after no reply</span>}
+              {t.resolvedBy === "student" && <span className={styles.mutedText}> · solved by Mel</span>}
+              {t.rating && (
+                <span style={{ color: "var(--gold)", marginLeft: 6 }} title={`${t.rating} of 5`}>
+                  {"★".repeat(t.rating)}
+                  {"☆".repeat(5 - t.rating)}
+                </span>
+              )}
               <div className={styles.mutedText} style={{ fontSize: 13, marginTop: 4 }}>
                 {t.email ?? "no email"} · <FormattedDateTime value={t.escalatedAt ?? t.updatedAt} />
               </div>

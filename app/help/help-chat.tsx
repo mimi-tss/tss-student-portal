@@ -186,6 +186,7 @@ export default function HelpChat({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [askContact, setAskContact] = useState(false);
+  const [rated, setRated] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
@@ -293,6 +294,21 @@ export default function HelpChat({
     if (ok) setAskContact(false);
   }
 
+  // Stars for a finished chat; after a moment the chat resets to a fresh
+  // start (the poll returns no thread once it's rated).
+  async function rate(stars: number) {
+    setRated(stars);
+    await fetch("/api/support/rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...guestHeaders() },
+      body: JSON.stringify({ stars }),
+    }).catch(() => {});
+    setTimeout(() => {
+      setRated(null);
+      load();
+    }, 2500);
+  }
+
   async function emailInstead() {
     await run(() => fetch("/api/support/email-transcript", { method: "POST", headers: guestHeaders() }));
   }
@@ -376,12 +392,10 @@ export default function HelpChat({
         </div>
       )}
       {status === "claimed" && <div className={styles.banner}>A team member has joined the chat.</div>}
-      {thread?.closed && (
+      {thread?.closed && status === "emailed" && (
         <div className={styles.banner}>
-          {status === "emailed"
-            ? `This conversation was sent to ${view?.supportEmail}. The team will reply by email.`
-            : "This conversation is closed."}{" "}
-          Send a new message any time to start a new chat.
+          This conversation was sent to {view?.supportEmail}. The team will reply by email. Send a new message any time to
+          start a new chat.
         </div>
       )}
 
@@ -391,7 +405,8 @@ export default function HelpChat({
             <div className={styles.sender}>Mel · AI assistant</div>
             {view?.caller.email ? (
               <>
-                Hi, you&apos;re signed in as <strong>{view.caller.email}</strong>
+                Hi{view.caller.name ? ` ${view.caller.name.trim().split(/\s+/)[0]}` : ""}! You&apos;re signed in as{" "}
+                <strong>{view.caller.email}</strong>
               </>
             ) : (
               <>Hi! I&apos;m Mel, the studio&apos;s AI assistant.</>
@@ -419,7 +434,7 @@ export default function HelpChat({
               </p>
             );
           }
-          const mine = m.sender === "student" || m.sender === "guest";
+          const mine = m.sender === "student" || m.sender === "coach" || m.sender === "guest";
           return (
             <div key={m.id} className={`${styles.row} ${mine ? styles.rowMine : ""}`}>
               <div className={`${styles.bubble} ${mine ? styles.bubbleMine : styles.bubbleTheirs}`}>
@@ -481,6 +496,28 @@ export default function HelpChat({
                 {s}
               </button>
             ))}
+          </div>
+        )}
+
+        {status === "resolved" && !thread?.rating && (
+          <div className={styles.actionCard} style={{ alignSelf: "center", textAlign: "center", marginTop: 6 }}>
+            {rated ? (
+              <strong>Thanks for your rating! {"★".repeat(rated)}</strong>
+            ) : (
+              <>
+                <div className={styles.actionLabel}>How did Mel do?</div>
+                <div className={styles.stars} role="group" aria-label="Rate this chat">
+                  {[5, 4, 3, 2, 1].map((n) => (
+                    <button key={n} type="button" className={styles.star} aria-label={`${n} star${n > 1 ? "s" : ""}`} onClick={() => rate(n)}>
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.small} style={{ marginTop: 4 }}>
+                  This chat is closed — send a message any time to start a new one.
+                </div>
+              </>
+            )}
           </div>
         )}
 
