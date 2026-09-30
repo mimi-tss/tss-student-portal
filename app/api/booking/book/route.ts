@@ -5,6 +5,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 import { canBookLessons } from "@/lib/billing/subscription-gate";
+import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
 import { notifyStudentSessionBooked } from "@/lib/notifications/booking-events";
 
 // Booking a slot — a session-credit booking against the student's own
@@ -258,6 +259,38 @@ export async function POST(req: NextRequest) {
   });
 
   if (groupClash) {
+    return NextResponse.json({ error: "slot no longer available" }, { status: 409 });
+  }
+
+  // Full overlap re-check against everything /api/booking/slots treats as
+  // busy — the exact-start-time session check above misses a partial
+  // overlap (a 60-min booking at 2:00 over someone's 2:30), and time off
+  // or a paused student's held slot were never re-checked at write time
+  // at all, so a booking page left open while those changed could still
+  // land on them.
+  const [{ data: nearbySessions }, { data: nearbyBlocks }, heldSlots] = await Promise.all([
+    admin
+      .from("sessions")
+      .select("scheduled_at, duration_minutes")
+      .eq("actual_coach_id", coachId)
+      .not("status", "in", "(cancelled-with-notice,holiday)")
+      .gte("scheduled_at", windowStartIso)
+      .lte("scheduled_at", slotEndDate.toISOString()),
+    admin
+      .from("coach_blocks")
+      .select("start_at, end_at")
+      .eq("coach_id", coachId)
+      .lt("start_at", slotEndDate.toISOString())
+      .gt("end_at", slotStartDate.toISOString()),
+    getHeldRecurringSlots(admin, coachId, new Date(windowStartIso), slotEndDate),
+  ]);
+  const overlaps = (start: Date, minutes: number) =>
+    slotStartDate < new Date(start.getTime() + minutes * 60 * 1000) && slotEndDate > start;
+  if (
+    (nearbySessions ?? []).some((x) => overlaps(new Date(x.scheduled_at), x.duration_minutes)) ||
+    (nearbyBlocks ?? []).length > 0 ||
+    heldSlots.some((h) => overlaps(new Date(h.scheduledAt), h.durationMinutes))
+  ) {
     return NextResponse.json({ error: "slot no longer available" }, { status: 409 });
   }
 
