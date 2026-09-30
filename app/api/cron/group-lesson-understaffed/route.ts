@@ -5,11 +5,12 @@ import { notifyStudent, notifyCoach } from "@/lib/notifications/create";
 import { formatDateTimeInZone } from "@/lib/timezone";
 import { groupClassCancelled } from "@/lib/email/templates/group-class-cancelled";
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
+import { willAutoCancel } from "@/lib/group-lesson-topic";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import { isCronAuthorized } from "@/lib/cron/auth";
 
 // Catches a group class ~24h out with 0 or 1 registered students and
-// cancels it — a coach showing up to teach one student (or nobody) isn't
+// cancels it (never a Bootcamp) — a coach showing up to teach one student (or nobody) isn't
 // the point of a group class. Same 1-hour window / 15-minute cadence
 // posture as session-reminders' own 24h reminder (see that route's
 // comment): wide enough to tolerate cron drift, notification_log's
@@ -73,7 +74,8 @@ export async function GET(req: NextRequest) {
 
   for (const lesson of rows) {
     const registrations = (lesson.group_lesson_registrations ?? []).filter((r) => r.status === "registered");
-    if (registrations.length > 1) continue;
+    // Bootcamps run no matter how many signed up (studio call 2026-09-30).
+    if (!willAutoCancel(lesson.topic, registrations.length)) continue;
 
     const coach = unwrap(lesson.coaches);
 

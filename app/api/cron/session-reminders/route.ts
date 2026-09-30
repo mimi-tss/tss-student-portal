@@ -4,11 +4,17 @@ import { notifyStudent } from "@/lib/notifications/create";
 import { sendMeetLinkChatReminders } from "@/lib/notifications/meet-link-chat";
 import { firstNameOf, lessonTimeFields, portalUrl } from "@/lib/ghl/fields";
 import { missedGroupSession, missedLesson } from "@/lib/email/templates/missed-lesson";
-import { sessionReminder24h, sessionStartingSoon } from "@/lib/email/templates/session-reminder";
+import {
+  groupSessionReminder24h,
+  groupSessionStartingSoon,
+  sessionReminder24h,
+  sessionStartingSoon,
+} from "@/lib/email/templates/session-reminder";
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 import { isCronAuthorized } from "@/lib/cron/auth";
+import { willAutoCancel } from "@/lib/group-lesson-topic";
 
-// Every 10 minutes (.github/workflows/session-reminders.yml), catches two
+// Every 5 minutes (Supabase pg_cron; GitHub Actions as a slow backup), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
 // (10 min) matches the cron cadence so every session is caught exactly
 // once as it crosses into the window; notification_log's per-session
@@ -152,6 +158,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const groupReminded = await sendGroupReminders(admin, now);
+
   const missedSent = (await sendMissedLessonEmails(admin, now)) + (await sendMissedGroupEmails(admin, now));
 
   const meetLinksSent = await sendMeetLinkChatReminders(
@@ -164,6 +172,7 @@ export async function GET(req: NextRequest) {
     startingSoon: startingSoon.length,
     reminder24h: reminder24h.length,
     notified,
+    groupReminded,
     meetLinksSent,
     missedSent,
   });
@@ -300,6 +309,75 @@ async function sendMissedGroupEmails(admin: ReturnType<typeof createAdminClient>
       emailAlways: true, // missed-lesson policy notice: always emailed
     });
     sent++;
+  }
+  return sent;
+}
+
+// Group session / Bootcamp reminders (studio call 2026-09-30): same two
+// windows and kinds as 1:1, one per registered student, deduped per
+// student + group lesson. Cancelled sessions and students who are no
+// longer registered get nothing.
+async function sendGroupReminders(admin: ReturnType<typeof createAdminClient>, now: number): Promise<number> {
+  let sent = 0;
+  for (const [kind, from, to] of [
+    ["session_starting_soon", STARTING_SOON_MIN_MINUTES * 60_000, STARTING_SOON_MAX_MINUTES * 60_000],
+    ["session_reminder_24h", REMINDER_24H_MIN_HOURS * 3_600_000, REMINDER_24H_MAX_HOURS * 3_600_000],
+  ] as const) {
+    const { data, error } = await admin
+      .from("group_lessons")
+      .select(
+        "id, topic, scheduled_at, duration_minutes, cancelled_at, coaches(name, timezone), " +
+          "group_lesson_registrations(status, students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp))",
+      )
+      .is("cancelled_at", null)
+      .gte("scheduled_at", new Date(now + from).toISOString())
+      .lt("scheduled_at", new Date(now + to).toISOString());
+    if (error) {
+      console.error("group reminder query failed", error.message);
+      continue;
+    }
+    for (const lesson of (data ?? []) as unknown as {
+      id: string;
+      topic: string | null;
+      scheduled_at: string;
+      duration_minutes: number;
+      coaches: { name: string; timezone: string } | { name: string; timezone: string }[] | null;
+      group_lesson_registrations: { status: string; students: StudentRow | StudentRow[] | null }[];
+    }[]) {
+      // A class the understaffed job is cancelling in this same 24h window
+      // gets the "cancelled" notice instead, never "see you tomorrow".
+      const registered = (lesson.group_lesson_registrations ?? []).filter((r) => r.status === "registered");
+      if (kind === "session_reminder_24h" && willAutoCancel(lesson.topic, registered.length)) continue;
+      const coach = unwrap(lesson.coaches);
+      const when = lessonTimeFields(lesson.scheduled_at, coach?.timezone);
+      for (const reg of registered) {
+        const student = unwrap(reg.students);
+        if (!student) continue;
+        const input = {
+          firstName: firstNameOf(student.name),
+          coachFirstName: firstNameOf(coach?.name),
+          sessionLabel: cleanGroupTopic(lesson.topic),
+          lessonDate: when.lessonDate,
+          lessonTime: when.lessonTime,
+          durationMinutes: lesson.duration_minutes,
+        };
+        const r = kind === "session_reminder_24h" ? groupSessionReminder24h(input) : groupSessionStartingSoon(input);
+        await notifyStudent(admin, {
+          studentId: student.id,
+          email: student.email,
+          phone: student.phone,
+          group: "alerts",
+          kind,
+          dedupKey: `student:${student.id}:${kind}:group:${lesson.id}`,
+          title: r.bellTitle,
+          body: r.bellBody,
+          linkUrl: "/student/dashboard",
+          ghlData: { groupLessonId: lesson.id, scheduledAt: lesson.scheduled_at, ...when, ...r },
+          channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+        });
+        sent++;
+      }
+    }
   }
   return sent;
 }

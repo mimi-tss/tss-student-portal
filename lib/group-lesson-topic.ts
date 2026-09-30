@@ -31,3 +31,18 @@ export function creditMatchesLesson(creditTopic: string | null | undefined, less
   if (key === lessonKey) return true;
   return !key.includes(" - coach ") && lessonKey.startsWith(`${key} - coach `);
 }
+
+// Bootcamps ("Bootcamp C2") always run, however few signed up — only
+// regular group classes are auto-cancelled (studio call 2026-09-30).
+export function isBootcamp(topic: string | null | undefined): boolean {
+  return /bootcamp/i.test(topic ?? "");
+}
+
+// The one rule for "this group class is about to be auto-cancelled"
+// (app/api/cron/group-lesson-understaffed): 0 or 1 registered, not a
+// Bootcamp. Shared so the 24h reminder never goes out for a class that's
+// cancelled in the same window.
+export const MIN_GROUP_REGISTRATIONS = 2;
+export function willAutoCancel(topic: string | null | undefined, registeredCount: number): boolean {
+  return !isBootcamp(topic) && registeredCount < MIN_GROUP_REGISTRATIONS;
+}
