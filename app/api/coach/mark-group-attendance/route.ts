@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { updateGroupAttendance } from "@/lib/group-attendance";
+import { skipMissedEmail } from "@/lib/notifications/skip-missed-email";
 
 // Per-attendee attendance marking for a group lesson — same posture as
 // app/api/coach/mark-attendance: RLS ("coaches can mark attendance on
@@ -11,7 +12,8 @@ import { updateGroupAttendance } from "@/lib/group-attendance";
 const ALLOWED_STATUSES = ["registered", "attended", "no-show"] as const;
 
 export async function POST(req: NextRequest) {
-  const { registrationId, status } = await req.json();
+  // sendMissedEmail: false = coach unticked the email in the no-show popup.
+  const { registrationId, status, sendMissedEmail } = await req.json();
 
   if (!registrationId || !ALLOWED_STATUSES.includes(status)) {
     return NextResponse.json(
@@ -29,6 +31,9 @@ export async function POST(req: NextRequest) {
   }
   if (!data) {
     return NextResponse.json({ error: "registration not found" }, { status: 404 });
+  }
+  if (status === "no-show" && sendMissedEmail === false && data.student_id) {
+    await skipMissedEmail(data.student_id, { registrationId });
   }
 
   return NextResponse.json({ success: true });

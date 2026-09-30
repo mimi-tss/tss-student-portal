@@ -201,12 +201,13 @@ export default function DashboardClient({
   }
 
   async function handleMarkGroupAttendee(registrationId: string, status: "attended" | "no-show") {
-    if (status === "no-show" && !confirmNoShow()) return;
+    const noShow = status === "no-show" ? await confirmNoShow() : null;
+    if (status === "no-show" && !noShow) return;
     setMarkingGroup(true);
     const res = await fetch("/api/coach/mark-group-attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registrationId, status }),
+      body: JSON.stringify({ registrationId, status, sendMissedEmail: noShow?.sendEmail }),
     });
     setMarkingGroup(false);
     if (res.ok) {
@@ -233,14 +234,15 @@ export default function DashboardClient({
   }
 
   async function handleMark(sessionId: string, status: "attended" | "no-show") {
-    if (status === "no-show" && !confirmNoShow(sessions.find((x) => x.id === sessionId)?.studentName)) return;
+    const noShow = status === "no-show" ? await confirmNoShow(sessions.find((x) => x.id === sessionId)?.studentName) : null;
+    if (status === "no-show" && !noShow) return;
     // Same call whether this is the first mark or a correction — the
     // route just updates the row, no "already marked" restriction
     // server-side.
     const res = await fetch("/api/coach/mark-attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, status }),
+      body: JSON.stringify({ sessionId, status, sendMissedEmail: noShow?.sendEmail }),
     });
     if (res.ok) {
       setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, status, needsAttendance: false } : s)));

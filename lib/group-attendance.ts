@@ -7,9 +7,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // email feature.
 export async function updateGroupAttendance(supabase: SupabaseClient, registrationId: string, status: string) {
   const withClock = { status, no_show_marked_at: status === "no-show" ? new Date().toISOString() : null };
-  const first = await supabase.from("group_lesson_registrations").update(withClock).eq("id", registrationId).select("id").maybeSingle();
+  const first = await supabase.from("group_lesson_registrations").update(withClock).eq("id", registrationId).select("id, student_id").maybeSingle();
   if (first.error && /no_show_marked_at/.test(first.error.message)) {
-    return supabase.from("group_lesson_registrations").update({ status }).eq("id", registrationId).select("id").maybeSingle();
+    return supabase.from("group_lesson_registrations").update({ status }).eq("id", registrationId).select("id, student_id").maybeSingle();
   }
   return first;
 }

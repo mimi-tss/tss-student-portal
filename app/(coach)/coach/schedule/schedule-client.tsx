@@ -54,12 +54,13 @@ export default function ScheduleClient() {
   }, []);
 
   async function handleMark(sessionId: string, status: "attended" | "no-show", studentName?: string) {
-    if (status === "no-show" && !confirmNoShow(studentName)) return;
+    const noShow = status === "no-show" ? await confirmNoShow(studentName) : null;
+    if (status === "no-show" && !noShow) return;
     setMarking(sessionId);
     const res = await fetch("/api/coach/mark-attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, status }),
+      body: JSON.stringify({ sessionId, status, sendMissedEmail: noShow?.sendEmail }),
     });
     setMarking(null);
 
@@ -81,12 +82,13 @@ export default function ScheduleClient() {
   }
 
   async function handleMarkGroup(registrationId: string, status: "attended" | "no-show", studentName?: string) {
-    if (status === "no-show" && !confirmNoShow(studentName)) return;
+    const noShow = status === "no-show" ? await confirmNoShow(studentName) : null;
+    if (status === "no-show" && !noShow) return;
     setMarking(registrationId);
     const res = await fetch("/api/coach/mark-group-attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registrationId, status }),
+      body: JSON.stringify({ registrationId, status, sendMissedEmail: noShow?.sendEmail }),
     });
     setMarking(null);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
+import { skipMissedEmail } from "@/lib/notifications/skip-missed-email";
 
 // Coaches' one scheduling-adjacent write action (TSS_App_Spec_1.md
 // section 8). Relies on the "coaches can update their own sessions" RLS
@@ -11,7 +12,8 @@ import { flagConsecutiveMisses } from "@/lib/admin/attention-items";
 const ALLOWED_STATUSES = ["attended", "no-show", "late-forfeit"] as const;
 
 export async function POST(req: NextRequest) {
-  const { sessionId, status } = await req.json();
+  // sendMissedEmail: false = coach unticked the email in the no-show popup.
+  const { sessionId, status, sendMissedEmail } = await req.json();
 
   if (!sessionId || !ALLOWED_STATUSES.includes(status)) {
     return NextResponse.json(
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
     const studentName = (data.students as unknown as { name: string } | null)?.name ?? "Student";
     await flagConsecutiveMisses(createAdminClient(), data.student_id, studentName, sessionId);
   }
+  if (status === "no-show" && sendMissedEmail === false) await skipMissedEmail(data.student_id, { sessionId });
 
   return NextResponse.json({ success: true });
 }
