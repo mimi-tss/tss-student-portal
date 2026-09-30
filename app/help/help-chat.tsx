@@ -74,7 +74,7 @@ function linkify(text: string): ReactNode[] {
     if (i + 2 < parts.length) {
       out.push(
         <a key={`m${i}`} href={parts[i + 2]} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
-          📖 {parts[i + 1]}
+          {/\/help\//.test(parts[i + 2]) ? "📖" : "→"} {parts[i + 1]}
         </a>,
       );
     }
