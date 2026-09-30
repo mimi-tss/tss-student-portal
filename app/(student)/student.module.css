@@ -92,12 +92,27 @@
   display: none;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.desktopOnly {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 @media (max-width: 640px) {
   .navLinks {
     display: none;
   }
-  .navToggle {
-    display: flex;
+  .desktopOnly {
+    display: none;
+  }
+  .header {
+    padding: 12px 16px;
+    flex-wrap: nowrap;
   }
   .navDropdown {
     display: flex;

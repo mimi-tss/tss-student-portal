@@ -53,10 +53,15 @@ export default async function StudentLayout({
             <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
           </div>
           <StudentNav />
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <BugReportButton defaultEmail={user.email ?? ""} />
-            <ThemeToggle />
-            <HelpAgentButton />
+          <div className={styles.headerRight}>
+            {/* Phones: these three live in the avatar menu instead
+                (components/profile-menu.tsx). BugReportButton stays
+                mounted so that menu can still open its modal. */}
+            <div className={styles.desktopOnly}>
+              <BugReportButton defaultEmail={user.email ?? ""} />
+              <ThemeToggle />
+              <HelpAgentButton />
+            </div>
             <NotificationBell />
             <ProfileMenu initials={initials(student.name)} />
           </div>

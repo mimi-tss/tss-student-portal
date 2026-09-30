@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import styles from "./student.module.css";
 
@@ -14,16 +13,11 @@ const KAJABI_SITE_URL = process.env.NEXT_PUBLIC_KAJABI_SITE_URL ?? "";
 // nesting depth (confirmed via curl -sI against both). Don't revert to
 // _blank without re-reading this.
 
-// Below 640px (student.module.css's .navToggle/.navLinks breakpoint) the
-// external links + Scheduler collapse into a dropdown instead of
-// wrapping onto extra header rows — "Coaching Studio" stays visible
-// outside it since it's the home link, not an external one. The
-// timezone control used to live here too; it's now inside the avatar
-// menu (components/profile-menu.tsx) instead, same declutter pass that
-// moved Billing there.
+// Below 640px (student.module.css's .navLinks breakpoint) the external
+// links + Scheduler hide and live in the avatar menu instead
+// (components/profile-menu.tsx) — one menu on phones, not a hamburger
+// plus an avatar menu. "Coaching Studio" stays visible as the home link.
 export default function StudentNav() {
-  const [open, setOpen] = useState(false);
-
   return (
     <nav className={styles.nav}>
       <Link href="/student/dashboard" className={styles.navLinkActive}>
@@ -45,42 +39,6 @@ export default function StudentNav() {
           Scheduler
         </Link>
       </div>
-
-      <button
-        type="button"
-        className={styles.navToggle}
-        aria-label="Menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className={styles.navToggleBar} />
-        <span className={styles.navToggleBar} />
-        <span className={styles.navToggleBar} />
-      </button>
-
-      {open && (
-        <div className={styles.navDropdown}>
-          <a
-            href={`${KAJABI_SITE_URL}/library`}
-            target="_self"
-            className={styles.navDropdownLink}
-            onClick={() => setOpen(false)}
-          >
-            My Library
-          </a>
-          <a
-            href={`${KAJABI_SITE_URL}/products/communities/v2/backstagehub`}
-            target="_self"
-            className={styles.navDropdownLink}
-            onClick={() => setOpen(false)}
-          >
-            Backstage
-          </a>
-          <Link href="/student/book" className={styles.navDropdownLink} onClick={() => setOpen(false)}>
-            Scheduler
-          </Link>
-        </div>
-      )}
     </nav>
   );
 }

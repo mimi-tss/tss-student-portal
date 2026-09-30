@@ -17,8 +17,20 @@ import styles from "./bug-report-button.module.css";
 // position:fixed descendant — rendered in place, the overlay would be
 // clipped to the header strip. Portaling out loses the route group's
 // .root tokens, so the overlay re-applies the shared tokens class itself.
+//
+// Other UI (the phone avatar menu, components/profile-menu.tsx) opens the
+// modal by dispatching this on window, since the header pill itself is
+// hidden on phones.
+export const OPEN_BUG_REPORT_EVENT = "open-bug-report";
+
 export default function BugReportButton({ defaultEmail }: { defaultEmail: string }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const openIt = () => setOpen(true);
+    window.addEventListener(OPEN_BUG_REPORT_EVENT, openIt);
+    return () => window.removeEventListener(OPEN_BUG_REPORT_EVENT, openIt);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
