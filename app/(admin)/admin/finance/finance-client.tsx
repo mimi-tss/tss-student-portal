@@ -10,6 +10,7 @@ interface Coach {
   id: string;
   name: string;
   hourly_rate: number;
+  monthly_salary: number | null;
   active: boolean;
 }
 
@@ -28,6 +29,8 @@ interface CoachPayrollSummary {
   coachId: string;
   coachName: string;
   hourlyRate: number;
+  monthlySalary: number | null;
+  salaryAmount: number;
   sessions: PayableSession[];
   total: number;
 }
@@ -122,6 +125,82 @@ function money(n: number) {
   return n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`;
 }
 
+// Fixed monthly pay (coaches.monthly_salary). When set, payroll pays
+// this instead of the hourly rate — lessons still list at $0.
+function CoachSalaryCell({ coach }: { coach: Coach }) {
+  const [saved, setSaved] = useState<number | null>(coach.monthly_salary === null ? null : Number(coach.monthly_salary));
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(saved === null ? "" : String(saved));
+  const [saving, setSaving] = useState(false);
+
+  async function save(next: number | null) {
+    setSaving(true);
+    const res = await fetch("/api/admin/coach-rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coachId: coach.id, monthlySalary: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setSaved(next);
+      setValue(next === null ? "" : String(next));
+      setEditing(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        {saved === null ? <span className={styles.mutedText}>Hourly</span> : `${money(saved)}/mo`}
+        <button onClick={() => setEditing(true)} className={styles.linkBtnSmall}>
+          {saved === null ? "Set salary" : "Edit"}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <input
+        type="number"
+        min={0}
+        step="0.01"
+        placeholder="e.g. 3000"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        disabled={saving}
+        className={styles.inputSmall}
+        style={{ width: 90 }}
+      />
+      <button
+        onClick={() => {
+          const parsed = Number(value);
+          if (value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0) save(parsed);
+        }}
+        disabled={saving}
+        className={styles.linkBtnSmall}
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+      {saved !== null && (
+        <button onClick={() => save(null)} disabled={saving} className={styles.linkBtnSmall}>
+          Back to hourly
+        </button>
+      )}
+      <button
+        onClick={() => {
+          setValue(saved === null ? "" : String(saved));
+          setEditing(false);
+        }}
+        disabled={saving}
+        className={styles.linkBtnSmall}
+      >
+        Cancel
+      </button>
+    </span>
+  );
+}
+
 function CoachRateRow({ coach }: { coach: Coach }) {
   const [saved, setSaved] = useState(coach.hourly_rate);
   const [editing, setEditing] = useState(false);
@@ -147,6 +226,9 @@ function CoachRateRow({ coach }: { coach: Coach }) {
   return (
     <tr>
       <td className={styles.rowName}>{coach.name}</td>
+      <td>
+        <CoachSalaryCell coach={coach} />
+      </td>
       <td>
         {!editing ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -545,10 +627,21 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                     style={{ cursor: "pointer" }}
                   >
                     <td className={styles.rowName}>{s.coachName}</td>
-                    <td className={styles.mutedText}>${s.hourlyRate.toFixed(2)}/hr</td>
+                    <td className={styles.mutedText}>
+                      {s.monthlySalary !== null ? `${money(s.monthlySalary)}/mo` : `$${s.hourlyRate.toFixed(2)}/hr`}
+                    </td>
                     <td className={styles.mutedText}>{s.sessions.length}</td>
                     <td>${s.total.toFixed(2)}</td>
                   </tr>
+                  {expandedCoach === s.coachId && s.monthlySalary !== null && (
+                    <tr>
+                      <td colSpan={2} className={styles.mutedText} style={{ paddingLeft: 24 }}>
+                        Monthly salary (lessons below are covered by it)
+                      </td>
+                      <td />
+                      <td className={styles.mutedText}>{money(s.salaryAmount)}</td>
+                    </tr>
+                  )}
                   {expandedCoach === s.coachId &&
                     s.sessions.map((sess) => (
                       <tr key={sess.id}>
@@ -829,6 +922,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
           <thead>
             <tr>
               <th>Coach</th>
+              <th>Monthly salary</th>
               <th>Hourly rate</th>
             </tr>
           </thead>

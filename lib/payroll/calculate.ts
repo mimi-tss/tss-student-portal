@@ -1,4 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
+import { zonedYearMonthDay } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -38,8 +40,30 @@ export interface CoachPayrollSummary {
   coachId: string;
   coachName: string;
   hourlyRate: number;
+  // Fixed monthly pay (coaches.monthly_salary, migration 0121) — when set,
+  // every lesson line is $0 and salaryAmount (this period's share of it)
+  // is what's owed instead. Null for ordinary hourly coaches.
+  monthlySalary: number | null;
+  salaryAmount: number;
   sessions: PayableSession[];
   total: number;
+}
+
+export const SALARY_REASON = "Monthly salary";
+
+// This period's share of a monthly salary — each day in [start, end)
+// (studio calendar, Eastern) is worth salary / days-in-that-month, so a
+// full calendar month is exactly the salary and a partial one is prorated.
+export function proratedSalary(monthlySalary: number, periodStart: string, periodEnd: string): number {
+  const [sy, sm, sd] = zonedYearMonthDay(new Date(periodStart), DEFAULT_TIMEZONE);
+  const [ey, em, ed] = zonedYearMonthDay(new Date(periodEnd), DEFAULT_TIMEZONE);
+  const end = Date.UTC(ey, em - 1, ed);
+  let total = 0;
+  for (let d = new Date(Date.UTC(sy, sm - 1, sd)); d.getTime() < end; d = new Date(d.getTime() + 86_400_000)) {
+    const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    total += monthlySalary / daysInMonth;
+  }
+  return Math.round(total * 100) / 100;
 }
 
 function payForSession(hourlyRate: number, durationMinutes: number): number {
@@ -101,7 +125,7 @@ export async function computeCoachPayroll(
   periodEnd: string,
 ): Promise<CoachPayrollSummary> {
   const [{ data: coach }, { data: sessions }, groupLessons] = await Promise.all([
-    supabase.from("coaches").select("id, name, hourly_rate").eq("id", coachId).single(),
+    supabase.from("coaches").select("id, name, hourly_rate, monthly_salary").eq("id", coachId).single(),
     fetchPayableSessions(supabase, coachId, periodStart, periodEnd),
     fetchPayableGroupLessons(supabase, coachId, periodStart, periodEnd),
   ]);
@@ -110,7 +134,11 @@ export async function computeCoachPayroll(
     throw new Error(`coach not found: ${coachId}`);
   }
 
-  const hourlyRate = Number(coach.hourly_rate);
+  const monthlySalary = coach.monthly_salary === null || coach.monthly_salary === undefined ? null : Number(coach.monthly_salary);
+  const salaried = monthlySalary !== null;
+  // A salaried coach's lessons still list (for the record) but pay $0 —
+  // the salary covers them, referral bonus included.
+  const hourlyRate = salaried ? 0 : Number(coach.hourly_rate);
   const sessionsPayable: PayableSession[] = (sessions ?? []).map((s) => {
     const student = s.students as unknown as { name: string; referred_by_coach_id: string | null } | null;
     const isReferralBonus = student?.referred_by_coach_id === coachId;
@@ -122,8 +150,8 @@ export async function computeCoachPayroll(
       status: s.status,
       studentId: s.student_id,
       studentName: student?.name ?? "Student",
-      amount: payForSession(hourlyRate + (isReferralBonus ? REFERRAL_BONUS_PER_HOUR : 0), s.duration_minutes),
-      isReferralBonus,
+      amount: salaried ? 0 : payForSession(hourlyRate + (isReferralBonus ? REFERRAL_BONUS_PER_HOUR : 0), s.duration_minutes),
+      isReferralBonus: !salaried && isReferralBonus,
     };
   });
   const groupLessonsPayable: PayableSession[] = groupLessons.map((g) => {
@@ -144,12 +172,16 @@ export async function computeCoachPayroll(
     (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
   );
 
+  const salaryAmount = salaried ? proratedSalary(monthlySalary, periodStart, periodEnd) : 0;
+
   return {
     coachId: coach.id,
     coachName: coach.name,
     hourlyRate,
+    monthlySalary,
+    salaryAmount,
     sessions: payable,
-    total: Math.round(payable.reduce((sum, s) => sum + s.amount, 0) * 100) / 100,
+    total: Math.round((payable.reduce((sum, s) => sum + s.amount, 0) + salaryAmount) * 100) / 100,
   };
 }
 
@@ -217,8 +249,27 @@ export async function generatePayrollRun(
       })),
   );
 
-  if (sessionRows.length === 0 && groupLessonRows.length === 0) {
+  const salaryCoaches = summaries.filter((summary) => summary.salaryAmount > 0);
+
+  if (sessionRows.length === 0 && groupLessonRows.length === 0 && salaryCoaches.length === 0) {
     return { inserted: 0, skippedAlreadyPaid: 0, perCoach: [] };
+  }
+
+  // Salary: one manual row per coach per period. The partial unique index
+  // (migration 0121) can't be targeted by supabase-js's onConflict, so a
+  // duplicate insert just errors with 23505 — treated as "already paid".
+  const salaryRows: { coach_id: string; amount: number }[] = [];
+  for (const summary of salaryCoaches) {
+    const { error } = await supabase.from("payroll_entries").insert({
+      coach_id: summary.coachId,
+      amount: summary.salaryAmount,
+      period_start: periodStart,
+      period_end: periodEnd,
+      is_manual: true,
+      reason: SALARY_REASON,
+    });
+    if (!error) salaryRows.push({ coach_id: summary.coachId, amount: summary.salaryAmount });
+    else if (error.code !== "23505") throw new Error(error.message);
   }
 
   const [{ data: insertedSessions, error: sessionsError }, { data: insertedGroups, error: groupsError }] =
@@ -240,8 +291,8 @@ export async function generatePayrollRun(
   if (sessionsError) throw new Error(sessionsError.message);
   if (groupsError) throw new Error(groupsError.message);
 
-  const totalRows = sessionRows.length + groupLessonRows.length;
-  const insertedCount = (insertedSessions?.length ?? 0) + (insertedGroups?.length ?? 0);
+  const totalRows = sessionRows.length + groupLessonRows.length + salaryCoaches.length;
+  const insertedCount = (insertedSessions?.length ?? 0) + (insertedGroups?.length ?? 0) + salaryRows.length;
 
   // Per-coach breakdown of what was *actually* newly written (not rows
   // skipped because an earlier/overlapping run already covered them) —
@@ -256,6 +307,7 @@ export async function generatePayrollRun(
   const newRows = [
     ...sessionRows.filter((r) => insertedSessionIds.has(r.session_id)),
     ...groupLessonRows.filter((r) => insertedGroupLessonIds.has(r.group_lesson_id)),
+    ...salaryRows,
   ];
 
   const coachNameById = new Map(summaries.map((s) => [s.coachId, s.coachName]));

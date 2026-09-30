@@ -32,7 +32,7 @@ export default async function CoachPayrollPage({
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, hourly_rate")
+    .select("id, hourly_rate, monthly_salary")
     .eq("profile_id", user.id)
     .single();
   if (!coach) redirect("/login");
@@ -69,6 +69,7 @@ export default async function CoachPayrollPage({
       <h1 className={styles.pageTitle}>Payroll</h1>
       <PayrollRangePicker
         hourlyRate={coach.hourly_rate}
+        monthlySalary={coach.monthly_salary === null ? null : Number(coach.monthly_salary)}
         initialPeriodStart={periodStart}
         initialPeriodEnd={periodEnd}
         initialEstimate={estimate}

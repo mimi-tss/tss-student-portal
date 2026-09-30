@@ -7,11 +7,26 @@ import { hasFinanceRole } from "@/lib/auth/roles";
 // "admins can update coaches" RLS policy (0041), same hardened
 // zero-rows check as coach-active/route.ts so a still-missing migration
 // fails loudly instead of silently no-op'ing.
+//
+// Also sets coaches.monthly_salary (migration 0121): pass monthlySalary
+// as a non-negative number for fixed monthly pay, or null to go back to
+// hourly. Either field can be sent on its own.
 export async function POST(req: NextRequest) {
-  const { coachId, hourlyRate } = await req.json();
+  const body = await req.json();
+  const { coachId, hourlyRate, monthlySalary } = body;
 
-  if (!coachId || typeof hourlyRate !== "number" || hourlyRate < 0) {
-    return NextResponse.json({ error: "coachId and a non-negative hourlyRate are required" }, { status: 400 });
+  const hasRate = hourlyRate !== undefined;
+  const hasSalary = "monthlySalary" in body;
+  if (
+    !coachId ||
+    (!hasRate && !hasSalary) ||
+    (hasRate && (typeof hourlyRate !== "number" || hourlyRate < 0)) ||
+    (hasSalary && monthlySalary !== null && (typeof monthlySalary !== "number" || monthlySalary < 0))
+  ) {
+    return NextResponse.json(
+      { error: "coachId plus a non-negative hourlyRate and/or monthlySalary (or null) are required" },
+      { status: 400 },
+    );
   }
 
   const supabase = await createClient();
@@ -21,7 +36,10 @@ export async function POST(req: NextRequest) {
 
   const { data: updated, error } = await supabase
     .from("coaches")
-    .update({ hourly_rate: hourlyRate })
+    .update({
+      ...(hasRate ? { hourly_rate: hourlyRate } : {}),
+      ...(hasSalary ? { monthly_salary: monthlySalary } : {}),
+    })
     .eq("id", coachId)
     .select("id");
 

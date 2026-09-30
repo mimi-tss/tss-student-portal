@@ -19,6 +19,7 @@ interface Estimate {
   coachId: string;
   coachName: string;
   hourlyRate: number;
+  salaryAmount?: number;
   sessions: PayableSession[];
   total: number;
 }
@@ -44,12 +45,14 @@ function money(n: number) {
 
 export default function PayrollRangePicker({
   hourlyRate,
+  monthlySalary = null,
   initialPeriodStart,
   initialPeriodEnd,
   initialEstimate,
   initialFinalized,
 }: {
   hourlyRate: number;
+  monthlySalary?: number | null;
   initialPeriodStart: string;
   initialPeriodEnd: string;
   initialEstimate: Estimate;
@@ -109,7 +112,10 @@ export default function PayrollRangePicker({
       <div className={styles.panel}>
         <h2>Estimate for this period</h2>
         <p className={styles.panelText}>
-          {estimate.coachName} · ${hourlyRate.toFixed(2)}/hr
+          {estimate.coachName} ·{" "}
+          {monthlySalary !== null
+            ? `${money(monthlySalary)}/month fixed — this period: ${money(estimate.salaryAmount ?? 0)}`
+            : `$${hourlyRate.toFixed(2)}/hr`}
         </p>
         {estimate.sessions.length === 0 ? (
           <p className={styles.emptyState}>No payable sessions in this range.</p>
