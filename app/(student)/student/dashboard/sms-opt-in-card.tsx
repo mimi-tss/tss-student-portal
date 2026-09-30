@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "../../student.module.css";
 
 // One-tap opt-in to lesson texts (studio call 2026-09-30). Shown only to
@@ -34,6 +34,13 @@ export default function SmsOptInCard({ phoneLabel }: { phoneLabel: string }) {
     setState("hidden");
     fetch("/api/student/sms-prompt", { method: "POST" }).catch(() => {});
   }
+
+  // After "You're all set!", let it read for 5 seconds, then go.
+  useEffect(() => {
+    if (state !== "done") return;
+    const t = setTimeout(() => setState("hidden"), 5000);
+    return () => clearTimeout(t);
+  }, [state]);
 
   if (state === "hidden") return null;
 
