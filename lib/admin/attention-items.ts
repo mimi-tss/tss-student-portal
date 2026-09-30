@@ -31,7 +31,8 @@ export type AttentionKind =
   | "kajabi_grant_failed"
   | "pause_request"
   | "change_plan_request"
-  | "recording_pipeline_stale";
+  | "recording_pipeline_stale"
+  | "schedule_overlap";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 

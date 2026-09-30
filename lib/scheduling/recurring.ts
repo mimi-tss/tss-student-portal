@@ -618,11 +618,11 @@ export async function materializeRecurringSessions(
     // app/api/booking/slots/route.ts makes.
     const { data: coachBusy } = await supabase
       .from("sessions")
-      .select("scheduled_at")
+      .select("scheduled_at, duration_minutes")
       .eq("actual_coach_id", schedule.coach_id)
-      .gte("scheduled_at", now.toISOString())
+      .gte("scheduled_at", new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString())
       .lte("scheduled_at", horizonEnd.toISOString())
-      .not("status", "eq", "cancelled-with-notice");
+      .not("status", "in", "(cancelled-with-notice,holiday)");
 
     const coachTaken = new Set(
       (coachBusy ?? []).map((s: { scheduled_at: string }) =>
@@ -655,7 +655,15 @@ export async function materializeRecurringSessions(
         .lte("scheduled_at", horizonEnd.toISOString()),
     ]);
 
+    // Other lessons as ranges, not just exact start times — confirmed
+    // live: a 60-min weekly slot at 3:00 was generated on top of another
+    // student's 30-min makeup at 3:30, since only an identical start
+    // instant (coachTaken) was ever treated as busy.
     const coachBusyRanges = [
+      ...(coachBusy ?? []).map((s: { scheduled_at: string; duration_minutes: number }) => {
+        const start = new Date(s.scheduled_at);
+        return [start, new Date(start.getTime() + s.duration_minutes * 60 * 1000)] as const;
+      }),
       ...(coachBlocks ?? []).map((b: { start_at: string; end_at: string }) => [new Date(b.start_at), new Date(b.end_at)] as const),
       ...(coachGroupLessons ?? []).map((g: { scheduled_at: string; duration_minutes: number }) => {
         const start = new Date(g.scheduled_at);

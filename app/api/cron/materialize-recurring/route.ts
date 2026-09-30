@@ -5,6 +5,7 @@ import { materializeRecurringGroupLessons } from "@/lib/group-lessons";
 import { forfeitHolidaySessions } from "@/lib/scheduling/holidays";
 import { materializeRecurringCoachBlocks } from "@/lib/coach-blocks";
 import { grantHolidayCredits } from "@/lib/scheduling/holiday-credits";
+import { flagScheduleOverlaps } from "@/lib/admin/schedule-overlaps";
 
 // Daily top-up: ensures every active recurring schedule has real
 // `sessions` rows out to the horizon (lib/scheduling/recurring.ts),
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
   // After materializing, so a holiday's 5th-week replacement session
   // already exists when deciding whether a credit is still owed.
   const holidayCredits = await grantHolidayCredits(admin);
+  const overlaps = await flagScheduleOverlaps(admin);
 
   return NextResponse.json({
     resumed,
@@ -57,6 +59,7 @@ export async function GET(req: NextRequest) {
     coachBlocksCreated: coachBlockResult.created,
     ...result,
     ...holidayCredits,
+    ...overlaps,
     groupLessonsCreated: groupLessonResult.created,
     groupLessonsSkipped: groupLessonResult.skipped,
   });

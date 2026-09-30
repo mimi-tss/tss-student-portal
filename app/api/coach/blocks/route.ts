@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifySlack } from "@/lib/slack/notify";
+import { flagScheduleOverlaps } from "@/lib/admin/schedule-overlaps";
 import { createAttentionItem } from "@/lib/admin/attention-items";
 
 // Coach's own personal time-off block (spec section 5: "coach availability
@@ -46,6 +47,9 @@ export async function POST(req: NextRequest) {
   await notifySlack(
     `🗓️ *${coach.name}* added a time-off block: ${new Date(startAt).toLocaleString()} – ${new Date(endAt).toLocaleString()}${reason ? ` — ${reason}` : ""}`,
   );
+
+  // Time off added on top of already-booked lessons → Needs Review.
+  await flagScheduleOverlaps(createAdminClient());
 
   await createAttentionItem(createAdminClient(), {
     kind: "coach_block_added",

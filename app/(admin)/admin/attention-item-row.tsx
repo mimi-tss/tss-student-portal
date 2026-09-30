@@ -32,6 +32,7 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   pause_request: "Pause Req",
   change_plan_request: "Change Plan Req",
   recording_pipeline_stale: "Recordings Not Arriving",
+  schedule_overlap: "Schedule Overlap",
 };
 
 export const KIND_CLASS: Record<AttentionKind, string> = {
@@ -57,6 +58,7 @@ export const KIND_CLASS: Record<AttentionKind, string> = {
   pause_request: styles.naKindPause,
   change_plan_request: styles.naKindTrial,
   recording_pipeline_stale: styles.naKindDnc,
+  schedule_overlap: styles.naKindDnc,
 };
 
 export const STATUS_TABS: { status: AttentionStatus; label: string }[] = [

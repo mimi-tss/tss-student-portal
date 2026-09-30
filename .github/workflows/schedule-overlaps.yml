@@ -1,0 +1,19 @@
+name: Schedule overlap check
+
+# Flags upcoming lessons that overlap another lesson, a group class, or
+# coach time off as Needs Review items (app/api/cron/schedule-overlaps).
+# Same GitHub Actions posture as every other cron here.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call schedule-overlaps endpoint
+        run: |
+          curl -sf -X GET "https://tss-student-portal.vercel.app/api/cron/schedule-overlaps" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
