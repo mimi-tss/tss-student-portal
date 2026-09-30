@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe, stripeOpus } from "@/lib/stripe/client";
-import { resolveTier, billingIntervalFromPrice } from "@/lib/stripe/tiers";
+import { resolveTier, billingIntervalFromPrice, formatPrice } from "@/lib/stripe/tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
 import { issueAndSendBillingWelcomeLink } from "@/lib/auth/billing-welcome-link";
 import { notifyStaff, notifyStudent } from "@/lib/notifications/create";
-import { planChangedEmail } from "@/lib/email/templates/membership";
+import { planChangedEmail, planName } from "@/lib/email/templates/membership";
+import { paymentFailed } from "@/lib/email/templates/payment-failed";
 import { firstNameOf } from "@/lib/ghl/fields";
 import type { StripeAccount, Tier } from "@/types/database";
 import { isFirstSessionEligible } from "@/lib/billing/first-session";
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
         const studentIds = await studentIdsForInvoice(admin, invoice, customerId, account);
         if (studentIds.length > 0) {
           await admin.from("students").update({ payment_status: "dnc" }).in("id", studentIds);
+          await notifyPaymentFailed(admin, invoice, studentIds);
         }
       }
       break;
@@ -182,6 +184,48 @@ async function studentIdsForInvoice(
     .eq("stripe_customer_id", customerId)
     .eq("stripe_account", account);
   return (data ?? []).map((s) => s.id);
+}
+
+// "Your payment didn't go through" — once on the first failed attempt,
+// once more when Stripe's last automatic retry fails (no next attempt).
+// Retries in between are deduped by the invoice id. Studio call
+// 2026-09-30: always emailed; text for anyone with any text switch on;
+// staff get a Slack line.
+async function notifyPaymentFailed(admin: AdminClient, invoice: Stripe.Invoice, studentIds: string[]) {
+  const final = invoice.next_payment_attempt == null;
+  const stage = final ? "final" : "first";
+  const amountLabel = formatPrice(invoice.amount_due, invoice.currency) ?? "your payment";
+  const { data: students } = await admin
+    .from("students")
+    .select("id, name, email, phone, tier, notify_reminders_sms, notify_bookings_sms, notify_credits_sms")
+    .in("id", studentIds);
+  for (const st of students ?? []) {
+    const plan = planName(st.tier as Tier);
+    const rendered = paymentFailed({ firstName: firstNameOf(st.name), amountLabel, planName: plan, final });
+    await notifyStudent(admin, {
+      studentId: st.id,
+      email: st.email,
+      phone: st.phone,
+      group: "alerts",
+      kind: "payment_failed",
+      dedupKey: `student:${st.id}:payment_failed:${invoice.id}:${stage}`,
+      title: rendered.bellTitle,
+      body: rendered.bellBody,
+      linkUrl: "/billing/account#billing",
+      ghlData: { invoiceId: invoice.id, amountLabel, final, ...rendered },
+      channels: {
+        email: true,
+        sms: !!(st.notify_reminders_sms || st.notify_bookings_sms || st.notify_credits_sms),
+        inApp: true,
+      },
+      emailAlways: true,
+    });
+    await notifyStaff(admin, {
+      kind: "payment_failed",
+      dedupKey: `${invoice.id}:${st.id}:${stage}`,
+      text: `💳 Payment failed${final ? " (last retry)" : ""}: ${st.name}, ${amountLabel} (${plan})`,
+    });
+  }
 }
 
 // One-time fulfillment for a new signup — mirrors

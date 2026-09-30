@@ -18,7 +18,8 @@ type NotificationKind =
   | "session_cancelled"
   | "fifth_week_offer"
   | "plan_changed"
-  | "session_missed";
+  | "session_missed"
+  | "payment_failed";
 
 // The only notifications that may go out by text (studio call
 // 2026-09-26). Coach messages, recordings and the digest are never
@@ -34,6 +35,7 @@ const SMS_KINDS: ReadonlySet<NotificationKind> = new Set([
   "session_cancelled",
   "fifth_week_offer",
   "session_missed",
+  "payment_failed",
 ]);
 
 // Claims a dedup_key in notification_log — returns false (already sent)
