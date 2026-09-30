@@ -243,7 +243,15 @@ export async function runTool(name: string, input: Record<string, unknown>, ctx:
     ]);
     const note =
       "PRIVACY: this person isn't logged in, so you can't be sure the email is theirs. You may tell them only whether this email can log in to the portal (the login page shows that too). NEVER say the plan name, subscription status or any other account detail.";
-    if (coach) return JSON.stringify({ found: true, account_type: "coach", can_use_portal: true, note });
+    // Staff emails get the same answer as any portal account — never
+    // reveal to a logged-out visitor that an email belongs to a coach.
+    if (coach) {
+      return JSON.stringify({
+        found: true,
+        can_use_portal: true,
+        note: `${note} This email can use the portal — help with the code steps (spam folder, newest code, typo, private browsing).`,
+      });
+    }
     if (!student) {
       return JSON.stringify({
         found: false,
@@ -253,7 +261,6 @@ export async function runTool(name: string, input: Record<string, unknown>, ctx:
     const canUse = student.tier !== "lite" && !student.archived;
     return JSON.stringify({
       found: true,
-      account_type: "student",
       can_use_portal: canUse,
       for_your_reasoning_only: { plan: student.tier, subscription_status: student.subscription_status, archived: student.archived },
       note: canUse
