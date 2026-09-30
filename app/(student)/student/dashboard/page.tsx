@@ -11,6 +11,7 @@ import { currentBillingCycleRange, effectiveSessionCycleCap, paidThroughEnd } fr
 import JoinButton from "./join-button";
 import StreakPing from "./streak-ping";
 import PlanRequestsClient from "./plan-requests-client";
+import SmsOptInCard from "./sms-opt-in-card";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import FifthWeekCard from "./fifth-week-card";
@@ -55,7 +56,7 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, billing_interval, streak_count, ambassador",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, billing_interval, streak_count, ambassador, phone, notify_alerts_sms, sms_prompt_dismissed_at",
     )
     .eq("profile_id", user.id)
     .single();
@@ -331,6 +332,10 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
+      {student.phone && !student.notify_alerts_sms && !student.sms_prompt_dismissed_at && (
+        <SmsOptInCard phoneLabel={formatPhone(student.phone)} />
+      )}
+
       {expiringSoonCredits.length > 0 && (
         <Link href="/student/book" className={styles.expiringWarning}>
           {expiringSoonCredits.map((c) => (
@@ -484,4 +489,10 @@ export default async function StudentDashboardPage() {
       </div>
     </div>
   );
+}
+
+// "+14035551234" → "(403) 555-1234"; anything else is shown as stored.
+function formatPhone(phone: string): string {
+  const m = phone.replace(/[^\d+]/g, "").match(/^\+?1?(\d{3})(\d{3})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : phone;
 }
