@@ -19,10 +19,14 @@ function appUrl(path = "") {
   return `${process.env.NEXT_PUBLIC_APP_URL ?? "https://portal.tarasimonstudios.com"}${path}`;
 }
 
-// Own channel if set, else the shared staff one — same fallback pattern
-// as bug reports.
+// Mel's handoff pings share the bug-reports channel (studio decision 2026-09-30),
+// unless a dedicated SLACK_SUPPORT_WEBHOOK_URL is set; falls back to the
+// staff channel like bug reports do.
 function supportSlack(text: string) {
-  return notifySlack(text, process.env.SLACK_SUPPORT_WEBHOOK_URL || undefined);
+  return notifySlack(
+    text,
+    process.env.SLACK_SUPPORT_WEBHOOK_URL || process.env.SLACK_BUG_REPORTS_WEBHOOK_URL || undefined,
+  );
 }
 
 async function whoIs(admin: SupabaseClient, thread: SupportThread) {
