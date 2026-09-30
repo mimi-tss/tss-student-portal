@@ -90,12 +90,31 @@
   display: none;
 }
 
+.desktopOnly {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.navCurrent {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .navLinks {
     display: none;
   }
-  .navToggle {
-    display: flex;
+  .desktopOnly {
+    display: none;
+  }
+  .navCurrent {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .header {
+    padding: 12px 16px;
+    flex-wrap: nowrap;
   }
   .navDropdown {
     display: flex;
@@ -268,6 +287,26 @@
 .detailCol {
   grid-column: 2;
   grid-row: 1;
+}
+/* Phones: stack schedule above details — two columns left the details
+   column 0px wide and spilling off the right edge (page scrolled
+   sideways). */
+@media (max-width: 640px) {
+  .dashLayout,
+  .dashLayout.collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detailCol {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .dashLayout.collapsed .scheduleCol {
+    display: none;
+  }
+  .dashLayout.collapsed .expandTab {
+    writing-mode: horizontal-tb;
+    justify-self: start;
+  }
 }
 
 .scheduleHeadRow {

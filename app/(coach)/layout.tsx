@@ -2,12 +2,10 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import { TimeZoneProvider } from "@/components/timezone-context";
-import TimeZoneNavControl from "@/components/timezone-nav-control";
-import RefreshButton from "@/components/refresh-button";
-import SessionResetButton from "@/components/session-reset-button";
 import ThemeToggle from "@/components/theme-toggle";
 import BugReportButton from "@/components/bug-report-button";
 import CoachNav from "./coach-nav";
+import CoachMenu from "./coach-menu";
 import HelpAgentButton from "@/components/help-agent-button";
 import { HelpPanelProvider } from "@/components/help-panel";
 import { Anton, Inter, Caveat } from "next/font/google";
@@ -51,14 +49,17 @@ export default async function CoachLayout({
           </div>
           <CoachNav />
           <div className={styles.headerRight}>
-            <BugReportButton defaultEmail={user.email ?? ""} />
-            <ThemeToggle />
-            <SessionResetButton />
-            <RefreshButton />
-            <TimeZoneNavControl />
-            <HelpAgentButton />
-            <div className={styles.avatar}>{initials(coach?.name ?? "?")}</div>
+            {/* Timezone, Fix stuck screen and Refresh live in the avatar
+                menu (coach-menu.tsx); on phones these three move there
+                too. BugReportButton stays mounted so that menu can still
+                open its modal. */}
+            <div className={styles.desktopOnly}>
+              <BugReportButton defaultEmail={user.email ?? ""} />
+              <ThemeToggle />
+              <HelpAgentButton />
+            </div>
             <span className={styles.roleBadge}>Coach</span>
+            <CoachMenu initials={initials(coach?.name ?? "?")} />
           </div>
         </header>
         {children}
