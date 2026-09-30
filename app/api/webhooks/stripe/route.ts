@@ -525,6 +525,7 @@ async function notifyPlanChanged(admin: AdminClient, studentId: string, from: Ti
       body: r.bellBody,
       ghlData: { ...r, from, to },
       channels: { email: true, sms: false, inApp: false },
+      emailAlways: true,
     });
   } catch (err) {
     console.error(`plan change email failed for ${studentId}`, err);

@@ -15,14 +15,27 @@ import { escalateThread } from "@/lib/support/escalate";
 // cookie). Write tools never write: they post a Confirm card, and only
 // the student's own click runs it (app/api/support/confirm).
 
+// Per-topic switches (migration 0119) — same keys the account page and
+// /api/notifications/preferences use.
 const NOTIFY_KEYS = [
+  "notify_reminders_email",
+  "notify_reminders_sms",
+  "notify_bookings_email",
+  "notify_bookings_sms",
+  "notify_credits_email",
+  "notify_credits_sms",
+  "notify_messages_email",
+  "notify_recordings_email",
   "notify_digest_email",
-  "notify_digest_sms",
-  "notify_digest_inapp",
-  "notify_alerts_email",
-  "notify_alerts_sms",
-  "notify_alerts_inapp",
 ] as const;
+const TOPIC_NAMES: Record<string, string> = {
+  reminders: "Lesson reminders",
+  bookings: "Bookings & changes",
+  credits: "Lesson credits",
+  messages: "Messages from your coach",
+  recordings: "Recordings",
+  digest: "Weekly digest",
+};
 
 const escalateTool: Anthropic.Tool = {
   name: "escalate_to_human",
@@ -72,7 +85,8 @@ const studentTools: Anthropic.Tool[] = [
   },
   {
     name: "get_my_notification_settings",
-    description: "Current portal notification settings (weekly digest + alerts, each by email / text / in-app).",
+    description:
+      "Current portal notification settings, per topic: lesson reminders, bookings & changes, lesson credits (each email + text); coach messages, recordings, weekly digest (email only). Purchases, membership and missed-lesson emails are always sent. The in-app bell is always on.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -336,9 +350,8 @@ export async function runTool(name: string, input: Record<string, unknown>, ctx:
       if (Object.keys(changes).length === 0) return "Error: no settings to change.";
       const pretty = Object.entries(changes)
         .map(([k, v]) => {
-          const [, group, channel] = k.split("_");
-          const channelName = { email: "email", sms: "text", inapp: "in-app" }[channel] ?? channel;
-          return `${group === "digest" ? "Weekly digest" : "Alerts"} by ${channelName}: ${v ? "ON" : "OFF"}`;
+          const [, topic, channel] = k.split("_");
+          return `${TOPIC_NAMES[topic] ?? topic} by ${channel === "sms" ? "text" : "email"}: ${v ? "ON" : "OFF"}`;
         })
         .join("; ");
       return proposeAction(

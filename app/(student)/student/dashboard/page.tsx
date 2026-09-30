@@ -56,7 +56,7 @@ export default async function StudentDashboardPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, billing_interval, streak_count, ambassador, phone, notify_alerts_sms, sms_prompt_dismissed_at",
+      "id, name, tier, drive_folder_id, assigned_coach_id, session_duration_minutes, billing_anniversary_date, billing_interval, streak_count, ambassador, phone, notify_reminders_sms, sms_prompt_dismissed_at",
     )
     .eq("profile_id", user.id)
     .single();
@@ -332,7 +332,7 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
-      {student.phone && !student.notify_alerts_sms && !student.sms_prompt_dismissed_at && (
+      {student.phone && !student.notify_reminders_sms && !student.sms_prompt_dismissed_at && (
         <SmsOptInCard phoneLabel={formatPhone(student.phone)} />
       )}
 

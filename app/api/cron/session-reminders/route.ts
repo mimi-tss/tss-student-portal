@@ -233,6 +233,7 @@ async function sendMissedLessonEmails(admin: ReturnType<typeof createAdminClient
       linkUrl: "/student/dashboard",
       ghlData: { sessionId: s.id, ...r },
       channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+      emailAlways: true, // missed-lesson policy notice: always emailed
     });
     sent++;
   }
@@ -296,6 +297,7 @@ async function sendMissedGroupEmails(admin: ReturnType<typeof createAdminClient>
       linkUrl: "/student/dashboard",
       ghlData: { registrationId: r.id, ...m },
       channels: { email: student.notify_alerts_email, sms: student.notify_alerts_sms, inApp: student.notify_alerts_inapp },
+      emailAlways: true, // missed-lesson policy notice: always emailed
     });
     sent++;
   }

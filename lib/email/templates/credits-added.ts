@@ -5,7 +5,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 
 // "Your credits are ready — book now" after a student buys lessons (add-on
 // shop, auto-added) or an admin adds credits by hand. Studio call
-// 2026-09-26. Email + bell, text if Alerts → Text is on.
+// 2026-09-26. Email + bell, text if Lesson credits → Text is on.
 
 export interface GroupCreditsAdded {
   count: number;

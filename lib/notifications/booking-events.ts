@@ -77,7 +77,8 @@ export async function notifyStudentSessionBooked(sessionId: string, opts: { purc
       body: r.bellBody,
       linkUrl: "/student/dashboard",
       ghlData: { sessionId, ...r },
-      channels: opts.purchase ? { ...channelsOf(student), email: true } : channelsOf(student),
+      channels: channelsOf(student),
+      emailAlways: !!opts.purchase,
     });
   } catch (err) {
     console.error(`notifyStudentSessionBooked failed for ${sessionId}`, err);

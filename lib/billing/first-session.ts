@@ -55,6 +55,7 @@ export async function notifyBonusFirstSession(
       linkUrl: "/student/book",
       ghlData: { ...r },
       channels: { email: true, sms: s.notify_alerts_sms, inApp: s.notify_alerts_inapp },
+      emailAlways: true,
     });
   } catch (err) {
     console.error(`notifyBonusFirstSession failed for ${studentId}`, err);

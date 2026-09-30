@@ -8,7 +8,7 @@ import { renderEmail, smsText } from "@/lib/email/layout";
 // = removed from the coach's schedule, no makeups, until they rebook a
 // better recurring time (the studio does this by hand; nothing
 // automatic). No app button on purpose: replying is the one action we
-// want. Email + bell, plus an optional text (Alerts → Text) — text replies
+// want. Email + bell, plus an optional text (Bookings & changes → Text) — text replies
 // land in the studio's GHL Conversations inbox.
 export function missedLesson(i: {
   firstName: string;

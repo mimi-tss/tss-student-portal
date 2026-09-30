@@ -25,7 +25,7 @@ export default async function BillingAccountPage() {
   const { data: student } = await supabase
     .from("students")
     .select(
-      "id, name, email, phone, birth_date, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, notify_digest_email, notify_digest_sms, notify_digest_inapp, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp",
+      "id, name, email, phone, birth_date, gender, address_street, address_city, address_state, address_zip, address_country, guardian_name, guardian_relationship, guardian_phone, guardian_email, notify_reminders_email, notify_reminders_sms, notify_bookings_email, notify_bookings_sms, notify_credits_email, notify_credits_sms, notify_messages_email, notify_recordings_email, notify_digest_email",
     )
     .eq("profile_id", user.id)
     .maybeSingle();
@@ -52,12 +52,15 @@ export default async function BillingAccountPage() {
           guardianEmail: student.guardian_email,
         }}
         notificationPrefs={{
+          notify_reminders_email: student.notify_reminders_email,
+          notify_reminders_sms: student.notify_reminders_sms,
+          notify_bookings_email: student.notify_bookings_email,
+          notify_bookings_sms: student.notify_bookings_sms,
+          notify_credits_email: student.notify_credits_email,
+          notify_credits_sms: student.notify_credits_sms,
+          notify_messages_email: student.notify_messages_email,
+          notify_recordings_email: student.notify_recordings_email,
           notify_digest_email: student.notify_digest_email,
-          notify_digest_sms: student.notify_digest_sms,
-          notify_digest_inapp: student.notify_digest_inapp,
-          notify_alerts_email: student.notify_alerts_email,
-          notify_alerts_sms: student.notify_alerts_sms,
-          notify_alerts_inapp: student.notify_alerts_inapp,
         }}
       />
       <h1 id="billing" className={styles.title} style={{ textAlign: "left" }}>
