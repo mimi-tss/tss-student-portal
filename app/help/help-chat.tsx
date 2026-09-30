@@ -264,7 +264,7 @@ export default function HelpChat({
               ...v.messages,
               {
                 id: `local-${Date.now()}`,
-                sender: v.caller.kind === "student" ? "student" : "guest",
+                sender: v.caller.kind,
                 body: body || null,
                 attachmentUrl: null,
                 attachmentName: file?.name ?? null,
@@ -337,8 +337,8 @@ export default function HelpChat({
         <a href="/help" className={styles.headerLink}>
           Help center
         </a>
-        {isStudent ? (
-          <a href="/student/dashboard" className={styles.headerLink}>
+        {view && view.caller.kind !== "guest" ? (
+          <a href={view.caller.kind === "coach" ? "/coach/dashboard" : "/student/dashboard"} className={styles.headerLink}>
             Back to portal
           </a>
         ) : (

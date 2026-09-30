@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/coach/schedule", label: "My Schedule" },
   { href: "/coach/students", label: "My Students" },
   { href: "/coach/payroll", label: "Payroll" },
+  { href: "/coach/help", label: "Help" },
 ];
 
 // Below 640px (coach.module.css's .navToggle/.navLinks breakpoint), same

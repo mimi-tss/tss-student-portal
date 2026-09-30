@@ -13,9 +13,10 @@ export interface HelpArticle {
   active: boolean;
   sort_order: number;
   updated_at: string;
+  audience: "students" | "coaches" | "both";
 }
 
-const COLUMNS = "id, slug, category, title, summary, body, is_public, active, sort_order, updated_at";
+const COLUMNS = "id, slug, category, title, summary, body, is_public, active, sort_order, updated_at, audience";
 
 // Everything the public help center shows. Service-role read (pages are
 // public, no session needed), filtered to published + active.
@@ -25,6 +26,7 @@ export async function listPublicArticles(): Promise<HelpArticle[]> {
     .select(COLUMNS)
     .eq("is_public", true)
     .eq("active", true)
+    .in("audience", ["students", "both"])
     .order("sort_order")
     .order("title");
   return (data as HelpArticle[] | null) ?? [];
@@ -46,8 +48,34 @@ export async function getArticle(slug: string): Promise<{ article: HelpArticle; 
   const { data } = await createAdminClient().from("support_kb_articles").select(COLUMNS).eq("slug", slug).maybeSingle();
   const article = data as HelpArticle | null;
   if (!article) return null;
-  if (article.is_public && article.active) return { article, preview: false };
+  if (article.is_public && article.active && article.audience !== "coaches") return { article, preview: false };
   return (await viewerIsAdmin()) ? { article, preview: true } : null;
+}
+
+// The private coach help center (/coach/help — the coach layout already
+// requires a coach login): published + active coach/both articles.
+export async function listCoachArticles(): Promise<HelpArticle[]> {
+  const { data } = await createAdminClient()
+    .from("support_kb_articles")
+    .select(COLUMNS)
+    .eq("is_public", true)
+    .eq("active", true)
+    .in("audience", ["coaches", "both"])
+    .order("sort_order")
+    .order("title");
+  return (data as HelpArticle[] | null) ?? [];
+}
+
+export async function getCoachArticle(slug: string): Promise<HelpArticle | null> {
+  const { data } = await createAdminClient()
+    .from("support_kb_articles")
+    .select(COLUMNS)
+    .eq("slug", slug)
+    .eq("is_public", true)
+    .eq("active", true)
+    .in("audience", ["coaches", "both"])
+    .maybeSingle();
+  return (data as HelpArticle | null) ?? null;
 }
 
 export function helpBaseUrl() {

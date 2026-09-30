@@ -16,6 +16,7 @@ export interface KbArticle {
   is_public: boolean;
   helpful_yes: number;
   helpful_no: number;
+  audience: "students" | "coaches" | "both";
 }
 
 const CATEGORIES: [string, string][] = [
@@ -26,6 +27,10 @@ const CATEGORIES: [string, string][] = [
   ["kajabi-community", "Kajabi community (Backstage)"],
   ["billing", "Billing"],
   ["other", "Other"],
+  ["coach-schedule", "Coach · Calendar & availability"],
+  ["coach-lessons", "Coach · Lessons & teaching tools"],
+  ["coach-students", "Coach · Your students"],
+  ["coach-pay", "Coach · Pay & attendance"],
 ];
 const DAYS: [string, string][] = [
   ["mon", "Mon"],
@@ -48,6 +53,7 @@ const EMPTY: Omit<KbArticle, "id"> = {
   is_public: false,
   helpful_yes: 0,
   helpful_no: 0,
+  audience: "students",
 };
 
 async function post(payload: Record<string, unknown>) {
@@ -119,7 +125,10 @@ function ArticleEditor({
       <div className={styles.panel} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <strong>{draft.title}</strong>{" "}
-          {draft.is_public ? <span className={styles.badge}>Public</span> : <span className={styles.badgeMuted}>Mel only</span>}{" "}
+          {draft.audience !== "students" && (
+            <span className={styles.badgeMuted}>{draft.audience === "coaches" ? "Coaches" : "Students + coaches"}</span>
+          )}{" "}
+          {draft.is_public ? <span className={styles.badge}>Published</span> : <span className={styles.badgeMuted}>Mel only</span>}{" "}
           {!draft.active && <span className={styles.badgeWarn}>Off</span>}
           <div className={styles.mutedText} style={{ fontSize: 13, marginTop: 4 }}>
             /help/a/{draft.slug}
@@ -144,6 +153,16 @@ function ArticleEditor({
   return (
     <div className={styles.panel}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <select
+          className={styles.selectSmall}
+          value={draft.audience}
+          onChange={(e) => setDraft({ ...draft, audience: e.target.value as KbArticle["audience"] })}
+          title="Who this article is for"
+        >
+          <option value="students">For students</option>
+          <option value="coaches">For coaches</option>
+          <option value="both">For both</option>
+        </select>
         <select className={styles.selectSmall} value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>
           {CATEGORIES.map(([v, l]) => (
             <option key={v} value={v}>
@@ -196,7 +215,7 @@ function ArticleEditor({
         </label>
         <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
           <input type="checkbox" checked={draft.is_public} onChange={(e) => setDraft({ ...draft, is_public: e.target.checked })} />
-          Show in public help center
+          {draft.audience === "coaches" ? "Show in coach help center" : "Show in help center"}
         </label>
         <label className={styles.mutedText} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
           <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />

@@ -8,6 +8,8 @@ import {
   MIN_BOT_REPLIES_BEFORE_HUMAN,
   resolveSupportCaller,
   type SupportMessage,
+  callerProfileId,
+  callerSender,
 } from "@/lib/support/thread";
 import { escalateThread } from "@/lib/support/escalate";
 import { buildHelpView, helpResponse } from "@/lib/support/view";
@@ -63,8 +65,8 @@ export async function POST(req: NextRequest) {
 
   await addMessage(admin, {
     threadId: thread.id,
-    sender: caller.kind === "student" ? "student" : "guest",
-    senderProfileId: caller.kind === "student" ? caller.profileId : null,
+    sender: callerSender(caller),
+    senderProfileId: callerProfileId(caller),
     body: contactRequest
       ? `My name is ${thread.guest_name ?? "(not given)"} and my email is ${thread.guest_email}.`
       : "I'd like to talk to a person.",

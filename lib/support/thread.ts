@@ -30,11 +30,13 @@ export type SupportCaller =
       // Under 18 by birth_date (null birth_date = unknown, treated as adult).
       isMinor: boolean;
     }
+  | { kind: "coach"; profileId: string; coachId: string; name: string; email: string }
   | { kind: "guest"; guestToken: string | null };
 
 export interface SupportThread {
   id: string;
   student_id: string | null;
+  coach_id: string | null;
   profile_id: string | null;
   guest_name: string | null;
   guest_email: string | null;
@@ -56,7 +58,7 @@ export interface SupportThread {
 export interface SupportMessage {
   id: string;
   thread_id: string;
-  sender: "student" | "guest" | "bot" | "admin" | "system";
+  sender: "student" | "coach" | "guest" | "bot" | "admin" | "system";
   sender_profile_id: string | null;
   body: string | null;
   attachment_path: string | null;
@@ -100,6 +102,15 @@ export async function resolveSupportCaller(req: NextRequest): Promise<SupportCal
         isMinor: isMinorBirthDate(student.birth_date),
       };
     }
+    // Coaches get Mel too — coach articles only, no student tools.
+    const { data: coach } = await supabase
+      .from("coaches")
+      .select("id, name, email")
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    if (coach) {
+      return { kind: "coach", profileId: user.id, coachId: coach.id, name: coach.name, email: coach.email };
+    }
   }
 
   const token = req.headers.get(GUEST_HEADER) || req.cookies.get(GUEST_COOKIE)?.value || null;
@@ -115,6 +126,7 @@ export async function findLatestThread(admin: SupabaseClient, caller: SupportCal
     .select("*")
     .gte("created_at", new Date(Date.now() - 7 * 864e5).toISOString());
   if (caller.kind === "student") query = query.eq("student_id", caller.studentId);
+  else if (caller.kind === "coach") query = query.eq("coach_id", caller.coachId);
   else if (caller.guestToken) query = query.eq("guest_token", caller.guestToken);
   else return null;
 
@@ -143,7 +155,9 @@ export async function getOrCreateThread(
     .insert(
       caller.kind === "student"
         ? { student_id: caller.studentId, profile_id: caller.profileId }
-        : { guest_token: guestToken, ...carry },
+        : caller.kind === "coach"
+          ? { coach_id: caller.coachId, profile_id: caller.profileId }
+          : { guest_token: guestToken, ...carry },
     )
     .select("*")
     .single();
@@ -221,6 +235,15 @@ export async function addMessage(
   if (error || !data) throw new Error(`couldn't save support message: ${error?.message}`);
   await admin.from("support_threads").update({ updated_at: new Date().toISOString() }).eq("id", msg.threadId);
   return data as SupportMessage;
+}
+
+// Which `sender` a caller's own messages are stored as.
+export function callerSender(caller: SupportCaller): "student" | "coach" | "guest" {
+  return caller.kind;
+}
+
+export function callerProfileId(caller: SupportCaller): string | null {
+  return caller.kind === "guest" ? null : caller.profileId;
 }
 
 export function displayName(thread: Pick<SupportThread, "guest_name" | "guest_email">, studentName?: string | null) {

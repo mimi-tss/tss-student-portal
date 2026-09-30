@@ -8,6 +8,8 @@ import SessionResetButton from "@/components/session-reset-button";
 import ThemeToggle from "@/components/theme-toggle";
 import BugReportButton from "@/components/bug-report-button";
 import CoachNav from "./coach-nav";
+import HelpAgentButton from "@/components/help-agent-button";
+import { HelpPanelProvider } from "@/components/help-panel";
 import { Anton, Inter, Caveat } from "next/font/google";
 import styles from "./coach.module.css";
 
@@ -42,6 +44,7 @@ export default async function CoachLayout({
   return (
     <TimeZoneProvider defaultZone={coach?.timezone ?? DEFAULT_TIMEZONE}>
       <div className={`${anton.variable} ${inter.variable} ${caveat.variable} ${styles.root}`}>
+        <HelpPanelProvider>
         <header className={styles.header}>
           <div className={styles.logoMark}>
             <img src="/logo.png" alt="Coaching Studio" className={styles.logoPlaceholder} />
@@ -53,11 +56,13 @@ export default async function CoachLayout({
             <SessionResetButton />
             <RefreshButton />
             <TimeZoneNavControl />
+            <HelpAgentButton />
             <div className={styles.avatar}>{initials(coach?.name ?? "?")}</div>
             <span className={styles.roleBadge}>Coach</span>
           </div>
         </header>
         {children}
+        </HelpPanelProvider>
       </div>
     </TimeZoneProvider>
   );

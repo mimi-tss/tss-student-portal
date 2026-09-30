@@ -11,10 +11,20 @@ export const HELP_CATEGORIES = [
   { key: "other", name: "Other", blurb: "Everything else", icon: "✨" },
 ] as const;
 
+// The private coach help center's categories (/coach/help). "login" is
+// shared — logging in works the same for everyone.
+export const COACH_HELP_CATEGORIES = [
+  { key: "coach-schedule", name: "Calendar & availability", blurb: "Your calendar, hours and time off", icon: "📅" },
+  { key: "coach-lessons", name: "Lessons & teaching tools", blurb: "Notes, homework, exercises, recordings", icon: "🎤" },
+  { key: "coach-students", name: "Your students", blurb: "Student info and chat", icon: "👥" },
+  { key: "coach-pay", name: "Pay & attendance", blurb: "Attendance and payroll", icon: "💵" },
+  { key: "login", name: "Getting in", blurb: "Logging in and login codes", icon: "🔑" },
+] as const;
+
 export type HelpCategoryKey = (typeof HELP_CATEGORIES)[number]["key"];
 
 export function helpCategory(key: string) {
-  return HELP_CATEGORIES.find((c) => c.key === key) ?? null;
+  return HELP_CATEGORIES.find((c) => c.key === key) ?? COACH_HELP_CATEGORIES.find((c) => c.key === key) ?? null;
 }
 
 export function slugify(title: string): string {

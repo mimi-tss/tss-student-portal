@@ -44,12 +44,13 @@ export function estimateCostUsd(t: Pick<SupportThread, "input_tokens" | "output_
 type ThreadWithJoins = SupportThread & {
   updated_at: string;
   students: { name: string; email: string; tier: string; birth_date: string | null } | { name: string; email: string; tier: string; birth_date: string | null }[] | null;
+  coaches: { name: string; email: string } | { name: string; email: string }[] | null;
 };
 
 export async function listAdminThreads(admin: SupabaseClient, limit = 200): Promise<AdminThreadRow[]> {
   const { data } = await admin
     .from("support_threads")
-    .select("*, students(name, email, tier, birth_date)")
+    .select("*, students(name, email, tier, birth_date), coaches(name, email)")
     .order("updated_at", { ascending: false })
     .limit(limit);
   const threads = (data ?? []) as ThreadWithJoins[];
@@ -79,12 +80,14 @@ export async function listAdminThreads(admin: SupabaseClient, limit = 200): Prom
 
   return threads.map((t) => {
     const s = Array.isArray(t.students) ? t.students[0] : t.students;
+    const c = Array.isArray(t.coaches) ? t.coaches[0] : t.coaches;
     return {
       id: t.id,
       status: t.status,
-      who: s?.name ?? t.guest_name ?? t.guest_email ?? "Guest (not logged in)",
-      email: s?.email ?? t.guest_email,
-      tier: s?.tier ?? null,
+      who: s?.name ?? c?.name ?? t.guest_name ?? t.guest_email ?? "Guest (not logged in)",
+      email: s?.email ?? c?.email ?? t.guest_email,
+      // Coach chats show a "Coach" tag where a student's plan would be.
+      tier: s?.tier ?? (c ? "Coach" : null),
       isMinor: isMinorBirthDate(s?.birth_date),
       studentId: t.student_id,
       reason: t.escalation_reason,
@@ -101,12 +104,13 @@ export async function listAdminThreads(admin: SupabaseClient, limit = 200): Prom
 
 export async function loadAdminThread(admin: SupabaseClient, threadId: string) {
   const [rows, messages] = await Promise.all([
-    admin.from("support_threads").select("*, students(name, email, tier, birth_date)").eq("id", threadId).maybeSingle(),
+    admin.from("support_threads").select("*, students(name, email, tier, birth_date), coaches(name, email)").eq("id", threadId).maybeSingle(),
     loadMessages(admin, threadId),
   ]);
   const t = rows.data as ThreadWithJoins | null;
   if (!t) return null;
   const s = Array.isArray(t.students) ? t.students[0] : t.students;
+    const c = Array.isArray(t.coaches) ? t.coaches[0] : t.coaches;
   const signed = await signAttachmentUrls(
     admin,
     messages.map((m) => m.attachment_path).filter((p): p is string => !!p),
@@ -115,9 +119,10 @@ export async function loadAdminThread(admin: SupabaseClient, threadId: string) {
     thread: {
       id: t.id,
       status: t.status,
-      who: s?.name ?? t.guest_name ?? t.guest_email ?? "Guest (not logged in)",
-      email: s?.email ?? t.guest_email,
-      tier: s?.tier ?? null,
+      who: s?.name ?? c?.name ?? t.guest_name ?? t.guest_email ?? "Guest (not logged in)",
+      email: s?.email ?? c?.email ?? t.guest_email,
+      // Coach chats show a "Coach" tag where a student's plan would be.
+      tier: s?.tier ?? (c ? "Coach" : null),
       isMinor: isMinorBirthDate(s?.birth_date),
       studentId: t.student_id,
       reason: t.escalation_reason,

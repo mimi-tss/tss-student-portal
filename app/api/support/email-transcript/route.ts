@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't send the email. Please stay in the chat or try again." }, { status: 502 });
   }
 
-  const replyTo = caller.kind === "student" ? caller.email : thread.guest_email;
+  const replyTo = caller.kind === "guest" ? thread.guest_email : caller.email;
   await addMessage(admin, {
     threadId: thread.id,
     sender: "system",

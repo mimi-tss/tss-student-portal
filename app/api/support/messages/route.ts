@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addMessage, getOrCreateThread, resolveSupportCaller } from "@/lib/support/thread";
+import { addMessage, callerProfileId, callerSender, getOrCreateThread, resolveSupportCaller } from "@/lib/support/thread";
 import { runBotTurn } from "@/lib/support/bot";
 import { buildHelpView, helpResponse } from "@/lib/support/view";
 
@@ -76,8 +76,8 @@ export async function POST(req: NextRequest) {
 
   await addMessage(admin, {
     threadId: thread.id,
-    sender: caller.kind === "student" ? "student" : "guest",
-    senderProfileId: caller.kind === "student" ? caller.profileId : null,
+    sender: callerSender(caller),
+    senderProfileId: callerProfileId(caller),
     body: body || null,
     attachmentPath,
   });

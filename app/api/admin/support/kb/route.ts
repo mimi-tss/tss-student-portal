@@ -5,7 +5,11 @@ import { slugify } from "@/lib/support/help-categories";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["portal", "scheduling", "kajabi-courses", "kajabi-community", "billing", "login", "other"];
+const CATEGORIES = [
+  "portal", "scheduling", "kajabi-courses", "kajabi-community", "billing", "login", "other",
+  "coach-schedule", "coach-students", "coach-lessons", "coach-pay",
+];
+const AUDIENCES = ["students", "coaches", "both"];
 
 // Help articles the bot answers from (support_kb_articles) + the
 // single-row support settings. Edits take effect on the bot's very next
@@ -53,6 +57,7 @@ export async function POST(req: NextRequest) {
     slug,
     summary: String(payload.summary ?? "").trim() || null,
     is_public: payload.is_public === true,
+    audience: AUDIENCES.includes(String(payload.audience)) ? String(payload.audience) : "students",
     active: payload.active !== false,
     sort_order: Number(payload.sort_order) || 0,
     updated_at: now,

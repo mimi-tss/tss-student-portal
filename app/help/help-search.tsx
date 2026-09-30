@@ -14,7 +14,15 @@ export interface SearchItem {
 
 // Instant search over every published article (a small list, so it's
 // filtered in the browser — no search server needed).
-export default function HelpSearch({ items }: { items: SearchItem[] }) {
+export default function HelpSearch({
+  items,
+  basePath = "/help/a",
+  askMelHref = "/help/chat",
+}: {
+  items: SearchItem[];
+  basePath?: string;
+  askMelHref?: string;
+}) {
   const [q, setQ] = useState("");
 
   const results = useMemo(() => {
@@ -53,14 +61,14 @@ export default function HelpSearch({ items }: { items: SearchItem[] }) {
           {results.length === 0 ? (
             <p className={styles.muted}>
               No articles match that yet.{" "}
-              <Link href="/help/chat" style={{ color: "var(--gold)" }}>
+              <Link href={askMelHref} style={{ color: "var(--gold)" }}>
                 Ask Mel instead →
               </Link>
             </p>
           ) : (
             <div className={styles.list}>
               {results.map((r) => (
-                <Link key={r.slug} href={`/help/a/${r.slug}`} className={styles.listItem}>
+                <Link key={r.slug} href={`${basePath}/${r.slug}`} className={styles.listItem}>
                   <div className={styles.listTitle}>{r.title}</div>
                   <div className={styles.muted}>{r.excerpt}</div>
                 </Link>

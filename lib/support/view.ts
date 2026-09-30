@@ -16,7 +16,7 @@ import { splitSuggestions } from "@/lib/support/suggestions";
 import { describeOfficeHours, isWithinOfficeHours, loadSupportSettings } from "@/lib/support/settings";
 
 export interface HelpView {
-  caller: { kind: "student" | "guest"; name: string | null; email: string | null };
+  caller: { kind: "student" | "coach" | "guest"; name: string | null; email: string | null };
   thread: {
     id: string;
     status: SupportThread["status"];
@@ -61,8 +61,8 @@ export async function buildHelpView(
   return {
     caller: {
       kind: caller.kind,
-      name: caller.kind === "student" ? caller.name : thread?.guest_name ?? null,
-      email: caller.kind === "student" ? caller.email : null,
+      name: caller.kind === "guest" ? (thread?.guest_name ?? null) : caller.name,
+      email: caller.kind === "guest" ? null : caller.email,
     },
     thread: thread
       ? {

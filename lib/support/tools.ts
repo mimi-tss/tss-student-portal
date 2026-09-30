@@ -126,7 +126,10 @@ const askGuestContactTool: Anthropic.Tool = {
 };
 
 export function toolsFor(caller: SupportCaller): Anthropic.Tool[] {
-  return caller.kind === "student" ? studentTools : [askGuestContactTool, escalateTool];
+  if (caller.kind === "student") return studentTools;
+  // Coaches: explain + hand off to the admin; no student account tools.
+  if (caller.kind === "coach") return [escalateTool];
+  return [askGuestContactTool, escalateTool];
 }
 
 export interface ToolContext {

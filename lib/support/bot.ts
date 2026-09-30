@@ -58,20 +58,31 @@ Young students: some students are under 18 (the context line says so when known)
 - Never ask a young student for personal details beyond their name and the account email. Never suggest contacting anyone outside the studio or moving the conversation elsewhere. For account or billing decisions for a minor, point them to their parent/guardian and the studio team.
 - SAFETY OVERRIDE: if anyone — especially a young student — mentions being hurt, abuse, self-harm, feeling unsafe, bullying, or an adult (including a coach) behaving inappropriately, respond kindly and calmly, tell them a person from the studio team will follow up, suggest they also talk to a trusted adult, and if they're in immediate danger tell them to call their local emergency number (911 in the US). Then call escalate_to_human right away with reason "Safety concern" — this overrides the normal "try first" rule.`;
 
-async function buildSystem(admin: SupabaseClient): Promise<Anthropic.TextBlockParam[]> {
+// Coaches get a different Mel: coach-portal help from coach articles,
+// no student account tools. Appended to the shared rules above.
+const COACH_INSTRUCTIONS = `
+
+You are talking to a COACH (studio staff), not a student. Help them use the coach portal: their calendar and availability, time off, their students, notes/homework, exercises, recordings and shared folders, chat, group and trial lessons, and pay/attendance.
+- Answer only from the coach help articles below. You can't see or change their calendar or students — explain where to do it in the coach portal.
+- The student rules above about young students, plans and billing don't apply to coaches; be concise and practical, like a helpful colleague.
+- Hand off (escalate_to_human) to the studio admin for anything that needs an admin (working-hours changes, pay questions or disputes, student account problems, anything you can't answer).`;
+
+async function buildSystem(admin: SupabaseClient, audience: "students" | "coaches"): Promise<Anthropic.TextBlockParam[]> {
   const [{ data: articles }, settings] = await Promise.all([
     admin
       .from("support_kb_articles")
       .select("category, title, body, slug, is_public")
       .eq("active", true)
+      .in("audience", [audience, "both"])
       .order("category")
       .order("sort_order"),
     loadSupportSettings(admin),
   ]);
 
   const base = helpBaseUrl();
+  const pageBase = audience === "coaches" ? `${base}/coach/help/a/` : `${base}/help/a/`;
   const kb = (articles ?? [])
-    .map((a) => `### [${a.category}] ${a.title}${a.is_public ? `\nPublic page: ${base}/help/a/${a.slug}` : ""}\n${a.body}`)
+    .map((a) => `### [${a.category}] ${a.title}${a.is_public ? `\nPublic page: ${pageBase}${a.slug}` : ""}\n${a.body}`)
     .join("\n\n");
 
   // Stable prefix (instructions + KB + hours) gets the cache breakpoint;
@@ -79,7 +90,7 @@ async function buildSystem(admin: SupabaseClient): Promise<Anthropic.TextBlockPa
   return [
     {
       type: "text",
-      text: `${INSTRUCTIONS}\n\nStudio team hours: ${describeOfficeHours(settings)}. Outside those hours, handoffs go to the team by email.\n\n## Help articles\n\n${kb || "(none yet)"}`,
+      text: `${INSTRUCTIONS}${audience === "coaches" ? COACH_INSTRUCTIONS : ""}\n\nStudio team hours: ${describeOfficeHours(settings)}. Outside those hours, handoffs go to the team by email.\n\n## Help articles\n\n${kb || "(none yet)"}`,
       cache_control: { type: "ephemeral" },
     },
   ];
@@ -89,6 +100,9 @@ function callerContext(caller: SupportCaller, timeZone: string): string {
   const now = new Date().toLocaleString("en-US", { timeZone, dateStyle: "full", timeStyle: "short" });
   if (caller.kind === "student") {
     return `[Context — not from the user] Logged-in student: ${caller.name}, plan: ${caller.tier}${caller.tier === "lite" ? " (no portal access)" : ""}${caller.isMinor ? ". This student is UNDER 18 — apply the young-student rules" : ""}. Their timezone: ${timeZone}. Now: ${now}.`;
+  }
+  if (caller.kind === "coach") {
+    return `[Context — not from the user] Logged-in COACH: ${caller.name}. Their timezone: ${timeZone}. Now: ${now}.`;
   }
   return `[Context — not from the user] Guest, NOT logged in (can't see their account). Their timezone: ${timeZone}. Now: ${now}.`;
 }
@@ -105,7 +119,7 @@ function toClaudeMessages(history: SupportMessage[], context: string): Anthropic
 
   for (const m of history) {
     const attachment = m.attachment_path ? " [attached a screenshot/file — you can't view it; staff can]" : "";
-    if (m.sender === "student" || m.sender === "guest") push("user", `${m.body ?? ""}${attachment}`.trim() || "(sent an attachment)");
+    if (m.sender === "student" || m.sender === "coach" || m.sender === "guest") push("user", `${m.body ?? ""}${attachment}`.trim() || "(sent an attachment)");
     else if (m.sender === "bot") {
       const action = m.action ? `\n[Proposed action: ${m.action.label} — ${m.action.status}${m.action.result ? `: ${m.action.result}` : ""}]` : "";
       push("assistant", `${m.body ?? ""}${action}`.trim());
@@ -135,7 +149,7 @@ export async function runBotTurn(
     return;
   }
 
-  const [system, history] = await Promise.all([buildSystem(admin), loadMessages(admin, thread.id)]);
+  const [system, history] = await Promise.all([buildSystem(admin, caller.kind === "coach" ? "coaches" : "students"), loadMessages(admin, thread.id)]);
   const messages = toClaudeMessages(history, callerContext(caller, timeZone));
   const tools = toolsFor(caller);
   const ctx: ToolContext = { admin, caller, thread, timeZone, origin, escalated: false, pendingActions: [] };

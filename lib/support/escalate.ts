@@ -34,6 +34,10 @@ async function whoIs(admin: SupabaseClient, thread: SupportThread) {
     const { data } = await admin.from("students").select("name, email, tier").eq("id", thread.student_id).maybeSingle();
     if (data) return { name: data.name as string, email: data.email as string, tier: data.tier as string };
   }
+  if (thread.coach_id) {
+    const { data } = await admin.from("coaches").select("name, email").eq("id", thread.coach_id).maybeSingle();
+    if (data) return { name: data.name as string, email: data.email as string, tier: "Coach" };
+  }
   return { name: thread.guest_name ?? "Guest (not logged in)", email: thread.guest_email, tier: null };
 }
 
