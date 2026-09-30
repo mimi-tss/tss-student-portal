@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
 import { resolveWorkingHoursForDate, windowEndDateParts } from "@/lib/scheduling/working-hours";
@@ -98,7 +99,15 @@ export async function GET(req: NextRequest) {
 
   const timeZone = coach?.timezone ?? "America/New_York";
 
-  const [{ data: blocks }, { data: existingSessions }, heldSlots, { data: groupLessons }] = await Promise.all([
+  // Group lessons and recurring schedules are RLS-hidden from students
+  // (a student only sees group lessons they're registered for, and only
+  // their own recurring schedule), so reading them through the
+  // student's own session silently returned nothing and offered those
+  // times as open — confirmed live: Spriha booked a 1:1 with Nikki on
+  // top of Nikki's 7pm group class. Only start/duration is read, via the
+  // service-role client.
+  const admin = createAdminClient();
+  const [{ data: blocks }, { data: existingSessions }, heldSlots, { data: groupLessons }, { data: ownGroupRegs }] = await Promise.all([
     supabase
       .from("coach_blocks")
       .select("start_at, end_at")
@@ -119,21 +128,38 @@ export async function GET(req: NextRequest) {
     // A paused student's slot stays reserved (spec section 3) — no
     // session row exists for it during the pause, so it needs its own
     // fetch to stay blocked from other students booking into it.
-    getHeldRecurringSlots(supabase, coachId, rangeStart, rangeEnd),
+    getHeldRecurringSlots(admin, coachId, rangeStart, rangeEnd),
     // A coach's own group lesson was never excluded here at all —
     // confirmed live: a student could book a 1:1 makeup slot directly
     // on top of that coach's group class, since group_lessons was never
     // one of this route's busy-range sources (coach_blocks/sessions/held
     // recurring slots only). A cancelled group lesson genuinely frees
     // the time back up, same as a with-notice 1:1 cancellation above.
-    supabase
+    admin
       .from("group_lessons")
       .select("scheduled_at, duration_minutes")
       .eq("coach_id", coachId)
       .is("cancelled_at", null)
       .gte("scheduled_at", rangeStart.toISOString())
       .lte("scheduled_at", rangeEnd.toISOString()),
+    // The student's own group classes (any coach) — they can't be in a
+    // 1:1 and a group class at the same time.
+    admin
+      .from("group_lesson_registrations")
+      .select("group_lessons!inner(scheduled_at, duration_minutes, cancelled_at)")
+      .eq("student_id", studentId)
+      .is("group_lessons.cancelled_at", null)
+      .gte("group_lessons.scheduled_at", rangeStart.toISOString())
+      .lte("group_lessons.scheduled_at", rangeEnd.toISOString()),
   ]);
+
+  const ownGroupLessons = (ownGroupRegs ?? []).flatMap((r) => {
+    const g = r.group_lessons as unknown as
+      | { scheduled_at: string; duration_minutes: number }
+      | { scheduled_at: string; duration_minutes: number }[]
+      | null;
+    return Array.isArray(g) ? g : g ? [g] : [];
+  });
 
   const busyRanges = [
     ...(blocks ?? []).map((b) => [new Date(b.start_at), new Date(b.end_at)] as const),
@@ -147,7 +173,7 @@ export async function GET(req: NextRequest) {
       const end = new Date(start.getTime() + s.duration_minutes * 60 * 1000);
       return [start, end] as const;
     }),
-    ...(groupLessons ?? []).map((g) => {
+    ...[...(groupLessons ?? []), ...ownGroupLessons].map((g) => {
       const start = new Date(g.scheduled_at);
       const end = new Date(start.getTime() + g.duration_minutes * 60 * 1000);
       return [start, end] as const;

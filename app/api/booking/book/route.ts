@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
@@ -220,15 +221,37 @@ export async function POST(req: NextRequest) {
   // checks already use.
   const slotStartDate = new Date(slotStart);
   const slotEndDate = new Date(slotStartDate.getTime() + durationMinutes * 60 * 1000);
-  const { data: nearbyGroupLessons } = await supabase
-    .from("group_lessons")
-    .select("scheduled_at, duration_minutes")
-    .eq("coach_id", coachId)
-    .is("cancelled_at", null)
-    .gte("scheduled_at", new Date(slotStartDate.getTime() - 4 * 60 * 60 * 1000).toISOString())
-    .lte("scheduled_at", slotEndDate.toISOString());
+  // Service-role read: group lessons are RLS-hidden from students unless
+  // they're registered, so the student's own session saw nothing here
+  // and this check never fired for them (see /api/booking/slots). Also
+  // covers the student's own group classes with any coach.
+  const admin = createAdminClient();
+  const windowStartIso = new Date(slotStartDate.getTime() - 4 * 60 * 60 * 1000).toISOString();
+  const [{ data: nearbyGroupLessons }, { data: ownGroupRegs }] = await Promise.all([
+    admin
+      .from("group_lessons")
+      .select("scheduled_at, duration_minutes")
+      .eq("coach_id", coachId)
+      .is("cancelled_at", null)
+      .gte("scheduled_at", windowStartIso)
+      .lte("scheduled_at", slotEndDate.toISOString()),
+    admin
+      .from("group_lesson_registrations")
+      .select("group_lessons!inner(scheduled_at, duration_minutes, cancelled_at)")
+      .eq("student_id", studentId)
+      .is("group_lessons.cancelled_at", null)
+      .gte("group_lessons.scheduled_at", windowStartIso)
+      .lte("group_lessons.scheduled_at", slotEndDate.toISOString()),
+  ]);
+  const ownGroupLessons = (ownGroupRegs ?? []).flatMap((r) => {
+    const g = r.group_lessons as unknown as
+      | { scheduled_at: string; duration_minutes: number }
+      | { scheduled_at: string; duration_minutes: number }[]
+      | null;
+    return Array.isArray(g) ? g : g ? [g] : [];
+  });
 
-  const groupClash = (nearbyGroupLessons ?? []).some((g) => {
+  const groupClash = [...(nearbyGroupLessons ?? []), ...ownGroupLessons].some((g) => {
     const gStart = new Date(g.scheduled_at);
     const gEnd = new Date(gStart.getTime() + g.duration_minutes * 60 * 1000);
     return slotStartDate < gEnd && slotEndDate > gStart;
