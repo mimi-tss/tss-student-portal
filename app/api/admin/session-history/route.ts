@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("sessions")
-    .select("id, scheduled_at, duration_minutes, actual_coach_id, status, is_makeup", { count: "exact" })
+    .select("id, scheduled_at, duration_minutes, actual_coach_id, status, is_makeup, cancel_reason", {
+      count: "exact",
+    })
     .eq("student_id", studentId)
     .lte("scheduled_at", effectiveTo)
     .order("scheduled_at", { ascending: false })
@@ -47,26 +49,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // The reason a cancelled session was cancelled isn't stored on the
-  // session row itself — it lives on the makeup_credits row THAT
-  // cancellation generated (source_session_id), whether student
-  // self-service or admin "regular cancel" (both go through
-  // applyCancellationCredit). A late cancel with no credit has nowhere
-  // this app stores a reason at all (applyCancellationCredit returns
-  // before touching makeup_credits), so those stay reason-less here —
-  // not a bug in this query, a real gap in what gets captured.
-  const cancelledIds = (sessions ?? [])
-    .filter((s) => s.status === "cancelled-with-notice")
+  // Fallback only, for cancellations from before sessions.cancel_reason
+  // existed (migration 0122) — those only ever had their reason stored on
+  // the makeup_credits row that cancellation generated (source_session_id).
+  // Every cancellation going forward writes cancel_reason directly, so
+  // this join shrinks to nothing over time rather than needing removal.
+  const missingReasonIds = (sessions ?? [])
+    .filter((s) => s.status === "cancelled-with-notice" && !s.cancel_reason)
     .map((s) => s.id);
 
-  let reasonsBySessionId: Record<string, string> = {};
-  if (cancelledIds.length) {
+  let legacyReasonsBySessionId: Record<string, string> = {};
+  if (missingReasonIds.length) {
     const { data: credits } = await supabase
       .from("makeup_credits")
       .select("source_session_id, reason")
-      .in("source_session_id", cancelledIds)
+      .in("source_session_id", missingReasonIds)
       .not("reason", "is", null);
-    reasonsBySessionId = Object.fromEntries(
+    legacyReasonsBySessionId = Object.fromEntries(
       (credits ?? [])
         .filter((c) => c.source_session_id && c.reason)
         .map((c) => [c.source_session_id as string, c.reason as string]),
@@ -75,7 +74,7 @@ export async function GET(req: NextRequest) {
 
   const sessionsWithReasons = (sessions ?? []).map((s) => ({
     ...s,
-    cancel_reason: reasonsBySessionId[s.id] ?? null,
+    cancel_reason: s.cancel_reason ?? legacyReasonsBySessionId[s.id] ?? null,
   }));
 
   return NextResponse.json({ sessions: sessionsWithReasons, total: count ?? 0 });

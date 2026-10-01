@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
   const { error: updateError } = await supabase
     .from("sessions")
-    .update({ status: "cancelled-with-notice" })
+    .update({ status: "cancelled-with-notice", cancel_reason: reason.trim() })
     .eq("id", session.id);
 
   if (updateError) {

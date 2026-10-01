@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
     .from("sessions")
     .update({
       status: outcome.creditGranted ? "cancelled-with-notice" : "cancelled-no-notice",
+      cancel_reason: reason?.trim() || null,
     })
     .eq("id", session.id);
 

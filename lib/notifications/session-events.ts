@@ -29,7 +29,7 @@ export async function notifyCoachSessionEvent(sessionId: string, kind: SessionEv
     const admin = createAdminClient();
     const { data: session } = await admin
       .from("sessions")
-      .select("id, scheduled_at, actual_coach_id, students(name), coaches(timezone, slack_webhook_url)")
+      .select("id, scheduled_at, actual_coach_id, cancel_reason, students(name), coaches(timezone, slack_webhook_url)")
       .eq("id", sessionId)
       .maybeSingle();
     if (!session) return;
@@ -44,13 +44,17 @@ export async function notifyCoachSessionEvent(sessionId: string, kind: SessionEv
     if (!student || !coach || !session.actual_coach_id) return;
 
     const time = formatDateTimeInZone(session.scheduled_at, coach.timezone);
+    // Only ever set for session_cancelled (see the three cancel routes),
+    // but reading it regardless of `kind` costs nothing and means this
+    // doesn't need updating if a reason is ever added to another event.
+    const reasonSuffix = session.cancel_reason ? ` — "${session.cancel_reason}"` : "";
 
     await notifyCoach(admin, {
       coachId: session.actual_coach_id,
       coachSlackWebhookUrl: coach.slack_webhook_url,
       kind,
       dedupKey: `coach:${session.actual_coach_id}:${kind}:${sessionId}`,
-      text: `${LABEL[kind]}: ${student.name} at ${time}`,
+      text: `${LABEL[kind]}: ${student.name} at ${time}${reasonSuffix}`,
     });
   } catch (err) {
     console.error(`notifyCoachSessionEvent failed for session ${sessionId} (${kind})`, err);
