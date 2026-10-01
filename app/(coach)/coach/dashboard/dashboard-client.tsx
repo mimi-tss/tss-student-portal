@@ -9,6 +9,7 @@ import SharedFolderPanel from "@/components/shared-folder-panel";
 import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
 import { useTimeZone } from "@/components/timezone-context";
 import { formatPlainDate } from "@/lib/format-date";
+import { formatPeriodDate } from "@/lib/payroll/period";
 import AssignExercisePanel from "@/components/assign-exercise-panel";
 import AssignedExercisesList from "@/components/assigned-exercises-list";
 import styles from "../../coach.module.css";
@@ -319,7 +320,7 @@ export default function DashboardClient({
             <p style={{ margin: 0, fontWeight: 700, color: "var(--gold)", fontSize: 13 }}>New payroll ready</p>
             <p className={styles.panelText} style={{ margin: "4px 0 0" }}>
               {money(newPayroll.total)} across {newPayroll.count} entr{newPayroll.count === 1 ? "y" : "ies"}, for{" "}
-              <FormattedDate value={newPayroll.periodStart} /> – <FormattedDate value={newPayroll.periodEnd} />.
+              {formatPeriodDate(newPayroll.periodStart)} – {formatPeriodDate(newPayroll.periodEnd, true)}.
             </p>
           </div>
           <a

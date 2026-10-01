@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FormattedDate, FormattedDateTime } from "@/components/formatted-time";
+import { FormattedDateTime } from "@/components/formatted-time";
+import { formatPeriodDate } from "@/lib/payroll/period";
 import { zonedTimeToUtc } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import styles from "../../coach.module.css";
@@ -33,10 +34,28 @@ interface FinalizedEntry {
   scheduledAt: string | null;
   label: string;
   isManual: boolean;
+  status?: string | null;
 }
+
+// Why a lesson pays, in plain words — late cancels and no-shows still
+// pay the coach (lib/payroll/calculate.ts PAID_STATUSES).
+const STATUS_LABEL: Record<string, string> = {
+  attended: "Attended",
+  "no-show": "No-show (paid)",
+  "late-forfeit": "Late cancel (paid)",
+  "cancelled-no-notice": "Late cancel (paid)",
+  occurred: "Group class",
+};
 
 function toDateInputValue(iso: string) {
   return iso.slice(0, 10);
+}
+
+// "To" is inclusive for the coach (Sep 1 – Sep 30), while periods are
+// stored with an exclusive end (Oct 1) — shift by a day each way.
+function shiftDate(date: string, days: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 function money(n: number) {
@@ -59,7 +78,7 @@ export default function PayrollRangePicker({
   initialFinalized: FinalizedEntry[];
 }) {
   const [start, setStart] = useState(toDateInputValue(initialPeriodStart));
-  const [end, setEnd] = useState(toDateInputValue(initialPeriodEnd));
+  const [end, setEnd] = useState(shiftDate(toDateInputValue(initialPeriodEnd), -1));
   const [estimate, setEstimate] = useState(initialEstimate);
   const [finalized, setFinalized] = useState(initialFinalized);
   const [loading, setLoading] = useState(false);
@@ -69,7 +88,7 @@ export default function PayrollRangePicker({
     // Eastern midnight, not UTC midnight — a UTC boundary starts 4-5
     // hours before the studio's own day actually turns over.
     const [sy, sm, sd] = start.split("-").map(Number);
-    const [ey, em, ed] = end.split("-").map(Number);
+    const [ey, em, ed] = shiftDate(end, 1).split("-").map(Number);
     const startIso = zonedTimeToUtc(sy, sm, sd, 0, 0, DEFAULT_TIMEZONE).toISOString();
     const endIso = zonedTimeToUtc(ey, em, ed, 0, 0, DEFAULT_TIMEZONE).toISOString();
     const res = await fetch(`/api/coach/payroll?start=${startIso}&end=${endIso}`);
@@ -137,7 +156,7 @@ export default function PayrollRangePicker({
                     <FormattedDateTime value={s.scheduledAt} />
                   </td>
                   <td>{s.studentName}</td>
-                  <td>{s.status}</td>
+                  <td>{STATUS_LABEL[s.status] ?? s.status}</td>
                   <td>{s.durationMinutes} min</td>
                   <td>${s.amount.toFixed(2)}</td>
                 </tr>
@@ -154,7 +173,8 @@ export default function PayrollRangePicker({
       <div className={styles.panel}>
         <h2>Finalized pay runs</h2>
         <p className={styles.panelText}>
-          Entries admin has already generated and locked in for this range.
+          Entries admin has already generated and locked in for this range, including any bonuses or
+          deductions — this total is what you&apos;ll be paid. The estimate above covers lessons only.
         </p>
         {finalized.length === 0 ? (
           <p className={styles.emptyState}>Nothing finalized yet for this range.</p>
@@ -164,9 +184,10 @@ export default function PayrollRangePicker({
               <tr>
                 <th>Date</th>
                 <th>Details</th>
+                <th>Lesson</th>
                 <th>Pay period</th>
                 <th>Amount</th>
-                <th>Status</th>
+                <th>Payment</th>
               </tr>
             </thead>
             <tbody>
@@ -181,8 +202,9 @@ export default function PayrollRangePicker({
                       </span>
                     )}
                   </td>
+                  <td>{f.status ? (STATUS_LABEL[f.status] ?? f.status) : f.isManual ? "—" : "Group class"}</td>
                   <td>
-                    <FormattedDate value={f.periodStart} /> – <FormattedDate value={f.periodEnd} />
+                    {formatPeriodDate(f.periodStart)} – {formatPeriodDate(f.periodEnd, true)}
                   </td>
                   <td style={f.amount < 0 ? { color: "var(--coral)" } : undefined}>{money(Number(f.amount))}</td>
                   <td>
@@ -192,6 +214,11 @@ export default function PayrollRangePicker({
                   </td>
                 </tr>
               ))}
+              <tr className={styles.totalRow}>
+                <td colSpan={4}>Total</td>
+                <td>{money(finalized.reduce((sum, f) => sum + Number(f.amount), 0))}</td>
+                <td />
+              </tr>
             </tbody>
           </table>
         )}

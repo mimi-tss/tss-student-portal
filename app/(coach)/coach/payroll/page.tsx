@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeCoachPayroll } from "@/lib/payroll/calculate";
 import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
+import { periodBoundary } from "@/lib/payroll/period";
 import PayrollRangePicker from "./payroll-range-picker";
 import styles from "../../coach.module.css";
 
@@ -40,15 +41,15 @@ export default async function CoachPayrollPage({
   const [nowYear, nowMonth] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
   const defaultStart = zonedTimeToUtc(nowYear, nowMonth, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
   const defaultEnd = zonedTimeToUtc(nowYear, nowMonth + 1, 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
-  const periodStart = startParam ?? defaultStart;
-  const periodEnd = endParam ?? defaultEnd;
+  const periodStart = startParam ? periodBoundary(startParam) : defaultStart;
+  const periodEnd = endParam ? periodBoundary(endParam) : defaultEnd;
 
   const estimate = await computeCoachPayroll(supabase, coach.id, periodStart, periodEnd);
 
   const { data: finalized } = await supabase
     .from("payroll_entries")
     .select(
-      "id, amount, period_start, period_end, paid, is_manual, reason, sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
+      "id, amount, period_start, period_end, paid, is_manual, reason, sessions(scheduled_at, duration_minutes, status, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
     .eq("coach_id", coach.id)
     .lte("period_start", periodEnd)
@@ -77,6 +78,7 @@ export default async function CoachPayrollPage({
           const session = f.sessions as unknown as {
             scheduled_at: string;
             duration_minutes: number;
+            status: string;
             students: { name: string } | null;
           } | null;
           const groupLesson = f.group_lessons as unknown as {
@@ -97,6 +99,7 @@ export default async function CoachPayrollPage({
                 ? (session.students?.name ?? "Student")
                 : (groupLesson?.topic ?? "Group Lesson"),
             isManual: f.is_manual,
+            status: session?.status ?? null,
           };
         })}
       />

@@ -68,12 +68,12 @@ export default async function CoachDashboardPage({
       ? {
           total: Math.round(unseenPayroll.reduce((sum, e) => sum + e.amount, 0) * 100) / 100,
           count: unseenPayroll.length,
-          // period_start/period_end are plain `date` columns — pinned to
-          // midnight UTC so they carry the same exclusive-upper-bound
-          // convention as every other periodStart/periodEnd in this app
-          // (e.g. Finance's own `${endDate}T00:00:00Z`).
-          periodStart: `${unseenPayroll.reduce((min, e) => (e.period_start < min ? e.period_start : min), unseenPayroll[0].period_start)}T00:00:00.000Z`,
-          periodEnd: `${unseenPayroll.reduce((max, e) => (e.period_end > max ? e.period_end : max), unseenPayroll[0].period_end)}T00:00:00.000Z`,
+          // Plain `date` values ("2026-09-01"; period_end exclusive) —
+          // /coach/payroll reads a bare date as the studio's Eastern
+          // midnight (lib/payroll/period.ts), matching how Finance
+          // generated the run.
+          periodStart: unseenPayroll.reduce((min, e) => (e.period_start < min ? e.period_start : min), unseenPayroll[0].period_start),
+          periodEnd: unseenPayroll.reduce((max, e) => (e.period_end > max ? e.period_end : max), unseenPayroll[0].period_end),
         }
       : null;
 
