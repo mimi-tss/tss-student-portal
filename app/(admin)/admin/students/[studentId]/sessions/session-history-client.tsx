@@ -26,6 +26,7 @@ interface SessionRow {
   actual_coach_id: string;
   status: string;
   is_makeup: boolean;
+  cancel_reason: string | null;
 }
 
 const PAGE_SIZE = 50;
@@ -422,6 +423,7 @@ export default function SessionHistoryClient({
                   </p>
                   <p className={styles.mutedText} style={{ marginTop: 2 }}>
                     {STATUS_LABEL[s.status] ?? s.status}
+                    {s.cancel_reason && ` — "${s.cancel_reason}"`}
                   </p>
                   <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 16 }}>
                     {s.status === "scheduled" && (
