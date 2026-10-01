@@ -288,7 +288,10 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [attendance, setAttendance] = useState<CoachUnrecordedAttendance[] | null>(null);
   const [expandedUnrecordedCoach, setExpandedUnrecordedCoach] = useState<string | null>(null);
   const [notifying, setNotifying] = useState(false);
-  const [notifyResult, setNotifyResult] = useState<{ coachCount: number; sessionCount: number } | null>(null);
+  const [notifyResult, setNotifyResult] = useState<{ notified: boolean; coachCount: number; sessionCount: number } | null>(
+    null,
+  );
+  const [notifyError, setNotifyError] = useState<string | null>(null);
 
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -462,15 +465,24 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
 
   async function handleNotify() {
     setNotifying(true);
-    const res = await fetch("/api/admin/payroll/notify-attendance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ periodStart, periodEnd, coachId: coachId || undefined }),
-    });
-    setNotifying(false);
-    if (res.ok) {
-      const result = await res.json();
-      setNotifyResult(result);
+    setNotifyResult(null);
+    setNotifyError(null);
+    try {
+      const res = await fetch("/api/admin/payroll/notify-attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ periodStart, periodEnd, coachId: coachId || undefined }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setNotifyError(body?.error ?? "Couldn't send the notification.");
+        return;
+      }
+      setNotifyResult(body);
+    } catch {
+      setNotifyError("Couldn't reach the server — check your connection and try again.");
+    } finally {
+      setNotifying(false);
     }
   }
 
@@ -593,10 +605,20 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
             <button onClick={handleNotify} disabled={notifying} className={styles.ctaSmall}>
               {notifying ? "Notifying…" : "Notify coaches"}
             </button>
-            {notifyResult && (
+            {notifyError && (
+              <p className={styles.errorText} style={{ marginTop: 8 }}>
+                {notifyError}
+              </p>
+            )}
+            {notifyResult && notifyResult.notified && (
               <p className={styles.successText} style={{ marginTop: 8 }}>
                 Slack message sent — {notifyResult.coachCount} coach{notifyResult.coachCount === 1 ? "" : "es"},{" "}
                 {notifyResult.sessionCount} session{notifyResult.sessionCount === 1 ? "" : "s"}.
+              </p>
+            )}
+            {notifyResult && !notifyResult.notified && (
+              <p className={styles.mutedText} style={{ marginTop: 8 }}>
+                Nothing to notify — no unmarked sessions in this range.
               </p>
             )}
           </>
