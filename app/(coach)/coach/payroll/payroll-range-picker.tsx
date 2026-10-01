@@ -191,7 +191,10 @@ export default function PayrollRangePicker({
               </tr>
             </thead>
             <tbody>
-              {finalized.map((f) => (
+              {/* Oldest lesson first; adjustments (no lesson date) on top. */}
+              {[...finalized]
+                .sort((a, b) => (a.scheduledAt ?? "").localeCompare(b.scheduledAt ?? ""))
+                .map((f) => (
                 <tr key={f.id}>
                   <td>{f.scheduledAt ? <FormattedDateTime value={f.scheduledAt} /> : "—"}</td>
                   <td>
