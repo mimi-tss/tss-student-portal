@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
           "id, amount, period_start, period_end, paid, is_manual, reason, sessions(scheduled_at, duration_minutes, status, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
         )
         .eq("coach_id", coach.id)
-        .lte("period_start", periodEnd)
-        .gte("period_end", periodStart)
+        .lt("period_start", periodEnd)
+        .gt("period_end", periodStart)
         .order("period_start", { ascending: false }),
       // Sessions in this range that already happened but the coach hasn't
       // marked yet — feeds "My Schedule"'s clickable "Needs attendance"

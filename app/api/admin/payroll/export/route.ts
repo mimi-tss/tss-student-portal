@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
     .select(
       "id, amount, paid, period_start, period_end, is_manual, reason, created_at, coaches(name), sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
-    .lte("period_start", periodEnd)
-    .gte("period_end", periodStart)
+    .lt("period_start", periodEnd)
+    .gt("period_end", periodStart)
     .order("period_start");
 
   if (coachId) query = query.eq("coach_id", coachId);

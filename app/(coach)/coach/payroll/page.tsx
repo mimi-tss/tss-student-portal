@@ -52,8 +52,8 @@ export default async function CoachPayrollPage({
       "id, amount, period_start, period_end, paid, is_manual, reason, sessions(scheduled_at, duration_minutes, status, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
     .eq("coach_id", coach.id)
-    .lte("period_start", periodEnd)
-    .gte("period_end", periodStart)
+    .lt("period_start", periodEnd)
+    .gt("period_end", periodStart)
     .order("period_start", { ascending: false });
 
   const finalizedIds = (finalized ?? []).map((f) => f.id);

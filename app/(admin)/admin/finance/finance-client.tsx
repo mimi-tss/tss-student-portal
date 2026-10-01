@@ -64,6 +64,9 @@ interface GenerateResult {
   inserted: number;
   skippedAlreadyPaid: number;
   perCoach: GeneratedRunCoachSummary[];
+  // Everything owed per coach for the period, earlier bonuses/deductions
+  // included (app/api/admin/payroll/generate).
+  periodTotals?: { coachId: string; coachName: string; lines: number; adjustments: number; total: number }[];
 }
 
 // A 1:1 session's status is always one of PAID_STATUSES
@@ -413,6 +416,24 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
     }
   }
 
+  // Marks (or un-marks) every finalized line for one coach in this range
+  // — the per-line toggle below is still there for exceptions.
+  async function handleMarkCoachPaid(coachName: string, paid: boolean) {
+    const ids = (history ?? []).filter((e) => e.coachName === coachName && e.paid !== paid).map((e) => e.id);
+    if (ids.length === 0) return;
+    setMarking(coachName);
+    const res = await fetch("/api/admin/payroll/mark-paid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entryIds: ids, paid }),
+    });
+    setMarking(null);
+    if (res.ok) {
+      const idSet = new Set(ids);
+      setHistory((prev) => (prev ? prev.map((e) => (idSet.has(e.id) ? { ...e, paid } : e)) : prev));
+    }
+  }
+
   async function handleAddAdjustment() {
     setAdjustmentError(null);
     const parsed = Number(adjAmount);
@@ -516,7 +537,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
         <div className={styles.overviewCard}>
           <div className={styles.overviewCardLabel}>Live rollup — this range</div>
           <div className={styles.overviewCardValue}>${grandTotal.toFixed(2)}</div>
-          <div className={styles.overviewCardSub}>Not yet frozen into a payroll run</div>
+          <div className={styles.overviewCardSub}>Lessons and salary only, before bonuses/deductions</div>
         </div>
         <div className={styles.overviewCard}>
           <div className={styles.overviewCardLabel}>Finalized — this range</div>
@@ -785,7 +806,39 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                 : ""}
               . Each coach below will see their share flagged as new payroll on their own dashboard.
             </p>
-            {generateResult.perCoach.length === 0 ? (
+            {generateResult.periodTotals && generateResult.periodTotals.length > 0 ? (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Coach</th>
+                    <th>New this run</th>
+                    <th>Bonuses / deductions</th>
+                    <th>Total to pay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {generateResult.periodTotals.map((c) => {
+                    const added = generateResult.perCoach.find((p) => p.coachId === c.coachId);
+                    return (
+                      <tr key={c.coachId}>
+                        <td className={styles.rowName}>{c.coachName}</td>
+                        <td className={styles.mutedText}>
+                          {added ? `${added.entries} lines · ${money(added.total)}` : "—"}
+                        </td>
+                        <td style={c.adjustments < 0 ? { color: "var(--coral)" } : undefined}>
+                          {c.adjustments ? money(c.adjustments) : "—"}
+                        </td>
+                        <td>{money(c.total)}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className={styles.totalRow}>
+                    <td colSpan={3}>Total for this pay run</td>
+                    <td>{money(generateResult.periodTotals.reduce((sum, c) => sum + c.total, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : generateResult.perCoach.length === 0 ? (
               <p className={styles.emptyState}>Nothing new to report — every entry already existed.</p>
             ) : (
               <table className={styles.table}>
@@ -894,6 +947,50 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
 
       <div className={styles.panel}>
         <h2>Finalized entries — this range</h2>
+        {history && history.length > 0 && (
+          <table className={styles.table} style={{ marginBottom: 20 }}>
+            <thead>
+              <tr>
+                <th>Coach</th>
+                <th>Lines</th>
+                <th>Total to pay</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from(new Set(history.map((e) => e.coachName)))
+                .sort()
+                .map((name) => {
+                  const lines = history.filter((e) => e.coachName === name);
+                  const total = Math.round(lines.reduce((sum, e) => sum + e.amount, 0) * 100) / 100;
+                  const paidCount = lines.filter((e) => e.paid).length;
+                  const allPaid = paidCount === lines.length;
+                  return (
+                    <tr key={name}>
+                      <td className={styles.rowName}>{name}</td>
+                      <td className={styles.mutedText}>{lines.length}</td>
+                      <td>{money(total)}</td>
+                      <td>
+                        <span className={allPaid ? styles.badge : styles.badgeMuted}>
+                          {allPaid ? "Paid" : paidCount > 0 ? `${paidCount} of ${lines.length} paid` : "Unpaid"}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => handleMarkCoachPaid(name, !allPaid)}
+                          disabled={marking === name}
+                          className={allPaid ? styles.btnGhost : styles.ctaSmall}
+                        >
+                          {marking === name ? "Saving…" : allPaid ? "Undo paid" : "Mark paid"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        )}
         {history === null ? (
           <p className={styles.mutedText}>Loading…</p>
         ) : history.length === 0 ? (
