@@ -117,7 +117,9 @@ function previousMonthRange() {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
   const start = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
-  const end = `${year}-${String(month).padStart(2, "0")}-01`;
+  // End is inclusive (the month's last day) — see periodEnd below.
+  const lastDay = new Date(Date.UTC(prevYear, prevMonth, 0)).getUTCDate();
+  const end = `${prevYear}-${String(prevMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return { start, end };
 }
 
@@ -317,9 +319,13 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
     const [y, m, d] = startDate.split("-").map(Number);
     return zonedTimeToUtc(y, m, d, 0, 0, DEFAULT_TIMEZONE).toISOString();
   })();
+  // The End date is included: periods run up to Eastern midnight the
+  // morning *after* it (exclusive), so "Sep 1 – Sep 30" covers Sep 30's
+  // evening lessons. It used to mean "up to the start of End", which
+  // silently dropped the last day when End was set to the month's end.
   const periodEnd = (() => {
     const [y, m, d] = endDate.split("-").map(Number);
-    return zonedTimeToUtc(y, m, d, 0, 0, DEFAULT_TIMEZONE).toISOString();
+    return zonedTimeToUtc(y, m, d + 1, 0, 0, DEFAULT_TIMEZONE).toISOString();
   })();
 
   function loadRollup() {
@@ -533,7 +539,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
             />
           </div>
           <div className={styles.field}>
-            <label htmlFor="payroll-end">End</label>
+            <label htmlFor="payroll-end">End (included)</label>
             <input
               id="payroll-end"
               type="date"
