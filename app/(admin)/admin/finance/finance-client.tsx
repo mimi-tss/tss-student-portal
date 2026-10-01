@@ -44,6 +44,7 @@ interface HistoryEntry {
   durationMinutes: number;
   amount: number;
   paid: boolean;
+  paidOn?: string | null;
   isManual: boolean;
 }
 
@@ -320,6 +321,11 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [unmarking, setUnmarking] = useState<string | null>(null);
 
+  // Deposit date for "Mark this pay run paid" — defaults to today (ET).
+  const [paidOnDate, setPaidOnDate] = useState(() => {
+    const [y, m, d] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  });
   const [adjCoachId, setAdjCoachId] = useState("");
   const [adjKind, setAdjKind] = useState<"bonus" | "deduction">("bonus");
   const [adjAmount, setAdjAmount] = useState("");
@@ -416,21 +422,26 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
     }
   }
 
-  // Marks (or un-marks) every finalized line for one coach in this range
-  // — the per-line toggle below is still there for exceptions.
-  async function handleMarkCoachPaid(coachName: string, paid: boolean) {
-    const ids = (history ?? []).filter((e) => e.coachName === coachName && e.paid !== paid).map((e) => e.id);
+  // Marks (or un-marks) every finalized line in this range — the whole
+  // run, or one coach's share (coachName) — with the deposit date
+  // (paidOnDate). The per-line toggle below is still there for exceptions.
+  async function handleMarkRunPaid(paid: boolean, coachName?: string) {
+    const ids = (history ?? [])
+      .filter((e) => (coachName === undefined || e.coachName === coachName) && (paid || e.paid))
+      .map((e) => e.id);
     if (ids.length === 0) return;
-    setMarking(coachName);
+    setMarking(coachName ?? "__run__");
     const res = await fetch("/api/admin/payroll/mark-paid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entryIds: ids, paid }),
+      body: JSON.stringify({ entryIds: ids, paid, paidOn: paid ? paidOnDate : null }),
     });
     setMarking(null);
     if (res.ok) {
       const idSet = new Set(ids);
-      setHistory((prev) => (prev ? prev.map((e) => (idSet.has(e.id) ? { ...e, paid } : e)) : prev));
+      setHistory((prev) =>
+        prev ? prev.map((e) => (idSet.has(e.id) ? { ...e, paid, paidOn: paid ? paidOnDate : null } : e)) : prev,
+      );
     }
   }
 
@@ -948,6 +959,37 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
       <div className={styles.panel}>
         <h2>Finalized entries — this range</h2>
         {history && history.length > 0 && (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div className={styles.field}>
+              <label htmlFor="paid-on">Payment date (when it lands in their bank)</label>
+              <input
+                id="paid-on"
+                type="date"
+                value={paidOnDate}
+                onChange={(e) => setPaidOnDate(e.target.value)}
+                className={styles.input}
+              />
+            </div>
+            {history.every((e) => e.paid) ? (
+              <button
+                onClick={() => handleMarkRunPaid(false)}
+                disabled={marking === "__run__"}
+                className={styles.btnGhost}
+              >
+                {marking === "__run__" ? "Saving…" : "Undo — mark whole run unpaid"}
+              </button>
+            ) : (
+              <button
+                onClick={() => handleMarkRunPaid(true)}
+                disabled={marking === "__run__" || !paidOnDate}
+                className={styles.cta}
+              >
+                {marking === "__run__" ? "Saving…" : `Mark this pay run paid (${formatPlainDay(paidOnDate)})`}
+              </button>
+            )}
+          </div>
+        )}
+        {history && history.length > 0 && (
           <table className={styles.table} style={{ marginBottom: 20 }}>
             <thead>
               <tr>
@@ -966,6 +1008,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                   const total = Math.round(lines.reduce((sum, e) => sum + e.amount, 0) * 100) / 100;
                   const paidCount = lines.filter((e) => e.paid).length;
                   const allPaid = paidCount === lines.length;
+                  const paidOn = lines.find((e) => e.paidOn)?.paidOn;
                   return (
                     <tr key={name}>
                       <td className={styles.rowName}>{name}</td>
@@ -973,16 +1016,20 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                       <td>{money(total)}</td>
                       <td>
                         <span className={allPaid ? styles.badge : styles.badgeMuted}>
-                          {allPaid ? "Paid" : paidCount > 0 ? `${paidCount} of ${lines.length} paid` : "Unpaid"}
+                          {allPaid
+                            ? `Paid${paidOn ? ` ${formatPlainDay(paidOn)}` : ""}`
+                            : paidCount > 0
+                              ? `${paidCount} of ${lines.length} paid`
+                              : "Unpaid"}
                         </span>
                       </td>
                       <td>
                         <button
-                          onClick={() => handleMarkCoachPaid(name, !allPaid)}
+                          onClick={() => handleMarkRunPaid(!allPaid, name)}
                           disabled={marking === name}
-                          className={allPaid ? styles.btnGhost : styles.ctaSmall}
+                          className={styles.btnGhost}
                         >
-                          {marking === name ? "Saving…" : allPaid ? "Undo paid" : "Mark paid"}
+                          {marking === name ? "Saving…" : allPaid ? "Undo" : "Mark just this coach"}
                         </button>
                       </td>
                     </tr>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import { formatPeriodDate } from "@/lib/payroll/period";
-import { zonedTimeToUtc } from "@/lib/timezone";
+import { zonedTimeToUtc, zonedYearMonthDay } from "@/lib/timezone";
 import { DEFAULT_TIMEZONE } from "@/lib/timezones";
 import styles from "../../coach.module.css";
 
@@ -31,6 +31,7 @@ interface FinalizedEntry {
   periodStart: string;
   periodEnd: string;
   paid: boolean;
+  paidOn?: string | null;
   scheduledAt: string | null;
   label: string;
   isManual: boolean;
@@ -56,6 +57,16 @@ function toDateInputValue(iso: string) {
 function shiftDate(date: string, days: number) {
   const [y, m, d] = date.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+// "Paid 10/5/2026", or "Paying 10/5/2026" while the deposit date is
+// still ahead (studio calendar, Eastern).
+function paymentLabel(f: { paid: boolean; paidOn?: string | null }) {
+  if (!f.paid) return "Pending";
+  if (!f.paidOn) return "Paid";
+  const [y, m, d] = zonedYearMonthDay(new Date(), DEFAULT_TIMEZONE);
+  const today = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${f.paidOn > today ? "Paying" : "Paid"} ${formatPeriodDate(f.paidOn)}`;
 }
 
 function money(n: number) {
@@ -242,7 +253,7 @@ export default function PayrollRangePicker({
                   <td style={f.amount < 0 ? { color: "var(--coral)" } : undefined}>{money(Number(f.amount))}</td>
                   <td>
                     <span className={f.paid ? styles.badge : styles.badgeMuted}>
-                      {f.paid ? "Paid" : "Pending"}
+                      {paymentLabel(f)}
                     </span>
                   </td>
                 </tr>

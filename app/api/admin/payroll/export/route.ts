@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("payroll_entries")
     .select(
-      "id, amount, paid, period_start, period_end, is_manual, reason, created_at, coaches(name), sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
+      "id, amount, paid, paid_on, period_start, period_end, is_manual, reason, created_at, coaches(name), sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
     .lt("period_start", periodEnd)
     .gt("period_end", periodStart)
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = [["Coach", "Date", "Type", "Student / Topic", "Duration (min)", "Amount", "Paid"]];
+  const rows = [["Coach", "Date", "Type", "Student / Topic", "Duration (min)", "Amount", "Paid", "Paid on"]];
   for (const entry of data ?? []) {
     const coachName = (entry.coaches as unknown as { name: string } | null)?.name ?? "";
     const session = entry.sessions as unknown as {
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
       String(duration),
       entry.amount.toFixed(2),
       entry.paid ? "Yes" : "No",
+      entry.paid_on ?? "",
     ]);
   }
 

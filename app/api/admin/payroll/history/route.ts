@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("payroll_entries")
     .select(
-      "id, amount, paid, is_manual, reason, created_at, coaches(name), sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
+      "id, amount, paid, paid_on, is_manual, reason, created_at, coaches(name), sessions(scheduled_at, duration_minutes, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
     .lt("period_start", periodEnd)
     .gt("period_end", periodStart)
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       durationMinutes: session?.duration_minutes ?? groupLesson?.duration_minutes ?? 0,
       amount: entry.amount,
       paid: entry.paid,
+      paidOn: entry.paid_on,
       isManual: entry.is_manual,
     };
   });

@@ -49,7 +49,7 @@ export default async function CoachPayrollPage({
   const { data: finalized } = await supabase
     .from("payroll_entries")
     .select(
-      "id, amount, period_start, period_end, paid, is_manual, reason, sessions(scheduled_at, duration_minutes, status, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
+      "id, amount, period_start, period_end, paid, paid_on, is_manual, reason, sessions(scheduled_at, duration_minutes, status, students(name)), group_lessons(topic, scheduled_at, duration_minutes)",
     )
     .eq("coach_id", coach.id)
     .lt("period_start", periodEnd)
@@ -92,6 +92,7 @@ export default async function CoachPayrollPage({
             periodStart: f.period_start,
             periodEnd: f.period_end,
             paid: f.paid,
+            paidOn: f.paid_on,
             scheduledAt: session?.scheduled_at ?? groupLesson?.scheduled_at ?? null,
             label: f.is_manual
               ? (f.reason ?? "Adjustment")
