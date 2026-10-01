@@ -104,9 +104,6 @@ export async function findFifthWeekOpportunities(
     if (!st || st.archived) continue;
     if (st.tier !== "pro" && st.tier !== "elite") continue;
     if (st.subscription_status !== "active") continue;
-    // Ambassadors (e.g. Mimi, Sebastian) never get a bonus week — no
-    // offer, no notice (studio call 2026-10-01).
-    if (st.ambassador && !FIFTH_WEEK_PILOT_STUDENT_IDS.has(s.student_id)) continue;
     const tz = coach?.timezone ?? "America/New_York";
     const occurrenceAt = fifthWeekOccurrence(s.day_of_week, s.start_time, tz, now, st.billing_anniversary_date, holidayDates);
     if (!occurrenceAt) continue;
@@ -123,7 +120,10 @@ export async function findFifthWeekOpportunities(
       coachTimezone: tz,
       occurrenceAt,
       durationMinutes: st.session_duration_minutes ?? 30,
-      noBonusLesson: isTaraCoach(coach?.name),
+      // Tara's students and ambassadors (e.g. Mimi, Sebastian) get the
+      // "no lesson that week" notice instead of an offer (studio calls
+      // 2026-09-29, 2026-10-01). The pilot overrides that for the test.
+      noBonusLesson: isTaraCoach(coach?.name) || (!!st.ambassador && !FIFTH_WEEK_PILOT_STUDENT_IDS.has(s.student_id)),
     });
   }
   if (!found.length) return [];

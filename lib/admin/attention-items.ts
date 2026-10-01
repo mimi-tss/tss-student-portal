@@ -424,7 +424,7 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
       Array.isArray(s.students) ? s.students[0] : s.students
     ) as { name: string; tier: string; subscription_status: string; billing_anniversary_date: string | null; ambassador: boolean | null } | null;
     if (!student) continue;
-    if (student.ambassador) continue; // ambassadors never get a bonus week
+    if (student.ambassador) continue; // ambassadors get the "no lesson" notice, nothing to offer
     if (student.tier !== "pro" && student.tier !== "elite") continue;
     if (student.subscription_status !== "active") continue;
 
