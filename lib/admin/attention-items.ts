@@ -2,7 +2,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { fifthWeekOccurrence } from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
-import { isTaraCoach } from "@/lib/scheduling/fifth-week-offers";
+import { FIFTH_WEEK_SELF_SERVE_ENABLED, isTaraCoach } from "@/lib/scheduling/fifth-week-offers";
 import { getStripeClient } from "@/lib/stripe/client";
 import { STRIPE_PRICE_BY_TIER, type BillingInterval } from "@/lib/stripe/tiers";
 import type { StripeAccount, Tier } from "@/types/database";
@@ -400,12 +400,16 @@ async function syncRecordingPipelineStaleAttentionItem(supabase: SupabaseClient)
 // as the recording kinds above: only ever the CURRENT cycle's own
 // opportunity, never a backlog of cycles that already passed.
 async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
+  // Once students get the offer and buy it themselves, there's nothing
+  // for admin to do — purchases post to Slack instead (studio call
+  // 2026-10-01).
+  if (FIFTH_WEEK_SELF_SERVE_ENABLED) return;
   const now = new Date();
 
   const { data: schedules } = await supabase
     .from("recurring_schedules")
     .select(
-      "student_id, coach_id, day_of_week, start_time, cadence, students(name, tier, subscription_status, billing_anniversary_date), coaches(name, timezone)",
+      "student_id, coach_id, day_of_week, start_time, cadence, students(name, tier, subscription_status, billing_anniversary_date, ambassador), coaches(name, timezone)",
     )
     .eq("active", true)
     .eq("cadence", "weekly");
@@ -418,8 +422,9 @@ async function syncFifthWeekAttentionItems(supabase: SupabaseClient) {
   for (const s of schedules) {
     const student = (
       Array.isArray(s.students) ? s.students[0] : s.students
-    ) as { name: string; tier: string; subscription_status: string; billing_anniversary_date: string | null } | null;
+    ) as { name: string; tier: string; subscription_status: string; billing_anniversary_date: string | null; ambassador: boolean | null } | null;
     if (!student) continue;
+    if (student.ambassador) continue; // ambassadors never get a bonus week
     if (student.tier !== "pro" && student.tier !== "elite") continue;
     if (student.subscription_status !== "active") continue;
 

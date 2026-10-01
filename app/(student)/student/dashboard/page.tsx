@@ -16,7 +16,7 @@ import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import FifthWeekCard from "./fifth-week-card";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FIFTH_WEEK_SELF_SERVE_ENABLED, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import { fifthWeekSelfServeFor, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import styles from "../../student.module.css";
 
@@ -245,7 +245,7 @@ export default async function StudentDashboardPage() {
   // the buy route re-checks everything before charging. Hidden within 6h
   // of the lesson, same cutoff as the offer emails.
   const [bonus] = (
-    FIFTH_WEEK_SELF_SERVE_ENABLED
+    fifthWeekSelfServeFor(student.id)
       ? await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])
       : []
   ).filter(

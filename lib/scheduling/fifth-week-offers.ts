@@ -18,6 +18,16 @@ import { formatPrice } from "@/lib/stripe/tiers";
 // STUDENT_NOTIFICATIONS_PAUSED.
 export const FIFTH_WEEK_SELF_SERVE_ENABLED = false;
 
+// Pilot: students who get the self-serve side (dashboard card + buy
+// route) before the master switch is on — for the studio's own live test
+// purchase. Also bypasses the ambassador exclusion below. Mimi Orac
+// (studio call 2026-10-01). Empty this once the switch is on.
+const FIFTH_WEEK_PILOT_STUDENT_IDS: ReadonlySet<string> = new Set(["5c4651e0-f842-403a-9d4a-70e3604f732c"]);
+
+export function fifthWeekSelfServeFor(studentId: string): boolean {
+  return FIFTH_WEEK_SELF_SERVE_ENABLED || FIFTH_WEEK_PILOT_STUDENT_IDS.has(studentId);
+}
+
 export interface FifthWeekOpportunity {
   studentId: string;
   studentName: string;
@@ -59,6 +69,7 @@ interface ScheduleRow {
     billing_anniversary_date: string | null;
     session_duration_minutes: number | null;
     archived: boolean;
+    ambassador: boolean | null;
     notify_alerts_email: boolean;
     notify_alerts_sms: boolean;
     notify_alerts_inapp: boolean;
@@ -75,7 +86,7 @@ export async function findFifthWeekOpportunities(
     .from("recurring_schedules")
     .select(
       "student_id, coach_id, day_of_week, start_time, " +
-        "students(name, email, phone, tier, subscription_status, billing_anniversary_date, session_duration_minutes, archived, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
+        "students(name, email, phone, tier, subscription_status, billing_anniversary_date, session_duration_minutes, archived, ambassador, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
         "coaches(name, timezone)",
     )
     .eq("active", true)
@@ -93,6 +104,9 @@ export async function findFifthWeekOpportunities(
     if (!st || st.archived) continue;
     if (st.tier !== "pro" && st.tier !== "elite") continue;
     if (st.subscription_status !== "active") continue;
+    // Ambassadors (e.g. Mimi, Sebastian) never get a bonus week — no
+    // offer, no notice (studio call 2026-10-01).
+    if (st.ambassador && !FIFTH_WEEK_PILOT_STUDENT_IDS.has(s.student_id)) continue;
     const tz = coach?.timezone ?? "America/New_York";
     const occurrenceAt = fifthWeekOccurrence(s.day_of_week, s.start_time, tz, now, st.billing_anniversary_date, holidayDates);
     if (!occurrenceAt) continue;
