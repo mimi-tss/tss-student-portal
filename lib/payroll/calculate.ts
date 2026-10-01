@@ -334,6 +334,8 @@ export interface UnrecordedSession {
 export interface CoachUnrecordedAttendance {
   coachId: string;
   coachName: string;
+  coachTimezone: string;
+  coachSlackWebhookUrl: string | null;
   sessions: UnrecordedSession[];
 }
 
@@ -353,7 +355,7 @@ export async function findUnrecordedAttendance(
 ): Promise<CoachUnrecordedAttendance[]> {
   let query = supabase
     .from("sessions")
-    .select("id, scheduled_at, actual_coach_id, coaches(name), students(name)")
+    .select("id, scheduled_at, actual_coach_id, coaches(name, timezone, slack_webhook_url), students(name)")
     .eq("status", "scheduled")
     .gte("scheduled_at", periodStart)
     .lt("scheduled_at", periodEnd)
@@ -366,7 +368,7 @@ export async function findUnrecordedAttendance(
 
   const byCoach = new Map<string, CoachUnrecordedAttendance>();
   for (const s of data ?? []) {
-    const coach = s.coaches as unknown as { name: string } | null;
+    const coach = s.coaches as unknown as { name: string; timezone: string; slack_webhook_url: string | null } | null;
     const student = s.students as unknown as { name: string } | null;
     const existing = byCoach.get(s.actual_coach_id);
     const session: UnrecordedSession = {
@@ -380,6 +382,8 @@ export async function findUnrecordedAttendance(
       byCoach.set(s.actual_coach_id, {
         coachId: s.actual_coach_id,
         coachName: coach?.name ?? "Coach",
+        coachTimezone: coach?.timezone ?? "America/New_York",
+        coachSlackWebhookUrl: coach?.slack_webhook_url ?? null,
         sessions: [session],
       });
     }

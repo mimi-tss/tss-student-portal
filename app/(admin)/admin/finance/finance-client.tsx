@@ -288,9 +288,12 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [attendance, setAttendance] = useState<CoachUnrecordedAttendance[] | null>(null);
   const [expandedUnrecordedCoach, setExpandedUnrecordedCoach] = useState<string | null>(null);
   const [notifying, setNotifying] = useState(false);
-  const [notifyResult, setNotifyResult] = useState<{ notified: boolean; coachCount: number; sessionCount: number } | null>(
-    null,
-  );
+  const [notifyResult, setNotifyResult] = useState<{
+    notified: boolean;
+    coachCount: number;
+    sessionCount: number;
+    missingSlackCoaches: string[];
+  } | null>(null);
   const [notifyError, setNotifyError] = useState<string | null>(null);
 
   const [confirming, setConfirming] = useState(false);
@@ -611,10 +614,17 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
               </p>
             )}
             {notifyResult && notifyResult.notified && (
-              <p className={styles.successText} style={{ marginTop: 8 }}>
-                Slack message sent — {notifyResult.coachCount} coach{notifyResult.coachCount === 1 ? "" : "es"},{" "}
-                {notifyResult.sessionCount} session{notifyResult.sessionCount === 1 ? "" : "s"}.
-              </p>
+              <>
+                <p className={styles.successText} style={{ marginTop: 8 }}>
+                  Slack message sent — {notifyResult.coachCount} coach{notifyResult.coachCount === 1 ? "" : "es"},{" "}
+                  {notifyResult.sessionCount} session{notifyResult.sessionCount === 1 ? "" : "s"}.
+                </p>
+                {notifyResult.missingSlackCoaches.length > 0 && (
+                  <p className={styles.errorText} style={{ marginTop: 4 }}>
+                    No Slack channel on file, not notified: {notifyResult.missingSlackCoaches.join(", ")}.
+                  </p>
+                )}
+              </>
             )}
             {notifyResult && !notifyResult.notified && (
               <p className={styles.mutedText} style={{ marginTop: 8 }}>
