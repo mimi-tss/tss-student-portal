@@ -5,7 +5,9 @@ import { isAdminRole } from "@/lib/auth/roles";
 import { getHolidayDateKeys, isHolidayInstant } from "@/lib/scheduling/holidays";
 import { notifyCoachSessionEvent } from "@/lib/notifications/session-events";
 import { canBookLessons } from "@/lib/billing/subscription-gate";
-import { getHeldRecurringSlots } from "@/lib/scheduling/recurring";
+import { getHeldRecurringSlots, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import { resolveWorkingHoursForDate, type WorkingHours } from "@/lib/scheduling/working-hours";
+import { zonedHourMinute, zonedYearMonthDay } from "@/lib/timezone";
 import { notifyStudentSessionBooked } from "@/lib/notifications/booking-events";
 
 // Booking a slot — a session-credit booking against the student's own
@@ -209,6 +211,38 @@ export async function POST(req: NextRequest) {
   const durationMinutes = trial
     ? 30
     : (credit?.duration_minutes ?? student.session_duration_minutes ?? 30);
+
+  // The slot must sit inside the coach's working hours (their own zone,
+  // with any queued hours change resolved for that date). /api/booking/slots
+  // only ever offers such times, but nothing re-checked it here, so a
+  // direct slotStart — e.g. admin's "Add lesson" on a Needs Review item —
+  // could book outside them. Confirmed live: a launch-night 5th-week item
+  // 4 hours off booked Anthony at 5:30am his coach's time.
+  const { data: coachHours } = await createAdminClient()
+    .from("coaches")
+    .select("working_hours, pending_working_hours, pending_effective_date, timezone")
+    .eq("id", coachId)
+    .single();
+  const coachZone = coachHours?.timezone ?? "America/New_York";
+  const slotInstant = new Date(slotStart);
+  const [cy, cm, cd] = zonedYearMonthDay(slotInstant, coachZone);
+  const [ch, cmin] = zonedHourMinute(slotInstant, coachZone);
+  const dateKey = `${cy}-${String(cm).padStart(2, "0")}-${String(cd).padStart(2, "0")}`;
+  const hoursThatDay = resolveWorkingHoursForDate(
+    {
+      workingHours: (coachHours?.working_hours ?? {}) as WorkingHours,
+      pendingWorkingHours: coachHours?.pending_working_hours as WorkingHours | null,
+      pendingEffectiveDate: coachHours?.pending_effective_date ?? null,
+    },
+    dateKey,
+  );
+  const startTime = `${String(ch).padStart(2, "0")}:${String(cmin).padStart(2, "0")}`;
+  if (!slotFitsWorkingHours(hoursThatDay, new Date(Date.UTC(cy, cm - 1, cd)).getUTCDay(), startTime, durationMinutes)) {
+    return NextResponse.json(
+      { error: "That time is outside the coach's working hours — pick another time." },
+      { status: 409 },
+    );
+  }
 
   // Same re-check for the coach's own group lessons — /api/booking/slots
   // already excludes these from what it offers (confirmed live: it
