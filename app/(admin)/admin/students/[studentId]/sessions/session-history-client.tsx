@@ -39,7 +39,17 @@ const STATUS_LABEL: Record<string, string> = {
   "cancelled-no-notice": "Late cancel — no credit",
 };
 
-const STATUS_OPTIONS = Object.keys(STATUS_LABEL);
+// "Staff cancel" isn't its own status: it saves as cancelled-with-notice
+// (coach not paid, see lib/payroll/calculate.ts PAID_STATUSES) with
+// "Staff cancel" on the audit note. Unlike the upcoming-lesson Staff
+// cancel button, it issues no credit — for fixing past records, e.g. a
+// lesson booked at the wrong time and rebooked.
+const STAFF_CANCEL = "staff-cancel";
+const STATUS_OPTIONS = [...Object.keys(STATUS_LABEL), STAFF_CANCEL];
+const OPTION_LABEL: Record<string, string> = {
+  ...STATUS_LABEL,
+  [STAFF_CANCEL]: "Staff cancel — coach not paid, no credit",
+};
 
 // datetime-local wants the browser's local wall-clock time with no
 // timezone suffix — same round-trip convention already used by
@@ -114,7 +124,15 @@ function SessionForm({
   async function handleSubmit() {
     setSaving(true);
     setError(null);
-    const err = await onSubmit({ scheduledAt, durationMinutes, coachId, status, note, creditId: creditId || null });
+    const staffCancel = status === STAFF_CANCEL;
+    const err = await onSubmit({
+      scheduledAt,
+      durationMinutes,
+      coachId,
+      status: staffCancel ? "cancelled-with-notice" : status,
+      note: staffCancel ? `Staff cancel${note.trim() ? `: ${note.trim()}` : ""}` : note,
+      creditId: creditId || null,
+    });
     setSaving(false);
     if (err) setError(err);
   }
@@ -157,7 +175,7 @@ function SessionForm({
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={styles.select}>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {OPTION_LABEL[s]}
               </option>
             ))}
           </select>
