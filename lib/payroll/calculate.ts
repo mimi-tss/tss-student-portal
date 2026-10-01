@@ -186,16 +186,26 @@ export async function computeCoachPayroll(
 }
 
 // All coaches, on the fly — no writes. Backs the admin rollup view.
+// Deliberately NOT filtered to active=true at the query level — an
+// inactive coach who worked earlier in this period still earned real
+// pay and must stay visible. Instead, an inactive coach is dropped from
+// the result only when they also have nothing owed at all ($0, covering
+// both hourly sessions and monthly salary — see `total`'s own comment):
+// confirmed live that a one-off test coach account with zero real
+// activity otherwise sits in this list forever showing $0.00.
 export async function computeAllCoachesPayroll(
   supabase: SupabaseClient,
   periodStart: string,
   periodEnd: string,
 ): Promise<CoachPayrollSummary[]> {
-  const { data: coaches } = await supabase.from("coaches").select("id").order("name");
+  const { data: coaches } = await supabase.from("coaches").select("id, active").order("name");
   const summaries = await Promise.all(
-    (coaches ?? []).map((c) => computeCoachPayroll(supabase, c.id, periodStart, periodEnd)),
+    (coaches ?? []).map(async (c) => ({
+      ...(await computeCoachPayroll(supabase, c.id, periodStart, periodEnd)),
+      active: c.active,
+    })),
   );
-  return summaries;
+  return summaries.filter((s) => s.active || s.total !== 0);
 }
 
 export interface GeneratedRunCoachSummary {
