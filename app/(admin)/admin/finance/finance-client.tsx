@@ -123,6 +123,18 @@ function previousMonthRange() {
   return { start, end };
 }
 
+// "2026-09-30" → "Sep 30, 2026" (a calendar date, no timezone shift).
+function formatPlainDay(date: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  if (!y || !m || !d) return date;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function money(n: number) {
   return n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`;
 }
@@ -529,7 +541,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
         <h2>Date range</h2>
         <div className={styles.rowForm}>
           <div className={styles.field}>
-            <label htmlFor="payroll-start">Start</label>
+            <label htmlFor="payroll-start">Start (included)</label>
             <input
               id="payroll-start"
               type="date"
@@ -572,6 +584,10 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
             Export CSV
           </a>
         </div>
+        <p className={styles.panelText} style={{ marginTop: 8, marginBottom: 0 }}>
+          Covers lessons that start from 12:00 AM ET on {formatPlainDay(startDate)} through 11:59 PM ET on{" "}
+          {formatPlainDay(endDate)}. A lesson counts in full in the period it starts in.
+        </p>
       </div>
 
       <div className={styles.panel}>
