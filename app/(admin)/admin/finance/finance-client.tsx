@@ -302,6 +302,9 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
   const [summaries, setSummaries] = useState<CoachPayrollSummary[] | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [expandedCoach, setExpandedCoach] = useState<string | null>(null);
+  // Finalized entries: lines stay collapsed under each coach's summary
+  // row (a month is ~400 lines) until opened.
+  const [openFinalCoach, setOpenFinalCoach] = useState<string | null>(null);
 
   const [attendance, setAttendance] = useState<CoachUnrecordedAttendance[] | null>(null);
   const [expandedUnrecordedCoach, setExpandedUnrecordedCoach] = useState<string | null>(null);
@@ -1012,7 +1015,15 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
                   return (
                     <tr key={name}>
                       <td className={styles.rowName}>{name}</td>
-                      <td className={styles.mutedText}>{lines.length}</td>
+                      <td>
+                        <button
+                          onClick={() => setOpenFinalCoach(openFinalCoach === name ? null : name)}
+                          className={styles.btnGhost}
+                          aria-expanded={openFinalCoach === name}
+                        >
+                          {openFinalCoach === name ? "▾" : "▸"} {lines.length} lines
+                        </button>
+                      </td>
                       <td>{money(total)}</td>
                       <td>
                         <span className={allPaid ? styles.badge : styles.badgeMuted}>
@@ -1042,6 +1053,8 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
           <p className={styles.mutedText}>Loading…</p>
         ) : history.length === 0 ? (
           <p className={styles.emptyState}>No finalized entries yet for this range.</p>
+        ) : openFinalCoach === null ? (
+          <p className={styles.mutedText}>Click a coach&apos;s lines above to see each entry.</p>
         ) : (
           <table className={styles.table}>
             <thead>
@@ -1055,7 +1068,7 @@ export default function FinanceClient({ coaches }: { coaches: Coach[] }) {
               </tr>
             </thead>
             <tbody>
-              {history.map((e) => (
+              {history.filter((e) => e.coachName === openFinalCoach).map((e) => (
                 <tr key={e.id}>
                   <td className={styles.rowName}>{e.coachName}</td>
                   <td className={styles.mutedText}>{e.scheduledAt ? <FormattedDateTime value={e.scheduledAt} /> : "—"}</td>
