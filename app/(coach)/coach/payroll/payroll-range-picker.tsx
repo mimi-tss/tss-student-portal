@@ -82,6 +82,22 @@ export default function PayrollRangePicker({
   const [estimate, setEstimate] = useState(initialEstimate);
   const [finalized, setFinalized] = useState(initialFinalized);
   const [loading, setLoading] = useState(false);
+  // The range actually loaded (inputs can be edited without Apply) —
+  // what the PDF statement's header shows.
+  const [applied, setApplied] = useState({ start, end });
+
+  // Browser print → "Save as PDF". Only the [data-print-area] block
+  // prints (app/globals.css); the title becomes the suggested filename.
+  function downloadPdf() {
+    const previousTitle = document.title;
+    document.title = `Pay statement - ${estimate.coachName} - ${formatPeriodDate(applied.start)} to ${formatPeriodDate(applied.end)}`.replace(/\//g, "-");
+    const restore = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    window.print();
+  }
 
   async function handleApply() {
     setLoading(true);
@@ -96,6 +112,7 @@ export default function PayrollRangePicker({
       const data = await res.json();
       setEstimate(data.estimate);
       setFinalized(data.finalized ?? []);
+      setApplied({ start, end });
     }
     setLoading(false);
   }
@@ -126,9 +143,22 @@ export default function PayrollRangePicker({
         <button onClick={handleApply} disabled={loading} className={styles.cta}>
           {loading ? "Loading…" : "Apply"}
         </button>
+        <button onClick={downloadPdf} className={styles.cta}>
+          Download PDF
+        </button>
       </div>
 
-      <div className={styles.panel}>
+      <div data-print-area>
+      {/* Statement header — only on the printed PDF. */}
+      <div data-print-only style={{ display: "none", marginBottom: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Tara Simon Studios — Pay statement</h1>
+        <p style={{ margin: "4px 0 0" }}>
+          {estimate.coachName} · {formatPeriodDate(applied.start)} – {formatPeriodDate(applied.end)}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: 12 }}>Printed {formatPeriodDate(new Date().toISOString())}</p>
+      </div>
+
+      <div className={styles.panel} {...(finalized.length > 0 ? { "data-no-print": true } : {})}>
         <h2>Estimate for this period</h2>
         <p className={styles.panelText}>
           {estimate.coachName} ·{" "}
@@ -225,6 +255,7 @@ export default function PayrollRangePicker({
             </tbody>
           </table>
         )}
+      </div>
       </div>
     </div>
   );

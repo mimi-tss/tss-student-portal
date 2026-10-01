@@ -32,3 +32,34 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* "Download PDF" on the coach payroll page (payroll-range-picker.tsx)
+   prints only the [data-print-area] statement — menus, header and the
+   date picker drop out — in plain black on white regardless of theme. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible;
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #ccc !important;
+  }
+  [data-print-area] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+  [data-no-print] {
+    display: none !important;
+  }
+  [data-print-only] {
+    display: block !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+}
