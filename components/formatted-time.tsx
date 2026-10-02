@@ -20,7 +20,25 @@ export function FormattedTime({ value, className }: { value: string; className?:
   return <span className={className}>{formatTimeInZone(value, timeZone)}</span>;
 }
 
-export function FormattedDateTime({ value, className }: { value: string; className?: string }) {
+// weekday: prefix the day name ("Thu, 10/2/2026, 2:30 PM ET") — in the
+// viewer's zone, so it always agrees with the date shown.
+export function FormattedDateTime({
+  value,
+  className,
+  weekday = false,
+}: {
+  value: string;
+  className?: string;
+  weekday?: boolean;
+}) {
   const { timeZone } = useTimeZone();
-  return <span className={className}>{formatDateTimeInZone(value, timeZone)}</span>;
+  const day = weekday
+    ? `${new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(new Date(value))}, `
+    : "";
+  return (
+    <span className={className}>
+      {day}
+      {formatDateTimeInZone(value, timeZone)}
+    </span>
+  );
 }

@@ -112,7 +112,7 @@ export default function AdminUpcomingSessions({
             return (
             <li key={s.id} className={styles.listItem}>
               <p>
-                <FormattedDateTime value={s.scheduled_at} /> · {s.duration_minutes} min
+                <FormattedDateTime value={s.scheduled_at} weekday /> · {s.duration_minutes} min
                 {s.is_makeup ? " · Makeup" : ""}
                 {unpaid && <span className={styles.mutedText} style={{ fontWeight: 600 }}> · Unpaid</span>}
               </p>
@@ -143,7 +143,7 @@ export default function AdminUpcomingSessions({
           {groupLessons.map((g) => (
             <li key={g.id} className={styles.listItem}>
               <p>
-                {g.topic || "Group Lesson"} — <FormattedDateTime value={g.scheduledAt} />
+                {g.topic || "Group Lesson"} — <FormattedDateTime value={g.scheduledAt} weekday />
               </p>
               <p className={styles.mutedText} style={{ marginTop: 4 }}>
                 with Coach {g.coachName} · {g.durationMinutes} min · manage via{" "}

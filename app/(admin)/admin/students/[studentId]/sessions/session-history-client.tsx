@@ -417,7 +417,7 @@ export default function SessionHistoryClient({
               ) : (
                 <>
                   <p>
-                    <FormattedDateTime value={s.scheduled_at} /> · {s.duration_minutes} min · with{" "}
+                    <FormattedDateTime value={s.scheduled_at} weekday /> · {s.duration_minutes} min · with{" "}
                     {coachName(coaches, s.actual_coach_id)}
                     {s.is_makeup && <span className={styles.badge} style={{ marginLeft: 6 }}>Makeup</span>}
                   </p>

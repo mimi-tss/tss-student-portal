@@ -113,7 +113,7 @@ export default function AdminCancelButtons({
     return (
       <div className={styles.warnPanel}>
         <p style={{ marginBottom: 4, fontWeight: 600 }}>
-          Staff cancel <FormattedDateTime value={scheduledAt} /> — reason required
+          Staff cancel <FormattedDateTime value={scheduledAt} weekday /> — reason required
         </p>
         <p className={styles.mutedText} style={{ marginBottom: 8 }}>
           {issueCredit
@@ -168,7 +168,7 @@ export default function AdminCancelButtons({
     return (
       <div className={styles.panel} style={{ background: "var(--surface-2)", marginTop: 8, marginBottom: 0, padding: 12 }}>
         <p style={{ marginBottom: 4, fontWeight: 600 }}>
-          {intent === "reschedule" ? "Reschedule" : "Cancel"} the <FormattedDateTime value={scheduledAt} /> session?
+          {intent === "reschedule" ? "Reschedule" : "Cancel"} the <FormattedDateTime value={scheduledAt} weekday /> session?
         </p>
         <p className={styles.panelText} style={{ marginBottom: 8 }}>
           Cancels exactly like the student&apos;s own self-service cancellation — a session

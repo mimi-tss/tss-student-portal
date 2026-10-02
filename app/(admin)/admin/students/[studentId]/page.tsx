@@ -462,7 +462,7 @@ export default async function AdminStudentPage({
         {groupLessonIsNext ? (
           <>
             <p>
-              {nextGroupLesson!.topic || "Group Lesson"} — <FormattedDateTime value={nextGroupLesson!.scheduledAt} />
+              {nextGroupLesson!.topic || "Group Lesson"} — <FormattedDateTime value={nextGroupLesson!.scheduledAt} weekday />
             </p>
             <p className={styles.mutedText} style={{ marginTop: 4 }}>
               with Coach {nextGroupLesson!.coachName} · {nextGroupLesson!.durationMinutes} min · manage via{" "}
@@ -474,7 +474,7 @@ export default async function AdminStudentPage({
         ) : nextSession ? (
           <>
             <p>
-              <FormattedDateTime value={nextSession.scheduled_at} /> · {nextSession.duration_minutes} min
+              <FormattedDateTime value={nextSession.scheduled_at} weekday /> · {nextSession.duration_minutes} min
             </p>
             <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12 }}>
               <AdminCancelButtons
