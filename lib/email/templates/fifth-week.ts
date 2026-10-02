@@ -22,12 +22,12 @@ export function fifthWeekOffer(i: {
   const price = i.priceLabel ? ` for ${i.priceLabel}` : "";
   const subject = i.reminder
     ? `Last chance: add your bonus lesson on ${i.lessonShortDate}`
-    : `Want an extra lesson on ${i.lessonShortDate}?`;
+    : `Don't lose your momentum: extra lesson on ${i.lessonShortDate}`;
   const preheader = `This billing month has 5 ${i.lessonWeekday}s. Add a lesson on the 5th one if you'd like.`;
 
   const { html, text } = renderEmail({
     preheader,
-    heading: i.reminder ? `Still time to add it, ${i.firstName}!` : `Want an extra lesson, ${i.firstName}?`,
+    heading: i.reminder ? `Still time to add it, ${i.firstName}!` : `Don't lose your momentum, ${i.firstName}!`,
     blocks: [
       {
         type: "p",
@@ -59,7 +59,7 @@ export function fifthWeekOffer(i: {
     html,
     text,
     sms,
-    bellTitle: i.reminder ? "Extra lesson: last chance to add it" : "Want an extra lesson this month?",
+    bellTitle: i.reminder ? "Extra lesson: last chance to add it" : "Don't lose your momentum: add an extra lesson",
     bellBody: `${i.lessonDay}, ${i.lessonShortDate} · ${i.lessonTime} with ${coach}${price}`,
   };
 }

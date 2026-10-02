@@ -84,7 +84,7 @@ export default function FifthWeekCard({
           ✕
         </button>
       )}
-      <div className={styles.noteFrom}>✨ Want an extra lesson this month?</div>
+      <div className={styles.noteFrom}>🎵 Don&apos;t lose your momentum</div>
       {step === "done" ? (
         <p style={{ margin: "6px 0 0" }}>
           You&apos;re booked! <strong>{whenLabel}</strong> with {coachLabel}. A confirmation is on its way.
