@@ -32,7 +32,8 @@ export type AttentionKind =
   | "pause_request"
   | "change_plan_request"
   | "recording_pipeline_stale"
-  | "schedule_overlap";
+  | "schedule_overlap"
+  | "tara_trial_done";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 

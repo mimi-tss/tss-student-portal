@@ -162,6 +162,7 @@ export async function GET(req: NextRequest) {
 
   const groupReminded = await sendGroupReminders(admin, now);
   const trialOffers = await sendTrialUpgradeOffers(admin, now);
+  const taraTrials = await flagTaraTrialFollowUps(admin, now);
 
   const missedSent = (await sendMissedLessonEmails(admin, now)) + (await sendMissedGroupEmails(admin, now));
 
@@ -177,6 +178,7 @@ export async function GET(req: NextRequest) {
     notified,
     groupReminded,
     trialOffers,
+    taraTrials,
     meetLinksSent,
     missedSent,
   });
@@ -449,4 +451,53 @@ async function sendTrialUpgradeOffers(admin: ReturnType<typeof createAdminClient
     sent++;
   }
   return sent;
+}
+
+
+// Free first sessions with Tara get no automatic "move up to Pro" email —
+// the studio follows up by hand (Master Course, or a spot in Tara's
+// schedule). Once one is marked attended or no-show, raise a Needs Review
+// item so it isn't lost (studio call 2026-10-02). One per trial (unique
+// dedup_key = session id, migration 0121); looks back 3 days only.
+async function flagTaraTrialFollowUps(admin: ReturnType<typeof createAdminClient>, now: number): Promise<number> {
+  const { data, error } = await admin
+    .from("sessions")
+    .select("id, scheduled_at, status, student_id, actual_coach_id, students(name), coaches:actual_coach_id(name, timezone)")
+    .eq("is_trial", true)
+    .in("status", ["attended", "no-show"])
+    .gte("scheduled_at", new Date(now - 3 * 24 * HOUR_MS).toISOString())
+    .lte("scheduled_at", new Date(now).toISOString());
+  if (error) {
+    console.error("tara trial query failed", error.message);
+    return 0;
+  }
+  let raised = 0;
+  for (const r of (data ?? []) as unknown as {
+    id: string;
+    scheduled_at: string;
+    status: string;
+    student_id: string;
+    actual_coach_id: string;
+    students: { name: string } | null;
+    coaches: { name: string; timezone: string } | { name: string; timezone: string }[] | null;
+  }[]) {
+    const coach = unwrap(r.coaches);
+    if (!isTaraCoach(coach?.name)) continue;
+    const day = lessonTimeFields(r.scheduled_at, coach?.timezone).lessonShortDate;
+    const { error: insErr } = await admin.from("attention_items").insert({
+      kind: "tara_trial_done",
+      student_id: r.student_id,
+      coach_id: r.actual_coach_id,
+      dedup_key: r.id,
+      summary:
+        r.status === "attended"
+          ? `Had their trial with Tara on ${day}. Follow up: Master Course, or a spot in Tara's schedule?`
+          : `Missed their trial with Tara on ${day}. Follow up to reschedule.`,
+    });
+    if (!insErr) raised++;
+    else if (insErr.code !== "23505" && !/attention_items_kind_check/.test(insErr.message)) {
+      console.error("tara trial item failed", insErr.message);
+    }
+  }
+  return raised;
 }
