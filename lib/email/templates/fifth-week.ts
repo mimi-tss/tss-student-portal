@@ -22,20 +22,20 @@ export function fifthWeekOffer(i: {
   const price = i.priceLabel ? ` for ${i.priceLabel}` : "";
   const subject = i.reminder
     ? `Last chance: add your bonus lesson on ${i.lessonShortDate}`
-    : `Bonus week! Add an extra lesson on ${i.lessonShortDate}`;
-  const preheader = `Your cycle has an extra ${i.lessonWeekday}. Keep your momentum going with ${coach}.`;
+    : `Want an extra lesson on ${i.lessonShortDate}?`;
+  const preheader = `This billing month has 5 ${i.lessonWeekday}s. Add a lesson on the 5th one if you'd like.`;
 
   const { html, text } = renderEmail({
     preheader,
-    heading: i.reminder ? `Still time to add it, ${i.firstName}!` : `Bonus week, ${i.firstName}!`,
+    heading: i.reminder ? `Still time to add it, ${i.firstName}!` : `Want an extra lesson, ${i.firstName}?`,
     blocks: [
       {
         type: "p",
-        text: `This billing cycle has an extra ${i.lessonWeekday}, so your usual lesson time with **${coach}** is open. Want to keep your momentum going? Add this lesson${price}.`,
+        text: `Your plan includes 4 lessons each billing month, and this one has **5 ${i.lessonWeekday}s**. If you'd like, you can add a lesson on the 5th one at your usual time with **${coach}**${price}.`,
       },
       {
         type: "card",
-        title: "Bonus lesson",
+        title: "Extra lesson",
         lines: [`${i.lessonDate} · ${i.lessonTime}`, `Private ${i.durationMinutes}-min Coaching Session with ${coach}${price}`],
       },
       { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
@@ -43,13 +43,13 @@ export function fifthWeekOffer(i: {
         type: "p",
         text: "Open your portal and tap **Add this lesson** on your dashboard. Your card on file is charged and the lesson is booked in your usual time.",
       },
-      { type: "note", text: "Not this time? No problem, just ignore this email." },
+      { type: "note", text: "Totally optional. If you skip it, there's just no lesson that week." },
     ],
     reason: "You're getting this because lesson alerts are on.",
   });
 
   const sms = smsText(
-    `Hi ${i.firstName}, bonus week! Your usual ${i.lessonDay} ${i.lessonTime} slot with ${coach} is open on ${i.lessonShortDate}. Add it in the app: ${STUDENT_APP_SHORT}`,
+    `Hi ${i.firstName}, this month has 5 ${i.lessonWeekday}s. Want an extra lesson with ${coach} on ${i.lessonShortDate}? Add it in the app: ${STUDENT_APP_SHORT}`,
     { brandPrefix: false },
   );
 
@@ -59,7 +59,7 @@ export function fifthWeekOffer(i: {
     html,
     text,
     sms,
-    bellTitle: i.reminder ? "Bonus lesson: last chance" : "Bonus week! Add an extra lesson",
+    bellTitle: i.reminder ? "Extra lesson: last chance to add it" : "Want an extra lesson this month?",
     bellBody: `${i.lessonDay}, ${i.lessonShortDate} · ${i.lessonTime} with ${coach}${price}`,
   };
 }

@@ -12,12 +12,14 @@ export default function FifthWeekCard({
   occurrenceAt,
   whenLabel,
   coachLabel,
+  weekday,
   durationMinutes,
   priceLabel,
 }: {
   occurrenceAt: string;
   whenLabel: string; // "Wednesday, Sep 30 · 2:30 PM ET"
   coachLabel: string; // "Coach Tara"
+  weekday: string; // "Thursday"
   durationMinutes: number;
   priceLabel: string;
 }) {
@@ -46,16 +48,19 @@ export default function FifthWeekCard({
 
   return (
     <div className={styles.note} style={{ borderLeft: "4px solid var(--gold)" }}>
-      <div className={styles.noteFrom}>✨ Bonus week</div>
+      <div className={styles.noteFrom}>✨ Want an extra lesson this month?</div>
       {step === "done" ? (
         <p style={{ margin: "6px 0 0" }}>
           You&apos;re booked! <strong>{whenLabel}</strong> with {coachLabel}. A confirmation is on its way.
         </p>
       ) : (
         <>
+          {/* Plain-language version (studio call 2026-10-02): say WHY
+              there's an extra lesson, and that it's optional. */}
           <p style={{ margin: "6px 0 10px" }}>
-            This billing cycle has an extra lesson day, so your usual time is open: a Private {durationMinutes}-min Coaching
-            Session with {coachLabel} on <strong>{whenLabel}</strong>.
+            Your plan includes 4 lessons each billing month, and this one has <strong>5 {weekday}s</strong>. If you&apos;d like,
+            you can add a lesson on the 5th one at your usual time: a Private {durationMinutes}-min Coaching Session with{" "}
+            {coachLabel} on <strong>{whenLabel}</strong>.
           </p>
           {step === "offer" ? (
             <button type="button" className={styles.cta} onClick={() => setStep("confirm")}>
@@ -70,6 +75,11 @@ export default function FifthWeekCard({
                 Not now
               </button>
             </div>
+          )}
+          {step === "offer" && (
+            <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
+              Totally optional. If you skip it, there&apos;s just no lesson that week.
+            </p>
           )}
           {error && <p style={{ margin: "8px 0 0", color: "var(--coral)" }}>{error}</p>}
         </>

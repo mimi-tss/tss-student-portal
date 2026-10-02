@@ -261,6 +261,7 @@ export default async function StudentDashboardPage() {
           occurrenceAt={bonus.occurrenceAt.toISOString()}
           whenLabel={`${bonusWhen.lessonDate} · ${bonusWhen.lessonTime}`}
           coachLabel={`Coach ${firstNameOf(bonus.coachName)}`}
+          weekday={new Intl.DateTimeFormat("en-US", { timeZone: bonus.coachTimezone, weekday: "long" }).format(bonus.occurrenceAt)}
           durationMinutes={bonus.durationMinutes}
           priceLabel={bonusPrice.label}
         />
