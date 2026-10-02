@@ -630,6 +630,39 @@
   background: var(--border);
   margin: 10px 6px;
 }
+.appSidebarSectionLabel {
+  padding: 14px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.appSidebarSectionToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 10px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.appSidebarSectionToggle:hover {
+  opacity: 1;
+}
+.appSidebarCollapsed .appSidebarSectionToggle {
+  justify-content: center;
+  padding: 10px 0 4px;
+}
 .appSidebarLink {
   display: flex;
   align-items: center;

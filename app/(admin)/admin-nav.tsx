@@ -12,40 +12,80 @@ import styles from "./admin.module.css";
 
 const COLLAPSE_KEY = "admin-sidebar-collapsed";
 
-const LINKS = [
-  { href: "/admin/overview", label: "Overview", icon: "▦" },
-  { href: "/admin/dashboard", label: "Students", icon: "◔" },
-  { href: "/admin/coaches", label: "Coaches", icon: "◑" },
-  { href: "/admin/needs-review", label: "Needs Review", icon: "◉", badgeKey: "needsReview" as const },
-  { href: "/admin/community", label: "Backstage", icon: "◈" },
-  { href: "/admin/support", label: "Support Chat", icon: "✉" },
-];
+interface NavLink {
+  href: string;
+  label: string;
+  icon: string;
+  badgeKey?: "needsReview";
+  // true means a plain "admin" doesn't get this link — Payroll/Reports
+  // (pay rates, revenue, margin) are the only 2 things that differ
+  // between "admin" and "admin_finance"; every other page is shared by
+  // both. Each of those 2 pages also redirects a non-finance admin away
+  // on a direct URL hit (requireFinanceAccess, lib/auth/require-role.ts)
+  // — this isn't just a hidden-but-reachable link.
+  financeOnly?: boolean;
+}
 
-// Below the mockup's 6-item nav — Exercises, Group Lessons, Finance, and
-// Reports are real, already-built features with no obvious home in that
-// list, so they get their own section rather than being dropped.
-// financeOnly: true means a plain "admin" doesn't get this link —
-// Finance/Reports (pay rates, revenue, margin) are the only 2 things
-// that differ between "admin" and "admin_finance"; every other page is
-// shared by both. Each of those 2 pages also redirects a non-finance
-// admin away on a direct URL hit (requireFinanceAccess,
-// lib/auth/require-role.ts) — this isn't just a hidden-but-reachable link.
-const MORE_LINKS = [
-  { href: "/admin/exercises", label: "Exercises", icon: "♪", financeOnly: false },
-  { href: "/admin/group-lessons", label: "Group Lessons", icon: "◫", financeOnly: false },
-  { href: "/admin/weekly-email", label: "Weekly Email", icon: "✦", financeOnly: false },
-  { href: "/admin/activity-log", label: "Activity Log", icon: "▤", financeOnly: false },
-  { href: "/admin/recordings", label: "Recordings", icon: "●", financeOnly: false },
-  { href: "/admin/billing", label: "Billing", icon: "◆", financeOnly: false },
-  { href: "/admin/bug-reports", label: "Bug Reports", icon: "✱", financeOnly: false },
-  { href: "/admin/finance", label: "Payroll", icon: "$", financeOnly: true },
-  { href: "/admin/reports", label: "Reports", icon: "◧", financeOnly: true },
+interface NavSection {
+  label?: string;
+  // Tucked behind a toggle (and auto-opened when the current page is
+  // inside it) — for the pages used least often, so the daily ones
+  // aren't buried in a 15-item list.
+  collapsible?: boolean;
+  links: NavLink[];
+}
+
+// Ordered by how the studio actually works through a day: what needs
+// attention first, then people, then lessons, then money, then the
+// occasional-use pages.
+const SECTIONS: NavSection[] = [
+  {
+    links: [
+      { href: "/admin/overview", label: "Overview", icon: "▦" },
+      { href: "/admin/needs-review", label: "Needs Review", icon: "◉", badgeKey: "needsReview" },
+      { href: "/admin/support", label: "Support Chat", icon: "✉" },
+    ],
+  },
+  {
+    label: "People",
+    links: [
+      { href: "/admin/dashboard", label: "Students", icon: "◔" },
+      { href: "/admin/coaches", label: "Coaches", icon: "◑" },
+    ],
+  },
+  {
+    label: "Lessons",
+    links: [
+      { href: "/admin/group-lessons", label: "Group Lessons", icon: "◫" },
+      { href: "/admin/recordings", label: "Recordings", icon: "●" },
+      { href: "/admin/exercises", label: "Exercises", icon: "♪" },
+    ],
+  },
+  {
+    label: "Money",
+    links: [
+      { href: "/admin/billing", label: "Billing", icon: "◆" },
+      { href: "/admin/finance", label: "Payroll", icon: "$", financeOnly: true },
+      { href: "/admin/reports", label: "Reports", icon: "◧", financeOnly: true },
+    ],
+  },
+  {
+    label: "More",
+    collapsible: true,
+    links: [
+      { href: "/admin/community", label: "Backstage", icon: "◈" },
+      { href: "/admin/weekly-email", label: "Weekly Email", icon: "✦" },
+      { href: "/admin/activity-log", label: "Activity Log", icon: "▤" },
+      { href: "/admin/bug-reports", label: "Bug Reports", icon: "✱" },
+    ],
+  },
 ];
 
 export default function AdminNav({ initialNeedsReviewCount, role }: { initialNeedsReviewCount: number; role: Role }) {
   const pathname = usePathname();
   const hasFinance = role === "admin_finance";
   const [collapsed, setCollapsed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [needsReviewCount, setNeedsReviewCount] = useState(initialNeedsReviewCount);
 
   // Read the saved preference after mount rather than in useState's
@@ -97,7 +137,38 @@ export default function AdminNav({ initialNeedsReviewCount, role }: { initialNee
     return pathname === href || pathname?.startsWith(href + "/");
   }
 
-  const moreLinks = hasFinance ? MORE_LINKS : MORE_LINKS.filter((l) => !l.financeOnly);
+  const sections = SECTIONS.map((section) => ({
+    ...section,
+    links: hasFinance ? section.links : section.links.filter((l) => !l.financeOnly),
+  })).filter((section) => section.links.length > 0);
+
+  // A page inside the collapsed "More" group must never leave its own
+  // active link hidden.
+  const currentPageInMore = SECTIONS.some(
+    (s) => s.collapsible && s.links.some((l) => isActive(l.href)),
+  );
+  const moreShown = moreOpen || currentPageInMore;
+
+  function renderLink(link: NavLink) {
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        title={collapsed ? link.label : undefined}
+        className={isActive(link.href) ? styles.appSidebarLinkActive : styles.appSidebarLink}
+      >
+        <span className={styles.appSidebarLinkLabel}>
+          <span aria-hidden>{link.icon}</span>
+          {!collapsed && link.label}
+        </span>
+        {link.badgeKey === "needsReview" && needsReviewCount > 0 && (
+          <span className={collapsed ? styles.appSidebarBadgeDot : styles.appSidebarBadge}>
+            {collapsed ? "" : needsReviewCount}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <div className={collapsed ? `${styles.appSidebar} ${styles.appSidebarCollapsed}` : styles.appSidebar}>
@@ -112,37 +183,27 @@ export default function AdminNav({ initialNeedsReviewCount, role }: { initialNee
       </div>
 
       <nav className={styles.appSidebarNav}>
-        {LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            title={collapsed ? link.label : undefined}
-            className={isActive(link.href) ? styles.appSidebarLinkActive : styles.appSidebarLink}
-          >
-            <span className={styles.appSidebarLinkLabel}>
-              <span aria-hidden>{link.icon}</span>
-              {!collapsed && link.label}
-            </span>
-            {link.badgeKey === "needsReview" && needsReviewCount > 0 && (
-              <span className={collapsed ? styles.appSidebarBadgeDot : styles.appSidebarBadge}>
-                {collapsed ? "" : needsReviewCount}
-              </span>
-            )}
-          </Link>
-        ))}
-        <div className={styles.appSidebarDivider} />
-        {moreLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            title={collapsed ? link.label : undefined}
-            className={isActive(link.href) ? styles.appSidebarLinkActive : styles.appSidebarLink}
-          >
-            <span className={styles.appSidebarLinkLabel}>
-              <span aria-hidden>{link.icon}</span>
-              {!collapsed && link.label}
-            </span>
-          </Link>
+        {sections.map((section, i) => (
+          <div key={section.label ?? "top"}>
+            {i > 0 &&
+              (section.collapsible ? (
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(!moreShown)}
+                  className={styles.appSidebarSectionToggle}
+                  aria-expanded={moreShown}
+                  title={collapsed ? section.label : undefined}
+                >
+                  <span>{collapsed ? "⋯" : section.label}</span>
+                  {!collapsed && <span aria-hidden>{moreShown ? "▾" : "▸"}</span>}
+                </button>
+              ) : collapsed ? (
+                <div className={styles.appSidebarDivider} />
+              ) : (
+                <div className={styles.appSidebarSectionLabel}>{section.label}</div>
+              ))}
+            {(!section.collapsible || moreShown) && section.links.map(renderLink)}
+          </div>
         ))}
       </nav>
 
