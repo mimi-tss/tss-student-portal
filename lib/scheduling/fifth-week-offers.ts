@@ -78,6 +78,7 @@ interface ScheduleRow {
   coach_id: string;
   day_of_week: number;
   start_time: string;
+  duration_minutes: number | null;
   students: One<{
     name: string;
     email: string;
@@ -103,7 +104,7 @@ export async function findFifthWeekOpportunities(
   let q = admin
     .from("recurring_schedules")
     .select(
-      "student_id, coach_id, day_of_week, start_time, " +
+      "student_id, coach_id, day_of_week, start_time, duration_minutes, " +
         "students(name, email, phone, tier, subscription_status, billing_anniversary_date, session_duration_minutes, archived, ambassador, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp), " +
         "coaches(name, timezone)",
     )
@@ -137,7 +138,10 @@ export async function findFifthWeekOpportunities(
       coachName: coach?.name ?? "",
       coachTimezone: tz,
       occurrenceAt,
-      durationMinutes: st.session_duration_minutes ?? 30,
+      // The weekly schedule's own length — what their real lessons use.
+      // students.session_duration_minutes can be stale (Mimi: 30 there,
+      // 60 on her schedule — booked a 30-min bonus lesson, 2026-10-02).
+      durationMinutes: s.duration_minutes ?? st.session_duration_minutes ?? 30,
       // Tara's students and ambassadors (e.g. Mimi, Sebastian) get the
       // "no lesson that week" notice instead of an offer (studio calls
       // 2026-09-29, 2026-10-01). The pilot overrides that for the test.
