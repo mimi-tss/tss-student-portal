@@ -150,16 +150,35 @@ export async function findFifthWeekOpportunities(
   }
   if (!found.length) return [];
 
+  // Back-to-back slots with the same coach (Gabe: 3:00 + 3:30, 30 min
+  // each) are really one longer lesson — offer it as one, priced by the
+  // combined length (studio call 2026-10-02).
+  found.sort((a, b) => a.studentId.localeCompare(b.studentId) || a.occurrenceAt.getTime() - b.occurrenceAt.getTime());
+  const merged: FifthWeekOpportunity[] = [];
+  for (const f of found) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      prev.studentId === f.studentId &&
+      prev.coachId === f.coachId &&
+      prev.occurrenceAt.getTime() + prev.durationMinutes * 60_000 === f.occurrenceAt.getTime()
+    ) {
+      prev.durationMinutes += f.durationMinutes;
+      continue;
+    }
+    merged.push({ ...f });
+  }
+
   // Already booked at that exact time (they bought it, or admin added it)
   // — nothing left to offer.
   const { data: existing } = await admin
     .from("sessions")
     .select("student_id, scheduled_at")
-    .in("student_id", found.map((f) => f.studentId))
-    .in("scheduled_at", found.map((f) => f.occurrenceAt.toISOString()))
+    .in("student_id", merged.map((f) => f.studentId))
+    .in("scheduled_at", merged.map((f) => f.occurrenceAt.toISOString()))
     .not("status", "in", "(cancelled-with-notice,cancelled-no-notice,holiday)");
   const taken = new Set((existing ?? []).map((r) => `${r.student_id}|${new Date(r.scheduled_at as string).toISOString()}`));
-  return found.filter((f) => !taken.has(`${f.studentId}|${f.occurrenceAt.toISOString()}`));
+  return merged.filter((f) => !taken.has(`${f.studentId}|${f.occurrenceAt.toISOString()}`));
 }
 
 // Stripe price for the lesson: the existing "1 Lesson Add-On" prices
