@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FormattedDateTime } from "@/components/formatted-time";
 import styles from "../../student.module.css";
+import { isBootcamp } from "@/lib/group-lesson-topic";
 
 // Mirrors CancelButton's own 24-hour preview logic (same threshold as
 // app/api/student/group-lessons/cancel/route.ts) — this is only for the
@@ -14,6 +15,9 @@ import styles from "../../student.module.css";
 const NOTICE_HOURS = 24;
 
 function warningFor(scheduledAt: string, topic: string | null) {
+  if (isBootcamp(topic)) {
+    return "Bootcamps run on set dates, so cancelling won't earn a credit. Do you still want to cancel?";
+  }
   const hoursNotice = (new Date(scheduledAt).getTime() - Date.now()) / (60 * 60 * 1000);
   if (hoursNotice < NOTICE_HOURS) {
     return "This is inside the 24-hour notice window, so this cancellation won't earn a credit — the class will be forfeited. Do you still want to cancel?";

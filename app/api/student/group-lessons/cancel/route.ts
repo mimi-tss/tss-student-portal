@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isBootcamp } from "@/lib/group-lesson-topic";
 
 // 24-hour notice rule, same threshold as the student's own 1:1 session
 // self-cancel (app/api/booking/cancel/route.ts) — but distinct in every
@@ -71,8 +72,11 @@ export async function POST(req: NextRequest) {
   // group_lesson_credits and redemption matches by exact topic) — the
   // cancellation itself still goes through, just without a credit, same
   // as admin's own "needs a topic first" guard elsewhere.
+  // Bootcamps run on set dates: cancelling or missing one never earns a
+  // credit (studio call 2026-10-02).
+  const bootcamp = isBootcamp(groupLesson.topic);
   let creditGranted = false;
-  if (withNotice && groupLesson.topic?.trim()) {
+  if (withNotice && !bootcamp && groupLesson.topic?.trim()) {
     const { error: creditError } = await admin.from("group_lesson_credits").insert({
       student_id: student.id,
       topic: groupLesson.topic,
@@ -91,7 +95,9 @@ export async function POST(req: NextRequest) {
 
   const message = creditGranted
     ? "Cancelled — you've earned a class credit (no expiration) for a future class with the same topic."
-    : withNotice
+    : bootcamp
+      ? "Cancelled. Bootcamps run on set dates, so no credit is issued."
+      : withNotice
       ? "Cancelled. This class has no topic set, so no credit could be issued — contact the studio."
       : "Cancelled. This was inside the 24-hour notice window, so no credit was issued.";
 

@@ -54,6 +54,12 @@ export function describeCredits(credits: LessonCreditLine[]): string[] {
   );
 }
 
+// "Thursday, Dec 31" / "Dec 31" for a credit's last usable day — same
+// Eastern + 6 AM rule as above. Shared with the group-credit reminder.
+export function creditDeadline(iso: string, style: "long" | "short"): string {
+  return fmt(iso, style === "long" ? { weekday: "long", month: "short", day: "numeric" } : { month: "short", day: "numeric" });
+}
+
 function soonest(credits: LessonCreditLine[]): string | null {
   const dates = credits.map((c) => c.expiresAt).filter((d): d is string => !!d).sort();
   return dates[0] ?? null;
