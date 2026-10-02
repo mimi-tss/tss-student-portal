@@ -5,6 +5,13 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export interface ResolvedAccount {
   email: string;
   redirectPath: string;
+  // The auth user linked to the student/coach row (profile_id). Login
+  // must sign into *this* account, not whatever auth user owns `email`:
+  // an admin can change a student's email on the record (e.g. from a
+  // parent's address to the student's own) without the auth user's
+  // email following — signing in by email then minted a brand-new,
+  // unlinked auth user and the student landed on "You don't have access".
+  profileId?: string | null;
 }
 
 // listUsers() is paginated (50 per page by default) and there's no
@@ -39,14 +46,14 @@ export async function resolveAccountByEmail(admin: AdminClient, rawEmail: string
   const email = rawEmail.trim().toLowerCase();
   if (!email) return null;
 
-  const { data: student } = await admin.from("students").select("email").ilike("email", email).maybeSingle();
-  if (student) return { email: student.email, redirectPath: "/student/dashboard" };
+  const { data: student } = await admin.from("students").select("email, profile_id").ilike("email", email).maybeSingle();
+  if (student) return { email: student.email, redirectPath: "/student/dashboard", profileId: student.profile_id };
 
   // active=false (0042's soft "Remove", never a hard delete) blocks login
   // here too, not just new bookings/scheduling — a removed coach's email
   // resolves to nothing, same as if they'd never been provisioned.
-  const { data: coach } = await admin.from("coaches").select("email, active").ilike("email", email).maybeSingle();
-  if (coach?.active) return { email: coach.email, redirectPath: "/coach/dashboard" };
+  const { data: coach } = await admin.from("coaches").select("email, active, profile_id").ilike("email", email).maybeSingle();
+  if (coach?.active) return { email: coach.email, redirectPath: "/coach/dashboard", profileId: coach.profile_id };
 
   const matchedUser = await findAuthUserByEmail(admin, email);
   if (matchedUser) {

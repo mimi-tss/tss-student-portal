@@ -42,9 +42,18 @@ export async function POST(req: NextRequest) {
   // the session via a real Set-Cookie response header on this same-origin
   // request — no client-side cookie write, no bounce through a third
   // domain, nothing for Safari's cross-iframe cookie blocking to catch.
+  //
+  // Sign into the auth user linked to the student/coach record — its
+  // email can differ from the record's (see ResolvedAccount.profileId);
+  // only fall back to the record's email for a not-yet-linked row.
+  let loginEmail = account.email;
+  if (account.profileId) {
+    const { data: linked } = await admin.auth.admin.getUserById(account.profileId);
+    if (linked?.user?.email) loginEmail = linked.user.email;
+  }
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "magiclink",
-    email: account.email,
+    email: loginEmail,
   });
 
   if (linkError || !linkData) {
