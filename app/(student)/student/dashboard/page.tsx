@@ -16,7 +16,13 @@ import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import FifthWeekCard from "./fifth-week-card";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fifthWeekSelfServeFor, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
+import {
+  declinedFifthWeekKeys,
+  fifthWeekDeclinedKey,
+  fifthWeekSelfServeFor,
+  findFifthWeekOpportunities,
+  fifthWeekPrice,
+} from "@/lib/scheduling/fifth-week-offers";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 import styles from "../../student.module.css";
 
@@ -244,13 +250,18 @@ export default async function StudentDashboardPage() {
   // service-role client (reads schedule + billing fields across tables);
   // the buy route re-checks everything before charging. Hidden within 6h
   // of the lesson, same cutoff as the offer emails.
-  const [bonus] = (
+  const [bonusOffer] = (
     fifthWeekSelfServeFor(student.id)
       ? await findFifthWeekOpportunities(createAdminClient(), { studentId: student.id }).catch(() => [])
       : []
   ).filter(
     (o) => !o.noBonusLesson && o.occurrenceAt.getTime() - now.getTime() >= 6 * 60 * 60 * 1000,
   );
+  // Hidden once they tapped ✕ ("no thanks") for that week.
+  const bonusDeclined = bonusOffer
+    ? (await declinedFifthWeekKeys(createAdminClient(), [fifthWeekDeclinedKey(student.id, bonusOffer.occurrenceAt.toISOString())])).size > 0
+    : false;
+  const bonus = bonusDeclined ? undefined : bonusOffer;
   const bonusPrice = bonus ? await fifthWeekPrice(bonus.durationMinutes) : null;
   const bonusWhen = bonus ? lessonTimeFields(bonus.occurrenceAt.toISOString(), bonus.coachTimezone) : null;
 

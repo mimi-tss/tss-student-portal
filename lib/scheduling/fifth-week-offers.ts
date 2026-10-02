@@ -24,6 +24,24 @@ export const FIFTH_WEEK_SELF_SERVE_ENABLED = false;
 // (studio call 2026-10-01). Empty this once the switch is on.
 const FIFTH_WEEK_PILOT_STUDENT_IDS: ReadonlySet<string> = new Set(["5c4651e0-f842-403a-9d4a-70e3604f732c"]);
 
+// "No thanks" (✕ on the dashboard card) for one bonus week — stored as a
+// notification_log marker, like sent notices, so no extra table: hides
+// the card and skips that week's "last chance" reminder (studio call
+// 2026-10-02).
+export const FIFTH_WEEK_DECLINED_KIND = "fifth_week_declined";
+export function fifthWeekDeclinedKey(studentId: string, occurrenceIso: string): string {
+  return `student:${studentId}:fifth_week_declined:${new Date(occurrenceIso).toISOString()}`;
+}
+export async function declinedFifthWeekKeys(admin: SupabaseClient, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const { data } = await admin
+    .from("notification_log")
+    .select("dedup_key")
+    .eq("kind", FIFTH_WEEK_DECLINED_KIND)
+    .in("dedup_key", keys);
+  return new Set((data ?? []).map((r) => r.dedup_key as string));
+}
+
 export function fifthWeekSelfServeFor(studentId: string): boolean {
   return FIFTH_WEEK_SELF_SERVE_ENABLED || FIFTH_WEEK_PILOT_STUDENT_IDS.has(studentId);
 }

@@ -24,7 +24,7 @@ export default function FifthWeekCard({
   priceLabel: string;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<"offer" | "confirm" | "done">("offer");
+  const [step, setStep] = useState<"offer" | "confirm" | "done" | "hidden">("offer");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +46,44 @@ export default function FifthWeekCard({
     router.refresh();
   }
 
+  // ✕ = "no thanks" for this week: hides the card and skips the reminder.
+  function decline() {
+    setStep("hidden");
+    fetch("/api/student/fifth-week/decline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ occurrenceAt }),
+    }).catch(() => {});
+  }
+
+  if (step === "hidden") return null;
+
   return (
-    <div className={styles.note} style={{ borderLeft: "4px solid var(--gold)" }}>
+    <div className={styles.note} style={{ borderLeft: "4px solid var(--gold)", position: "relative", paddingRight: 44 }}>
+      {step !== "done" && (
+        <button
+          type="button"
+          onClick={decline}
+          disabled={busy}
+          aria-label="No thanks"
+          title="No thanks"
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            width: 28,
+            height: 28,
+            border: "none",
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: "pointer",
+          }}
+        >
+          ✕
+        </button>
+      )}
       <div className={styles.noteFrom}>✨ Want an extra lesson this month?</div>
       {step === "done" ? (
         <p style={{ margin: "6px 0 0" }}>
@@ -78,7 +114,7 @@ export default function FifthWeekCard({
           )}
           {step === "offer" && (
             <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
-              Totally optional. If you skip it, there&apos;s just no lesson that week.
+              Totally optional. Not this time? Tap ✕ and there&apos;s just no lesson that week.
             </p>
           )}
           {error && <p style={{ margin: "8px 0 0", color: "var(--coral)" }}>{error}</p>}
