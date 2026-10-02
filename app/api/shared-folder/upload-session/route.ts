@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
   if (!folderId) return NextResponse.json({ error: "no shared folder yet" }, { status: 404 });
 
   try {
-    const uploadUrl = await createResumableUploadSession(folderId, {
-      name: fileName,
-      mimeType: mimeType || "application/octet-stream",
-    });
+    const uploadUrl = await createResumableUploadSession(
+      folderId,
+      { name: fileName, mimeType: mimeType || "application/octet-stream" },
+      req.headers.get("origin"),
+    );
     return NextResponse.json({ uploadUrl });
   } catch (err) {
     return NextResponse.json(

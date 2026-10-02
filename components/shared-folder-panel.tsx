@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { uploadResumable, sleep } from "@/lib/upload/resumable-drive";
 
 interface DriveFile {
   id: string;
@@ -11,39 +12,6 @@ interface DriveFile {
 
 type PendingAction = null | "link";
 
-// PUTs the file's bytes straight to the Drive resumable-upload session
-// URL minted by /api/shared-folder/upload-session — never touches this
-// app's own server. XMLHttpRequest rather than fetch specifically for
-// upload.onprogress: fetch has no built-in upload-progress event, and a
-// several-hundred-MB video with no progress feedback at all would just
-// look hung.
-//
-// Confirmed live: Drive's resumable-upload endpoint will accept and
-// complete a cross-origin PUT from the browser, but doesn't reliably let
-// browser JS actually READ that response back (a CORS quirk on the
-// response itself, not the request) — this fires `onerror` with no
-// readable status at all even when the file already exists in Drive.
-// So this function's rejection means "the browser couldn't confirm it,"
-// NOT "it definitely failed" — the caller re-checks Drive's own folder
-// listing (via this app's server, unaffected by browser CORS) rather
-// than trusting this promise's outcome as the final word.
-function putFileDirectly(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`status ${xhr.status}`)));
-    xhr.onerror = () => reject(new Error("network error (possibly just an unreadable response — verifying)"));
-    xhr.send(file);
-  });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 // Shared folder (coach dashboard spec) — student, coach, and admin can
 // all upload, add a shortcut via a pasted Drive link, or remove an item,
@@ -73,6 +41,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -114,7 +83,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
   // The PUT's own success/failure signal isn't trusted on its own —
   // confirmed live that Drive can genuinely receive and create the file
   // while the browser still reports a network error reading the response
-  // back (see putFileDirectly's comment). So either way, this re-checks
+  // back (see uploadResumable's comment). So either way, this re-checks
   // Drive's own folder listing through our server (server-side, immune to
   // the browser's CORS restriction) to find out what actually happened —
   // one retry after a short pause in case Drive's listing lags the write
@@ -124,9 +93,18 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
     if (!file) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     setUploadProgress(0);
     const knownIds = new Set(files.map((f) => f.id));
     let putError: string | null = null;
+    // Keep an iPad/phone screen from dimming mid-upload, which pauses the
+    // page. Best-effort: not every browser supports it.
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    try {
+      wakeLock = await (navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request("screen") ?? null;
+    } catch {
+      // not supported / not allowed — carry on
+    }
     try {
       const sessionRes = await fetch("/api/shared-folder/upload-session", {
         method: "POST",
@@ -139,10 +117,13 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
       }
       const { uploadUrl } = await sessionRes.json();
 
+      let confirmed: string | null = null;
       try {
-        await putFileDirectly(uploadUrl, file, setUploadProgress);
+        confirmed = await uploadResumable(uploadUrl, file, setUploadProgress);
+        if (confirmed === null) putError = "the connection kept dropping";
       } catch (err) {
         putError = err instanceof Error ? err.message : "upload error";
+        if (err instanceof Error && /expired|refused/.test(err.message)) throw err;
       }
 
       setUploadProgress(null);
@@ -152,7 +133,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
         const listRes = await fetch(`/api/shared-folder/list?studentId=${studentId}`);
         if (!listRes.ok) continue;
         const { files: freshFiles } = (await listRes.json()) as { files: DriveFile[] };
-        landedFile = freshFiles.find((f) => !knownIds.has(f.id) && f.name === file.name);
+        landedFile = freshFiles.find((f) => !knownIds.has(f.id) && (f.id === confirmed || f.name === file.name));
         if (landedFile) {
           setFiles(freshFiles);
           break;
@@ -163,6 +144,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
           putError ? `Upload didn't complete (${putError}) — please try again.` : "Upload didn't complete — please try again.",
         );
       }
+      setNotice(`✓ Sent — “${file.name}” is in the shared folder.`);
 
       // Coach-facing Slack ping — only actually sends when the caller
       // resolves server-side to being this student themselves (see the
@@ -176,6 +158,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
+      wakeLock?.release().catch(() => {});
       setBusy(false);
       setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -257,6 +240,12 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
         </div>
       )}
 
+      {uploadProgress !== null && (
+        <p className="px-5 pt-2 text-xs text-[var(--text-muted)]">
+          Uploading {uploadProgress}% — keep this page open until it says Sent. Big videos can take a few minutes.
+        </p>
+      )}
+      {notice && <p className="px-5 pt-2 text-xs font-semibold text-[var(--slot-group)]">{notice}</p>}
       {error && <p className="px-5 pt-2 text-xs text-[var(--coral)]">{error}</p>}
 
       {loading ? (

@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FormattedDateTime } from "./formatted-time";
+import { uploadToSharedFolder } from "@/lib/upload/resumable-drive";
 
 interface Message {
   id: string;
@@ -14,6 +15,12 @@ interface Message {
 }
 
 const POLL_MS = 4000;
+// The chat-attachments bucket rejects files over 50 MB. Videos (and any
+// file near that) go to the student's Shared Folder instead via Drive's
+// resumable upload, with a chat message pointing to it — iPad videos are
+// routinely hundreds of MB and used to fail after minutes with no
+// message (Maryke Meyer's report, 2026-10-02).
+const CHAT_ATTACHMENT_MAX_BYTES = 45 * 1024 * 1024;
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
 function filenameFromPath(path: string) {
@@ -76,6 +83,7 @@ export default function ChatPanel({
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
@@ -145,7 +153,8 @@ export default function ChatPanel({
     // real thread id upfront, since the storage path convention IS the
     // thread id — so that's still gated below; send a text message
     // first to get a thread, then attachments work on the next message.
-    if (file && !threadId) {
+    const viaSharedFolder = !!file && (file.type.startsWith("video/") || file.size > CHAT_ATTACHMENT_MAX_BYTES);
+    if (file && !viaSharedFolder && !threadId) {
       setError("Send a text message first before attaching a file to a new conversation.");
       return;
     }
@@ -155,8 +164,14 @@ export default function ChatPanel({
 
     try {
       let attachmentUrl: string | null = null;
+      let messageBody = text.trim() || null;
 
-      if (file) {
+      if (file && viaSharedFolder) {
+        setUploadProgress(0);
+        await uploadToSharedFolder(studentId, file, setUploadProgress);
+        const note = `${file.type.startsWith("video/") ? "📹 Sent a video" : "📎 Sent a file"}: ${file.name} — it's in the Shared Folder.`;
+        messageBody = messageBody ? `${messageBody}\n\n${note}` : note;
+      } else if (file) {
         const path = `${threadId}/${crypto.randomUUID()}-${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from("chat-attachments")
@@ -172,7 +187,7 @@ export default function ChatPanel({
       const res = await fetch("/api/chat/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, body: text.trim() || null, attachmentUrl }),
+        body: JSON.stringify({ studentId, body: messageBody, attachmentUrl }),
       });
 
       if (!res.ok) {
@@ -186,8 +201,13 @@ export default function ChatPanel({
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await loadMessages();
+    } catch (err) {
+      // A thrown upload/network error used to end silently here — the
+      // button just went back to "Send".
+      setError(err instanceof Error ? err.message : "Couldn't send that — please try again.");
     } finally {
       setSending(false);
+      setUploadProgress(null);
     }
   }
 
@@ -248,6 +268,11 @@ export default function ChatPanel({
 
       <div className="border-t border-[var(--border)] bg-[var(--surface-2)] p-3">
         {error && <p className="mb-2 text-sm text-[var(--coral)]">{error}</p>}
+        {uploadProgress !== null && (
+          <p className="mb-2 text-xs text-[var(--text-muted)]">
+            Uploading {uploadProgress}% — keep this page open until it&apos;s sent. Big videos can take a few minutes.
+          </p>
+        )}
         {file && (
           <p className="mb-2 text-xs text-[var(--text-muted)]">
             Attached: {file.name}{" "}
@@ -288,7 +313,7 @@ export default function ChatPanel({
             disabled={sending || (!text.trim() && !file)}
             className="rounded-lg bg-[var(--gold)] px-4 py-2 text-sm font-bold text-[var(--gold-text)] disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send"}
+            {sending ? (uploadProgress !== null ? `Sending… ${uploadProgress}%` : "Sending…") : "Send"}
           </button>
         </div>
       </div>

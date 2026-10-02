@@ -200,6 +200,12 @@ export async function listStudentRecordings(folderId: string): Promise<StudentFo
 export async function createResumableUploadSession(
   folderId: string,
   file: { name: string; mimeType: string },
+  // The browser origin that will PUT the bytes. Drive only sends CORS
+  // headers on the session's PUT responses when the session was started
+  // with a matching Origin — without it the browser can't read any
+  // reply (status 0), so it can't upload in resumable chunks or even
+  // tell success from failure.
+  origin?: string | null,
 ): Promise<string> {
   const auth = getGoogleAuth(DRIVE_SCOPES);
   const { token } = await auth.getAccessToken();
@@ -213,6 +219,7 @@ export async function createResumableUploadSession(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json; charset=UTF-8",
         "X-Upload-Content-Type": file.mimeType,
+        ...(origin ? { Origin: origin } : {}),
       },
       body: JSON.stringify({
         name: file.name,
