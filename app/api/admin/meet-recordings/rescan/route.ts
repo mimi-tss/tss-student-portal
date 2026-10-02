@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
-import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
+import { scanForNewRecordings, runNameMatching, runDayMatching, runTimeMatching } from "@/lib/admin/recording-matching";
 
 // The slow scan + auto-match pass, split out of the main GET route
 // (see that route's own comment) so a manual "check now" doesn't block
@@ -35,8 +35,11 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
   const { inserted } = await scanForNewRecordings(admin, lookbackDays);
+  // Time-of-day first: the recording's own start time (filename) against
+  // the coach's attended lessons — resolves most recordings outright.
+  const { autoMatched: timeMatched } = await runTimeMatching(admin);
   const { matched: nameMatched } = await runNameMatching(admin);
   const { autoMatched: dayMatched } = await runDayMatching(admin);
 
-  return NextResponse.json({ inserted, autoMatched: nameMatched + dayMatched });
+  return NextResponse.json({ inserted, autoMatched: timeMatched + nameMatched + dayMatched });
 }

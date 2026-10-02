@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
+import { scanForNewRecordings, runNameMatching, runDayMatching, runTimeMatching } from "@/lib/admin/recording-matching";
 import { recordingsScanIdentities } from "@/lib/google/drive"; // TEMP DEBUG
 import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
@@ -116,6 +116,9 @@ export async function GET(req: NextRequest) {
   // marked (day+session matching does), so it resolves more real cases
   // at this studio right now. Day+session still runs after as a
   // fallback for whatever name-matching couldn't resolve.
+  // Time-of-day first: the recording's own start time (filename) against
+  // the coach's attended lessons — resolves most recordings outright.
+  const { autoMatched: timeMatched } = await runTimeMatching(admin);
   const { matched: nameMatched } = await runNameMatching(admin);
   const { autoMatched: dayMatched } = await runDayMatching(admin);
 
@@ -162,9 +165,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     inserted,
+    timeMatched,
     nameMatched,
     dayMatched,
-    autoMatched: nameMatched + dayMatched,
+    autoMatched: timeMatched + nameMatched + dayMatched,
     matchFailAlerted,
     debugScanIdentities: recordingsScanIdentities(), // TEMP DEBUG
   });
