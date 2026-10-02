@@ -46,11 +46,11 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
           </div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {/* Points at the Kajabi site, not /student/dashboard — this
-                header is shared by every /billing page, including the
-                logged-out pricing page, where there's no session to send
-                anyone to a dashboard with. */}
-            <a href={KAJABI_SITE_URL} className={styles.linkBtn}>
+            {/* The account page (always logged in) goes back to the
+                portal dashboard (studio call 2026-10-02); the logged-out
+                pricing/signup pages keep pointing at the Kajabi site,
+                since there's no session to send anyone to a dashboard with. */}
+            <a href={pathname.startsWith("/billing/account") ? "/student/dashboard" : KAJABI_SITE_URL} className={styles.linkBtn}>
               ← Back to Studio
             </a>
             <ThemeToggle />
