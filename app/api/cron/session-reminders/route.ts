@@ -13,6 +13,8 @@ import {
 import { cleanGroupTopic } from "@/lib/admin/recording-matching";
 import { isCronAuthorized } from "@/lib/cron/auth";
 import { willAutoCancel } from "@/lib/group-lesson-topic";
+import { trialUpgradeOffer } from "@/lib/email/templates/trial-upgrade";
+import { isTaraCoach } from "@/lib/scheduling/fifth-week-offers";
 
 // Every 5 minutes (Supabase pg_cron; GitHub Actions as a slow backup), catches two
 // windows in one run: "starting soon" and "24hr before". Window width
@@ -159,6 +161,7 @@ export async function GET(req: NextRequest) {
   }
 
   const groupReminded = await sendGroupReminders(admin, now);
+  const trialOffers = await sendTrialUpgradeOffers(admin, now);
 
   const missedSent = (await sendMissedLessonEmails(admin, now)) + (await sendMissedGroupEmails(admin, now));
 
@@ -173,6 +176,7 @@ export async function GET(req: NextRequest) {
     reminder24h: reminder24h.length,
     notified,
     groupReminded,
+    trialOffers,
     meetLinksSent,
     missedSent,
   });
@@ -379,6 +383,70 @@ async function sendGroupReminders(admin: ReturnType<typeof createAdminClient>, n
         sent++;
       }
     }
+  }
+  return sent;
+}
+
+// "Move up to Pro" after a Suite member's free first session (studio
+// call 2026-10-02). Email 1 ~2 hours after it ends, once the coach has
+// marked it attended; email 2 four days later if they're still on Suite
+// (and only if email 1 went out). The windows' upper bounds keep old
+// trials from getting a surprise email. No-shows get the missed-lesson
+// email instead. Skips Tara's trials and ambassadors.
+const HOUR_MS = 60 * 60 * 1000;
+async function sendTrialUpgradeOffers(admin: ReturnType<typeof createAdminClient>, now: number): Promise<number> {
+  const { data, error } = await admin
+    .from("sessions")
+    .select("id, scheduled_at, duration_minutes, students(id, name, email, phone, tier, archived, ambassador), coaches:actual_coach_id(name)")
+    .eq("is_trial", true)
+    .eq("status", "attended")
+    .gte("scheduled_at", new Date(now - 11 * 24 * HOUR_MS).toISOString())
+    .lte("scheduled_at", new Date(now - 2 * HOUR_MS).toISOString());
+  if (error) {
+    console.error("trial upgrade query failed", error.message);
+    return 0;
+  }
+  type Row = {
+    id: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    students: { id: string; name: string; email: string; phone: string | null; tier: string; archived: boolean; ambassador: boolean | null } | null;
+    coaches: { name: string } | { name: string }[] | null;
+  };
+  const rows = (data ?? []) as unknown as Row[];
+  const key = (studentId: string, sessionId: string, n: 1 | 2) => `student:${studentId}:trial_upgrade_offer:${sessionId}:${n}`;
+  const { data: sentRows } = await admin
+    .from("notification_log")
+    .select("dedup_key")
+    .eq("kind", "trial_upgrade_offer")
+    .in("dedup_key", rows.flatMap((r) => (r.students ? [key(r.students.id, r.id, 1)] : [])));
+  const firstSent = new Set((sentRows ?? []).map((r) => r.dedup_key as string));
+
+  let sent = 0;
+  for (const r of rows) {
+    const st = r.students;
+    const coach = unwrap(r.coaches);
+    if (!st || st.archived || st.ambassador || st.tier !== "suite" || isTaraCoach(coach?.name)) continue;
+    const sinceEnd = now - (new Date(r.scheduled_at).getTime() + r.duration_minutes * 60_000);
+    let n: 1 | 2 | null = null;
+    if (sinceEnd >= 2 * HOUR_MS && sinceEnd <= 3 * 24 * HOUR_MS) n = 1;
+    else if (sinceEnd >= 4 * 24 * HOUR_MS && sinceEnd <= 10 * 24 * HOUR_MS && firstSent.has(key(st.id, r.id, 1))) n = 2;
+    if (!n) continue;
+    const m = trialUpgradeOffer({ firstName: firstNameOf(st.name), coachFirstName: firstNameOf(coach?.name), followUp: n === 2 });
+    await notifyStudent(admin, {
+      studentId: st.id,
+      email: st.email,
+      phone: st.phone,
+      group: "alerts",
+      kind: "trial_upgrade_offer",
+      dedupKey: key(st.id, r.id, n),
+      title: m.subject,
+      body: m.preheader,
+      ghlData: { sessionId: r.id, ...m },
+      channels: { email: true, sms: false, inApp: false },
+      emailAlways: true,
+    });
+    sent++;
   }
   return sent;
 }

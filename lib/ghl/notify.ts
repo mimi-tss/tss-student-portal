@@ -23,7 +23,8 @@ export interface GhlEvent {
     | "fifth_week_offer"
     | "plan_changed"
     | "session_missed"
-    | "payment_failed";
+    | "payment_failed"
+    | "trial_upgrade_offer";
   studentId: string;
   email: string;
   phone: string | null;

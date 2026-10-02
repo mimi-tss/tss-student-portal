@@ -19,7 +19,8 @@ type NotificationKind =
   | "fifth_week_offer"
   | "plan_changed"
   | "session_missed"
-  | "payment_failed";
+  | "payment_failed"
+  | "trial_upgrade_offer";
 
 // The only notifications that may go out by text (studio call
 // 2026-09-26). Coach messages, recordings and the digest are never
@@ -197,4 +198,16 @@ export async function notifyStaff(
   const claimed = await claim(admin, "staff", null, opts.kind, opts.dedupKey);
   if (!claimed) return;
   await notifySlack(opts.text);
+}
+
+// Staff email (e.g. the daily ops digest). Same notification_log dedup as
+// notifyStaff, so a re-run within the day is a no-op.
+export async function emailStaff(
+  admin: SupabaseClient,
+  opts: { kind: string; dedupKey: string; to: string; subject: string; html: string; text: string },
+): Promise<boolean> {
+  const claimed = await claim(admin, "staff", null, opts.kind, opts.dedupKey);
+  if (!claimed) return false;
+  await sendEmail(opts.to, opts.subject, opts.html, undefined, opts.text);
+  return true;
 }
