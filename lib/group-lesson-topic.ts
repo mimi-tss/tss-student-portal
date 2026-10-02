@@ -43,6 +43,18 @@ export function isBootcamp(topic: string | null | undefined): boolean {
 // Bootcamp. Shared so the 24h reminder never goes out for a class that's
 // cancelled in the same window.
 export const MIN_GROUP_REGISTRATIONS = 2;
-export function willAutoCancel(topic: string | null | undefined, registeredCount: number): boolean {
+
+// cancel_reason on a class an admin brought back after it was cancelled
+// (app/api/admin/uncancel-group-lesson) — cancelled_at is null again, and
+// this marker tells the auto-cancel job to leave it alone even if it
+// still has fewer than MIN_GROUP_REGISTRATIONS signed up.
+export const REINSTATED_REASON = "reinstated by admin";
+
+export function willAutoCancel(
+  topic: string | null | undefined,
+  registeredCount: number,
+  cancelReason?: string | null,
+): boolean {
+  if (cancelReason === REINSTATED_REASON) return false;
   return !isBootcamp(topic) && registeredCount < MIN_GROUP_REGISTRATIONS;
 }

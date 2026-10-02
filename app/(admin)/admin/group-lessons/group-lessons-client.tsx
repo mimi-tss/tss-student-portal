@@ -552,12 +552,21 @@ function GroupLessonHistory() {
               )}
             </div>
             {lesson.cancelledAt ? (
-              <p className={styles.errorText} style={{ marginTop: 4 }}>
-                Cancelled <FormattedDateTime value={lesson.cancelledAt} />
-                {lesson.cancelReason ? ` — ${lesson.cancelReason}` : ""}
-              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+                <p className={styles.errorText} style={{ margin: 0 }}>
+                  Cancelled <FormattedDateTime value={lesson.cancelledAt} />
+                  {lesson.cancelReason ? ` — ${lesson.cancelReason}` : ""}
+                </p>
+                {new Date(lesson.scheduledAt).getTime() + lesson.durationMinutes * 60_000 > Date.now() && (
+                  <ReinstateGroupLessonButton groupLessonId={lesson.id} onReinstated={load} />
+                )}
+              </div>
             ) : (
-              <p className={styles.mutedText} style={{ marginTop: 4 }}>Held as scheduled.</p>
+              <p className={styles.mutedText} style={{ marginTop: 4 }}>
+                {new Date(lesson.scheduledAt).getTime() > Date.now()
+                  ? "Reinstated — it's on the upcoming list above; register students there."
+                  : "Held as scheduled."}
+              </p>
             )}
             {lesson.attendees.length > 0 && (
               <ul className={styles.list} style={{ marginTop: 8 }}>
@@ -1102,5 +1111,67 @@ function CancelGroupLessonButton({
         </button>
       </div>
     </div>
+  );
+}
+
+// Undo a cancellation for a class that hasn't happened yet — e.g. it was
+// auto-cancelled for low sign-ups and students then asked to join. The
+// class goes back on the upcoming list (register students there) and the
+// auto-cancel job leaves it alone from then on.
+function ReinstateGroupLessonButton({
+  groupLessonId,
+  onReinstated,
+}: {
+  groupLessonId: string;
+  onReinstated: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleReinstate() {
+    setSaving(true);
+    setMessage(null);
+    const res = await fetch("/api/admin/uncancel-group-lesson", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groupLessonId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSaving(false);
+    if (!res.ok) {
+      setMessage(body.error ?? "Couldn't reinstate this class.");
+      return;
+    }
+    setConfirming(false);
+    setMessage(
+      body.creditsFromCancel > 0
+        ? `Reinstated. Note: ${body.creditsFromCancel} credit(s) issued when it was cancelled are still on students' accounts.`
+        : "Reinstated — it's back in the upcoming list. Register students there.",
+    );
+    onReinstated();
+  }
+
+  if (!confirming) {
+    return (
+      <>
+        <button onClick={() => setConfirming(true)} className={styles.linkBtnSmall}>
+          Reinstate class
+        </button>
+        {message && <span className={styles.mutedText}>{message}</span>}
+      </>
+    );
+  }
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span className={styles.mutedText}>Put this class back on? It won&apos;t be auto-cancelled again.</span>
+      <button onClick={handleReinstate} disabled={saving} className={styles.ctaSmall}>
+        {saving ? "Reinstating…" : "Yes, reinstate"}
+      </button>
+      <button onClick={() => setConfirming(false)} disabled={saving} className={styles.linkBtnSmall}>
+        Never mind
+      </button>
+      {message && <span className={styles.errorText}>{message}</span>}
+    </span>
   );
 }

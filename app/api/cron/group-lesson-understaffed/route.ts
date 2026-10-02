@@ -40,6 +40,7 @@ interface LessonRow {
   topic: string | null;
   scheduled_at: string;
   coach_id: string;
+  cancel_reason: string | null;
   coaches: { name: string; timezone: string; slack_webhook_url: string | null } | { name: string; timezone: string; slack_webhook_url: string | null }[] | null;
   group_lesson_registrations: Registration[] | null;
 }
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
   const { data: lessons } = await admin
     .from("group_lessons")
     .select(
-      "id, topic, scheduled_at, coach_id, coaches(name, timezone, slack_webhook_url), " +
+      "id, topic, scheduled_at, coach_id, cancel_reason, coaches(name, timezone, slack_webhook_url), " +
         "group_lesson_registrations(id, student_id, status, students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp))",
     )
     .is("cancelled_at", null)
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
   for (const lesson of rows) {
     const registrations = (lesson.group_lesson_registrations ?? []).filter((r) => r.status === "registered");
     // Bootcamps run no matter how many signed up (studio call 2026-09-30).
-    if (!willAutoCancel(lesson.topic, registrations.length)) continue;
+    if (!willAutoCancel(lesson.topic, registrations.length, lesson.cancel_reason)) continue;
 
     const coach = unwrap(lesson.coaches);
 

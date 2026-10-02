@@ -326,7 +326,7 @@ async function sendGroupReminders(admin: ReturnType<typeof createAdminClient>, n
     const { data, error } = await admin
       .from("group_lessons")
       .select(
-        "id, topic, scheduled_at, duration_minutes, cancelled_at, coaches(name, timezone), " +
+        "id, topic, scheduled_at, duration_minutes, cancelled_at, cancel_reason, coaches(name, timezone), " +
           "group_lesson_registrations(status, students(id, name, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp))",
       )
       .is("cancelled_at", null)
@@ -341,13 +341,14 @@ async function sendGroupReminders(admin: ReturnType<typeof createAdminClient>, n
       topic: string | null;
       scheduled_at: string;
       duration_minutes: number;
+      cancel_reason: string | null;
       coaches: { name: string; timezone: string } | { name: string; timezone: string }[] | null;
       group_lesson_registrations: { status: string; students: StudentRow | StudentRow[] | null }[];
     }[]) {
       // A class the understaffed job is cancelling in this same 24h window
       // gets the "cancelled" notice instead, never "see you tomorrow".
       const registered = (lesson.group_lesson_registrations ?? []).filter((r) => r.status === "registered");
-      if (kind === "session_reminder_24h" && willAutoCancel(lesson.topic, registered.length)) continue;
+      if (kind === "session_reminder_24h" && willAutoCancel(lesson.topic, registered.length, lesson.cancel_reason)) continue;
       const coach = unwrap(lesson.coaches);
       const when = lessonTimeFields(lesson.scheduled_at, coach?.timezone);
       for (const reg of registered) {
