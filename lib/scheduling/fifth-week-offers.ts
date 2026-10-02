@@ -16,13 +16,13 @@ import { formatPrice } from "@/lib/stripe/tiers";
 // route), which charges real cards. Off until the studio signs off on a
 // live test; flip to true to launch. Offer emails are separately held by
 // STUDENT_NOTIFICATIONS_PAUSED.
-export const FIFTH_WEEK_SELF_SERVE_ENABLED = false;
+export const FIFTH_WEEK_SELF_SERVE_ENABLED = true; // launched 2026-10-02 after a live test purchase
 
 // Pilot: students who get the self-serve side (dashboard card + buy
 // route) before the master switch is on — for the studio's own live test
 // purchase. Also bypasses the ambassador exclusion below. Mimi Orac
 // (studio call 2026-10-01). Empty this once the switch is on.
-const FIFTH_WEEK_PILOT_STUDENT_IDS: ReadonlySet<string> = new Set(["5c4651e0-f842-403a-9d4a-70e3604f732c"]);
+const FIFTH_WEEK_PILOT_STUDENT_IDS: ReadonlySet<string> = new Set();
 
 // "No thanks" (✕ on the dashboard card) for one bonus week — stored as a
 // notification_log marker, like sent notices, so no extra table. Only
