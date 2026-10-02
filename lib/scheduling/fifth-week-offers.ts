@@ -25,8 +25,8 @@ export const FIFTH_WEEK_SELF_SERVE_ENABLED = false;
 const FIFTH_WEEK_PILOT_STUDENT_IDS: ReadonlySet<string> = new Set(["5c4651e0-f842-403a-9d4a-70e3604f732c"]);
 
 // "No thanks" (✕ on the dashboard card) for one bonus week — stored as a
-// notification_log marker, like sent notices, so no extra table: hides
-// the card and skips that week's "last chance" reminder (studio call
+// notification_log marker, like sent notices, so no extra table. Only
+// hides the card; the "last chance" reminder still goes out (studio call
 // 2026-10-02).
 export const FIFTH_WEEK_DECLINED_KIND = "fifth_week_declined";
 export function fifthWeekDeclinedKey(studentId: string, occurrenceIso: string): string {

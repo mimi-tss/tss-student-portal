@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyStudent } from "@/lib/notifications/create";
-import {
-  FIFTH_WEEK_SELF_SERVE_ENABLED,
-  declinedFifthWeekKeys,
-  fifthWeekDeclinedKey,
-  findFifthWeekOpportunities,
-  fifthWeekPrice,
-} from "@/lib/scheduling/fifth-week-offers";
+import { FIFTH_WEEK_SELF_SERVE_ENABLED, findFifthWeekOpportunities, fifthWeekPrice } from "@/lib/scheduling/fifth-week-offers";
 import { fifthWeekNoLesson, fifthWeekOffer } from "@/lib/email/templates/fifth-week";
 import { firstNameOf, lessonTimeFields } from "@/lib/ghl/fields";
 
@@ -31,10 +25,6 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
   const opportunities = await findFifthWeekOpportunities(admin);
   const prices = new Map<number, Awaited<ReturnType<typeof fifthWeekPrice>>>();
-  const declined = await declinedFifthWeekKeys(
-    admin,
-    opportunities.map((o) => fifthWeekDeclinedKey(o.studentId, o.occurrenceAt.toISOString())),
-  );
 
   let offers = 0;
   let reminders = 0;
@@ -77,8 +67,6 @@ export async function GET(req: NextRequest) {
     // are behind FIFTH_WEEK_SELF_SERVE_ENABLED. No claim is made, so the
     // offer still goes out once it's switched on (if still in window).
     if (!FIFTH_WEEK_SELF_SERVE_ENABLED) continue;
-    // They tapped ✕ ("no thanks") on the dashboard card: no more nudges.
-    if (declined.has(fifthWeekDeclinedKey(o.studentId, o.occurrenceAt.toISOString()))) continue;
 
     if (!prices.has(o.durationMinutes)) prices.set(o.durationMinutes, await fifthWeekPrice(o.durationMinutes));
     const price = prices.get(o.durationMinutes) ?? null;

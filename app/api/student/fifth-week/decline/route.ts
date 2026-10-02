@@ -3,9 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
 import { FIFTH_WEEK_DECLINED_KIND, fifthWeekDeclinedKey } from "@/lib/scheduling/fifth-week-offers";
 
-// ✕ on the dashboard "extra lesson" card: hides it and skips that week's
-// reminder (app/api/cron/fifth-week-offers). Same student resolution as
-// the buy route next door.
+// ✕ on the dashboard "extra lesson" card: hides it for that week (the
+// "last chance" reminder still goes out). Same student resolution as the
+// buy route next door.
 export async function POST(req: NextRequest) {
   const { occurrenceAt } = (await req.json().catch(() => ({}))) as { occurrenceAt?: string };
   if (!occurrenceAt || Number.isNaN(new Date(occurrenceAt).getTime())) {

@@ -46,7 +46,7 @@ export default function FifthWeekCard({
     router.refresh();
   }
 
-  // ✕ = "no thanks" for this week: hides the card and skips the reminder.
+  // ✕ = "no thanks" for this week: hides the card (reminder still sent).
   function decline() {
     setStep("hidden");
     fetch("/api/student/fifth-week/decline", {
