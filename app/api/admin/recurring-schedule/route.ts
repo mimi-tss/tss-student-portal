@@ -6,6 +6,7 @@ import {
   nextWeeklySlotInstant,
 } from "@/lib/scheduling/recurring";
 import { notifyCoachRecurringScheduleEvent } from "@/lib/notifications/session-events";
+import { ensureStudentDriveFolder } from "@/lib/google/drive";
 
 function unwrapJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -84,6 +85,10 @@ export async function POST(req: NextRequest) {
   // real, supported case, see the comment above).
   if (!student.assigned_coach_id) {
     await supabase.from("students").update({ assigned_coach_id: effectiveCoachId }).eq("id", studentId);
+    // Same as every other path that sets a coach: the student's Drive
+    // folder is created off their coach, so it can't wait for a manual
+    // "Assign coach" click that may never come.
+    await ensureStudentDriveFolder(studentId);
   }
 
   // Backfill for students who predate billing_anniversary_date being set

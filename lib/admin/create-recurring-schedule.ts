@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import { ensureStudentDriveFolder } from "@/lib/google/drive";
 
 export interface CreateRecurringScheduleInput {
   studentId: string;
@@ -60,6 +61,10 @@ export async function createRecurringSchedule(
   // overwritten by a different per-schedule coach.
   if (!student.assigned_coach_id) {
     await supabase.from("students").update({ assigned_coach_id: effectiveCoachId }).eq("id", studentId);
+    // Same as every other path that sets a coach: the student's Drive
+    // folder is created off their coach, so it can't wait for a manual
+    // "Assign coach" click that may never come.
+    await ensureStudentDriveFolder(studentId);
   }
 
   if (!student.billing_anniversary_date) {
