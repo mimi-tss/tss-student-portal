@@ -62,7 +62,7 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Money",
+    label: "Finance",
     links: [
       { href: "/admin/billing", label: "Billing", icon: "◆" },
       { href: "/admin/finance", label: "Payroll", icon: "$", financeOnly: true },
