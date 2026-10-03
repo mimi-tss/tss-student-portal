@@ -73,7 +73,6 @@ const SECTIONS: NavSection[] = [
     label: "More",
     collapsible: true,
     links: [
-      { href: "/admin/community", label: "Backstage", icon: "◈" },
       { href: "/admin/weekly-email", label: "Weekly Email", icon: "✦" },
       { href: "/admin/activity-log", label: "Activity Log", icon: "▤" },
       { href: "/admin/bug-reports", label: "Bug Reports", icon: "✱" },
