@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { getGoogleAuth, DRIVE_SCOPES } from "./client";
+import { listMeetApiRecordingFileIds } from "./meet";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function getDriveClient(subject?: string) {
@@ -519,6 +520,33 @@ async function listMeetRecordingsInboxAs(subject: string, cutoff: string): Promi
     .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
 }
 
+// The same recordings, found through the Meet API instead of Drive
+// folders: Meet reports each finished recording with its Drive file id,
+// so this still works when Google moves or duplicates the folders the
+// crawl above depends on — and sees a recording as soon as it exists.
+// A failure here (missing delegation scope, API outage) must never take
+// the Drive crawl down with it, so it logs and contributes nothing.
+async function listMeetApiRecordingsAs(subject: string, cutoff: string): Promise<MeetRecordingFile[]> {
+  try {
+    const ids = await listMeetApiRecordingFileIds(subject, cutoff);
+    const drive = getDriveClient(subject);
+    const files = await Promise.all(
+      ids.map((fileId) =>
+        drive.files
+          .get({ fileId, fields: "id, name, createdTime", supportsAllDrives: true })
+          .then((r) => r.data)
+          .catch(() => null),
+      ),
+    );
+    return files
+      .filter((f): f is NonNullable<typeof f> => !!f?.id && !!f.createdTime)
+      .map((f) => ({ id: f.id as string, name: f.name ?? "Untitled", createdTime: f.createdTime as string }));
+  } catch (err) {
+    console.error(`Meet API recording lookup failed for ${subject}`, err);
+    return [];
+  }
+}
+
 // Lists recent recordings sitting in the shared Meet-recordings inbox —
 // feeds lib/admin/recording-matching.ts's scan step, which diffs this
 // against meet_recordings.drive_file_id to find newly-arrived files.
@@ -541,9 +569,11 @@ export async function listMeetRecordingsInbox(
 ): Promise<MeetRecordingFile[]> {
   const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const byIdentity = await Promise.all(
-    recordingsScanIdentities().map((subject) => listMeetRecordingsInboxAs(subject, cutoff)),
-  );
+  const identities = recordingsScanIdentities();
+  const byIdentity = await Promise.all([
+    ...identities.map((subject) => listMeetRecordingsInboxAs(subject, cutoff)),
+    ...identities.map((subject) => listMeetApiRecordingsAs(subject, cutoff)),
+  ]);
 
   const seen = new Set<string>();
   const merged: MeetRecordingFile[] = [];

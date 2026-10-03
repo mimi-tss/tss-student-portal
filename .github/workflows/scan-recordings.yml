@@ -4,14 +4,18 @@ name: Scan and auto-match Meet recordings
 # a recording lands in the right student's Drive folder without an
 # admin needing to happen to open that page — same reason this runs
 # here instead of Vercel Cron as kajabi-sync/materialize-recurring
-# (see those workflows' own comments). Every 2 hours, not more often:
-# Meet's own save-to-Drive step has a confirmed multi-hour processing
-# delay (RECORDING_GRACE_HOURS in lib/admin/attention-items.ts), so
-# anything tighter just burns Drive/Gemini API calls for no benefit.
+# (see those workflows' own comments). Every 30 minutes: the scan also
+# asks the Meet API for finished recordings (lib/google/meet.ts), which
+# reports each one as soon as its file exists, so a recording can be
+# found within minutes instead of waiting out a 2-hour cycle. Gemini's
+# notes doc still lags by hours (RECORDING_GRACE_HOURS in
+# lib/admin/attention-items.ts) — name matching just retries on later
+# runs until the notes show up, bounded per run, so a tighter schedule
+# costs little.
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
 jobs:

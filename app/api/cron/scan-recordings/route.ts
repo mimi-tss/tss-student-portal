@@ -10,11 +10,11 @@ import { notifyStaff } from "@/lib/notifications/create";
 // stuck.
 const MATCH_FAIL_GRACE_HOURS = 3;
 
-// This job is scheduled every 2 hours (.github/workflows/scan-recordings.yml)
+// This job is scheduled every 30 minutes (.github/workflows/scan-recordings.yml)
 // — a gap bigger than this means at least one scheduled run never made it
 // to its own success path (auth failure, Vercel outage, quota, anything),
 // and Needs Review/Recordings have quietly stopped refreshing with nobody
-// aware. Generous margin over the 2h schedule so ordinary scheduling
+// aware. Generous margin over the 30-minute schedule so ordinary scheduling
 // jitter never false-alarms. This only catches "a run was skipped or
 // failed," not "GitHub Actions itself stopped firing the schedule
 // entirely" — that failure mode needs an external uptime check (e.g.

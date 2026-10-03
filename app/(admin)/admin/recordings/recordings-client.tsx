@@ -223,7 +223,7 @@ export default function RecordingsClient() {
         <p className={styles.panelText}>
           Recordings Meet couldn&apos;t be confidently matched to a student on its own — pick the right session, or
           dismiss if it&apos;s not a lesson recording (an internal meeting, a personal call). New recordings are
-          checked automatically every 2 hours.
+          checked automatically every 30 minutes.
         </p>
         <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
           <button className={styles.linkBtnSmall} disabled={rescanning} onClick={() => rescan()}>
