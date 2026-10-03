@@ -639,12 +639,31 @@ export function findStudentNameInText(text: string, students: StudentForMatching
 // runs rather than getting stuck reprocessing the same newest items.
 const NAME_MATCH_BATCH_SIZE = 8;
 
+// Tara's recordings are never auto-matched: they often need trimming
+// before they go to a student, so the studio matches them by hand from
+// the Recordings page. Every automatic pass below leaves her coach's
+// unmatched rows alone — and excludes them in the query itself, not
+// after the fact, so they can't fill a bounded batch (name matching)
+// and starve everyone else's recordings behind them.
+const MANUAL_MATCH_ONLY_COACH_NAMES = ["Tara Simon"];
+
+// Returned as a ready-made PostgREST `in` list for `.not("coach_id", "in", …)`.
+// An all-zero uuid stands in when no such coach exists, so callers always
+// apply the same filter instead of conditionally rebuilding the query.
+async function manualMatchOnlyCoachFilter(admin: SupabaseClient): Promise<string> {
+  const { data } = await admin.from("coaches").select("id").in("name", MANUAL_MATCH_ONLY_COACH_NAMES);
+  const ids = (data ?? []).map((c) => c.id as string);
+  return `(${ids.length ? ids.join(",") : "00000000-0000-0000-0000-000000000000"})`;
+}
+
 export async function runNameMatching(admin: SupabaseClient): Promise<{ matched: number }> {
+  const manualOnly = await manualMatchOnlyCoachFilter(admin);
   const { data: unmatched } = await admin
     .from("meet_recordings")
     .select("id, coach_id, drive_file_id, file_name, drive_created_at")
     .eq("status", "unmatched")
     .not("coach_id", "is", null)
+    .not("coach_id", "in", manualOnly)
     .order("drive_created_at", { ascending: true })
     .limit(NAME_MATCH_BATCH_SIZE);
 
@@ -915,11 +934,13 @@ export async function runTimeMatching(
   opts: { dryRun?: boolean } = {},
 ): Promise<{ autoMatched: number; planned: { recordingId: string; sessionId: string; studentId: string }[] }> {
   const planned: { recordingId: string; sessionId: string; studentId: string }[] = [];
+  const manualOnly = await manualMatchOnlyCoachFilter(admin);
   const { data: unmatched } = await admin
     .from("meet_recordings")
     .select("id, coach_id, file_name")
     .eq("status", "unmatched")
     .not("coach_id", "is", null)
+    .not("coach_id", "in", manualOnly)
     .order("drive_created_at", { ascending: true });
   if (!unmatched?.length) return { autoMatched: 0, planned };
 
@@ -980,12 +1001,14 @@ export async function runTimeMatching(
 }
 
 export async function runDayMatching(admin: SupabaseClient): Promise<{ autoMatched: number }> {
+  const manualOnly = await manualMatchOnlyCoachFilter(admin);
   const [{ data: unmatched }, { data: coaches }, { data: alreadyMatched }] = await Promise.all([
     admin
       .from("meet_recordings")
       .select("id, coach_id, recorded_date")
       .eq("status", "unmatched")
-      .not("coach_id", "is", null),
+      .not("coach_id", "is", null)
+      .not("coach_id", "in", manualOnly),
     admin.from("coaches").select("id, timezone"),
     admin.from("meet_recordings").select("matched_session_id").eq("status", "matched"),
   ]);
