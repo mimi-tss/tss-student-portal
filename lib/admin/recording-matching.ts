@@ -6,6 +6,7 @@ import {
   exportDocText,
   findShortcutTargeting,
   removeStudentFolderItem,
+  ensureStudentDriveFolder,
 } from "@/lib/google/drive";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
@@ -150,13 +151,26 @@ export async function attachRecordingToStudent(
     return { success: false, error: "recording not found or already resolved" };
   }
 
-  const { data: student } = await admin
-    .from("students")
-    .select("name, drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
-    .eq("id", studentId)
-    .single();
+  const loadStudent = () =>
+    admin
+      .from("students")
+      .select("name, drive_folder_id, email, phone, notify_alerts_email, notify_alerts_sms, notify_alerts_inapp")
+      .eq("id", studentId)
+      .single();
+  let { data: student } = await loadStudent();
+  // A student with a coach but no folder yet (folder creation only runs
+  // when a coach is assigned) shouldn't dead-end a match — create it now
+  // and carry on. Still fails below if there's genuinely nowhere to put
+  // one (no coach, or the coach has no Drive subfolder configured).
+  if (student && !student.drive_folder_id) {
+    await ensureStudentDriveFolder(studentId);
+    ({ data: student } = await loadStudent());
+  }
   if (!student?.drive_folder_id) {
-    return { success: false, error: "that student has no Drive folder set up yet" };
+    return {
+      success: false,
+      error: "that student has no Drive folder, and one couldn't be created (needs an assigned coach with a Drive folder)",
+    };
   }
 
   // Check for a shortcut that already exists first — the 2026-09-10
