@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scanForNewRecordings, runNameMatching, runDayMatching, runTimeMatching } from "@/lib/admin/recording-matching";
-import { recordingsScanIdentities } from "@/lib/google/drive"; // TEMP DEBUG
 import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
 
@@ -170,6 +169,5 @@ export async function GET(req: NextRequest) {
     dayMatched,
     autoMatched: timeMatched + nameMatched + dayMatched,
     matchFailAlerted,
-    debugScanIdentities: recordingsScanIdentities(), // TEMP DEBUG
   });
 }

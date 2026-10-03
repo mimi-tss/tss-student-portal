@@ -476,12 +476,7 @@ async function listQualifyingMeetingSubfolders(
 // comma-separated, for the mimi@-doesn't-see-info@'s-folders gap (see
 // findMeetRecordingsRootFolders's own comment). Deduped so a misconfigured
 // duplicate doesn't double every API call this function makes.
-// TEMP DEBUG — exported so the cron route can report this list directly
-// in its own JSON response. Remove the export (keep the function) once
-// confirmed GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS is actually reaching the
-// runtime — env var UI changes have twice now turned out not to be live
-// yet when expected.
-export function recordingsScanIdentities(): string[] {
+function recordingsScanIdentities(): string[] {
   const extra = (process.env.GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim())
