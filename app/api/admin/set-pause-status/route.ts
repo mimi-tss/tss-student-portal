@@ -71,5 +71,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true });
+  // Resume / cancelled pause: put the student's still-upcoming held
+  // weekly lessons back on the schedule. This used to be missing — the
+  // profile cleared but every lesson the pause had held stayed 'paused'
+  // (grey "Reserved" on the coach calendar), so a student whose pause was
+  // called off had no lessons until after the old pause end (Shiv Singla,
+  // Oct–Dec 2026). Only weekly-schedule lessons: a held makeup already
+  // had its credit given back when it was paused, so it stays held and
+  // the student rebooks with the credit.
+  let resumedLessons = 0;
+  if (!paused) {
+    const { data: restored } = await supabase
+      .from("sessions")
+      .update({ status: "scheduled" })
+      .eq("student_id", studentId)
+      .eq("status", "paused")
+      .eq("is_makeup", false)
+      .not("recurring_schedule_id", "is", null)
+      .gte("scheduled_at", new Date().toISOString())
+      .select("id");
+    resumedLessons = restored?.length ?? 0;
+  }
+
+  return NextResponse.json({ success: true, resumedLessons });
 }
