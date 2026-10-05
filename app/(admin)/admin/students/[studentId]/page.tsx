@@ -534,7 +534,7 @@ export default async function AdminStudentPage({
 
       <div className={styles.panel}>
         <h2>Homework notes</h2>
-        <NotesPanel studentId={student.id} canAdd />
+        <NotesPanel studentId={student.id} canAdd canDelete />
       </div>
 
       <div className={styles.panel}>

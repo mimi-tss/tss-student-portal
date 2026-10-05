@@ -30,10 +30,13 @@ function coachName(note: Note): string {
 export default function NotesPanel({
   studentId,
   canAdd = false,
+  canDelete = false,
   initialLimit,
 }: {
   studentId: string;
   canAdd?: boolean;
+  // Admin only — for a note posted on the wrong student by mistake.
+  canDelete?: boolean;
   initialLimit?: number;
 }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
@@ -76,6 +79,22 @@ export default function NotesPanel({
     await load();
   }
 
+  async function handleDelete(noteId: string) {
+    if (!window.confirm("Delete this note? This can't be undone.")) return;
+    setError(null);
+    const res = await fetch("/api/notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ noteId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? "Could not delete that note.");
+      return;
+    }
+    await load();
+  }
+
   const visible =
     !expanded && initialLimit && notes ? notes.slice(0, initialLimit) : notes;
   const hiddenCount =
@@ -83,6 +102,7 @@ export default function NotesPanel({
 
   return (
     <div>
+      {!canAdd && error && <p className="mb-1 text-xs text-[var(--coral)]">{error}</p>}
       {canAdd && (
         <div className="mb-3">
           {error && <p className="mb-1 text-xs text-[var(--coral)]">{error}</p>}
@@ -117,6 +137,11 @@ export default function NotesPanel({
               <p className="whitespace-pre-wrap">{n.note}</p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {coachName(n)} · <FormattedDateTime value={n.created_at} />
+                {canDelete && (
+                  <button onClick={() => handleDelete(n.id)} className="ml-2 text-[var(--coral)] underline">
+                    Delete
+                  </button>
+                )}
               </p>
             </li>
           ))}

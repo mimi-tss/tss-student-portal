@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminRole } from "@/lib/auth/roles";
 
 // Homework notes (TSS_App_Spec_1.md section 8) — a dated running log per
@@ -101,4 +102,57 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true, id: created.id });
+}
+
+// Admin-only removal of a homework note — for a note posted on the wrong
+// student by mistake. Coaches can add notes but not delete them (no
+// DELETE policy exists for any role), so this goes through the service
+// role after an explicit admin check, and keeps the deleted text in
+// admin_overrides so there's still a record of what was removed and by
+// whom.
+export async function DELETE(req: NextRequest) {
+  const { noteId } = await req.json();
+  if (!noteId) {
+    return NextResponse.json({ error: "noteId required" }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "not logged in" }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (!isAdminRole(profile?.role)) {
+    return NextResponse.json({ error: "admin only" }, { status: 403 });
+  }
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("homework_notes")
+    .select("id, student_id, note, created_at, coaches(name)")
+    .eq("id", noteId)
+    .maybeSingle();
+  if (!existing) {
+    return NextResponse.json({ error: "note not found" }, { status: 404 });
+  }
+
+  const { error: auditError } = await admin.from("admin_overrides").insert({
+    student_id: existing.student_id,
+    admin_profile_id: user.id,
+    override_type: "delete-homework-note",
+    note: `Deleted homework note from ${existing.created_at}: ${existing.note}`.slice(0, 2000),
+  });
+  if (auditError) {
+    return NextResponse.json({ error: `couldn't log the deletion, nothing deleted: ${auditError.message}` }, { status: 500 });
+  }
+
+  const { error } = await admin.from("homework_notes").delete().eq("id", noteId);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }
