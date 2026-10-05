@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { stripe, stripeOpus } from "@/lib/stripe/client";
+import { getStripeClient, stripe, stripeOpus } from "@/lib/stripe/client";
 import { resolveTier, billingIntervalFromPrice, formatPrice } from "@/lib/stripe/tiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
@@ -531,6 +531,34 @@ async function handleSubscriptionDeleted(admin: AdminClient, subscription: Strip
   const student = await findStudentForSubscription(admin, subscription.id, customerId, account);
 
   if (!student) return;
+
+  // Only the student's CURRENT subscription ending means they've left.
+  // When a student is moved to a new plan, the old subscription ends after
+  // the new one starts — that must not mark them cancelled, revoke Kajabi,
+  // or alert staff (Nathan Robinette, 2026-10-05). Also double-check Stripe
+  // for any other live subscription on the customer (e.g. a scheduled
+  // replacement that has started but hasn't reached us yet).
+  const { data: current } = await admin.from("students").select("stripe_subscription_id").eq("id", student.id).maybeSingle();
+  if (current?.stripe_subscription_id && current.stripe_subscription_id !== subscription.id) return;
+  // Ignore subscriptions that belong to ANOTHER student on a shared
+  // customer (Cassi & Michele) — theirs staying live says nothing here.
+  const { data: siblings } = await admin
+    .from("students")
+    .select("stripe_subscription_id")
+    .eq("stripe_customer_id", customerId)
+    .eq("stripe_account", account)
+    .neq("id", student.id);
+  const othersSubs = new Set((siblings ?? []).map((r) => r.stripe_subscription_id).filter(Boolean));
+  const live = await getStripeClient(account)
+    .subscriptions.list({ customer: customerId, status: "all", limit: 20 })
+    .then((r) =>
+      r.data.filter((s) => s.id !== subscription.id && !othersSubs.has(s.id) && ["active", "trialing", "past_due"].includes(s.status)),
+    )
+    .catch(() => []);
+  if (live.length > 0) {
+    console.warn(`subscription ${subscription.id} ended but customer ${customerId} still has ${live.map((s) => s.id).join(", ")} — not cancelling`);
+    return;
+  }
 
   await admin.from("students").update({ subscription_status: "cancelled" }).eq("id", student.id);
 
