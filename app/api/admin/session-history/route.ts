@@ -22,14 +22,23 @@ export async function GET(req: NextRequest) {
   const to = req.nextUrl.searchParams.get("to");
   const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
 
-  // "Previous sessions" — never future. With no explicit `to`, an
-  // unfiltered query returned every row including a recurring student's
-  // far-future scheduled sessions, ordered newest-first, so the page
-  // showed a year-out 2027 booking before any actual history (confirmed
-  // live). Capped here rather than just defaulting the client's date
-  // picker, so it holds regardless of what the client sends.
+  // "Previous sessions" — never future *scheduled* ones. With no explicit
+  // `to`, an unfiltered query returned every row including a recurring
+  // student's far-future scheduled sessions, ordered newest-first, so the
+  // page showed a year-out 2027 booking before any actual history
+  // (confirmed live). Capped here rather than just defaulting the client's
+  // date picker, so it holds regardless of what the client sends.
+  //
+  // The cap deliberately lets future sessions through when they're NOT
+  // 'scheduled' (cancelled, late-cancel, etc.): a cancelled session isn't
+  // in the student's upcoming list anymore, and without this it had no
+  // admin screen at all until its date passed — so one cancelled for next
+  // week (still on the coach's calendar as a late cancel) couldn't be
+  // opened, fixed or put back. Skipped when the admin picked an explicit
+  // `to` date, which stays a hard upper bound.
   const now = new Date().toISOString();
-  const effectiveTo = to && to < now ? to : now;
+  const explicitTo = !!to && to < now;
+  const effectiveTo = explicitTo ? to! : now;
 
   let query = supabase
     .from("sessions")
@@ -37,9 +46,12 @@ export async function GET(req: NextRequest) {
       count: "exact",
     })
     .eq("student_id", studentId)
-    .lte("scheduled_at", effectiveTo)
     .order("scheduled_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+
+  query = explicitTo
+    ? query.lte("scheduled_at", effectiveTo)
+    : query.or(`scheduled_at.lte.${effectiveTo},status.neq.scheduled`);
 
   if (from) query = query.gte("scheduled_at", from);
 
