@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface Exercise {
@@ -8,10 +8,10 @@ interface Exercise {
   title: string;
 }
 
-const MAX_SUGGESTIONS = 8;
-
 // Type-to-filter exercise picker — matches anywhere in the title (not
-// just prefix). Shared between coach and admin (admin now has the same
+// just prefix). The list is scrollable and shows every match — it used to
+// stop at the first 8, so most of the catalog could only be reached by
+// typing a name exactly. Shared between coach and admin (admin now has the same
 // exercise-assigning ability as a coach on a student's detail view), so
 // this uses Tailwind arbitrary var() classes rather than a CSS module,
 // same reasoning as components/shared-folder-panel.tsx — it needs to
@@ -53,9 +53,16 @@ export default function AssignExercisePanel({
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return assignableExercises.slice(0, MAX_SUGGESTIONS);
-    return assignableExercises.filter((ex) => ex.title.toLowerCase().includes(q)).slice(0, MAX_SUGGESTIONS);
+    if (!q) return assignableExercises;
+    return assignableExercises.filter((ex) => ex.title.toLowerCase().includes(q));
   }, [query, assignableExercises]);
+
+  // Keep the arrow-key highlight on screen now that the list can be long.
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    (listRef.current?.children[highlighted] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, open]);
 
   function pick(ex: Exercise) {
     setQuery(ex.title);
@@ -146,7 +153,7 @@ export default function AssignExercisePanel({
           onKeyDown={handleKeyDown}
         />
         {open && (
-          <ul className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[220px] list-none overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-1">
+          <ul ref={listRef} className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-[220px] list-none overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-1">
             {matches.length === 0 ? (
               <li className="px-2.5 py-2 text-xs text-[var(--text-muted)]">No matching exercises.</li>
             ) : (
