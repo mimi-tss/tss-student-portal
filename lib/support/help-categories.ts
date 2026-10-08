@@ -5,8 +5,8 @@ export const HELP_CATEGORIES = [
   { key: "login", name: "Getting in", blurb: "Logging in, login codes and access", icon: "🔑" },
   { key: "scheduling", name: "Lessons & scheduling", blurb: "Rescheduling, make-up credits, holidays", icon: "📅" },
   { key: "portal", name: "Using the portal", blurb: "Your dashboard, chat, notifications", icon: "🎤" },
-  { key: "kajabi-courses", name: "Courses", blurb: "Finding your courses in Kajabi", icon: "🎓" },
-  { key: "kajabi-community", name: "Backstage community", blurb: "The Backstage community in Kajabi", icon: "💬" },
+  { key: "kajabi-courses", name: "Courses", blurb: "Finding your courses in My Library", icon: "🎓" },
+  { key: "kajabi-community", name: "Backstage community", blurb: "The studio community in the Sing Smarter App", icon: "💬" },
   { key: "billing", name: "Billing & plans", blurb: "Plans, add-ons, pausing or cancelling", icon: "💳" },
   { key: "other", name: "Other", blurb: "Everything else", icon: "✨" },
 ] as const;
