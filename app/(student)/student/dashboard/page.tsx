@@ -15,6 +15,7 @@ import SmsOptInCard from "./sms-opt-in-card";
 import SharedFolderPanel from "@/components/shared-folder-panel";
 import ExercisePlayer from "@/components/exercise-player";
 import FifthWeekCard from "./fifth-week-card";
+import WeeklySetupBanner from "../weekly-lesson/setup-banner";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   declinedFifthWeekKeys,
@@ -276,6 +277,9 @@ export default async function StudentDashboardPage() {
           durationMinutes={bonus.durationMinutes}
           priceLabel={bonusPrice.label}
         />
+      )}
+      {(student.tier === "pro" || student.tier === "elite") && (recurringSchedules ?? []).length === 0 && (
+        <WeeklySetupBanner />
       )}
       <div className={styles.hero}>
         <div className={styles.heroLeft}>

@@ -330,6 +330,36 @@ export function fifthWeekOccurrence(
   return null;
 }
 
+export interface WeeklySlot {
+  day_of_week: number;
+  start_time: string; // "HH:MM", wall-clock in the coach's zone
+  duration_minutes: number;
+}
+
+// Whether two weekly slots of the same coach overlap, on a weekly clock
+// (minutes from Sunday 00:00 in the coach's zone) rather than by
+// comparing same-weekday times only. That also catches a late slot
+// running past midnight into the next day's early slot (Mon 11:30pm for
+// 60 min vs Tue 12:00am), and Saturday night into Sunday.
+export function weeklySlotsOverlap(a: WeeklySlot, b: WeeklySlot): boolean {
+  const WEEK = 7 * 24 * 60;
+  const startOf = (x: WeeklySlot) => {
+    const [hh, mm] = x.start_time.split(":").map(Number);
+    return x.day_of_week * 24 * 60 + hh * 60 + mm;
+  };
+  const aStart = startOf(a);
+  const bStart = startOf(b);
+  return [-WEEK, 0, WEEK].some(
+    (shift) => aStart < bStart + shift + b.duration_minutes && aStart + a.duration_minutes > bStart + shift,
+  );
+}
+
+// The weekdays a slot starting on `dayOfWeek` could overlap: that day
+// and its neighbours (for slots that cross midnight).
+export function neighbourWeekdays(dayOfWeek: number): number[] {
+  return [(dayOfWeek + 6) % 7, dayOfWeek, (dayOfWeek + 1) % 7];
+}
+
 // A recurring slot must sit inside the coach's working hours, otherwise
 // the generated sessions would be invisible on the coach calendar — that
 // grid only renders cells that fall within working hours, so an

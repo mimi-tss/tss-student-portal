@@ -34,7 +34,11 @@ export type AttentionKind =
   | "recording_pipeline_stale"
   | "schedule_overlap"
   | "tara_trial_done"
-  | "downgraded_has_schedule";
+  | "downgraded_has_schedule"
+  // Student self-setup of a weekly lesson hit something to look at
+  // (migration 0125 — until it's applied, app/api/student/weekly-lesson
+  // files these as schedule_overlap instead).
+  | "weekly_setup_issue";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
