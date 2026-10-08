@@ -1,4 +1,9 @@
-import { getHeldRecurringSlots, occurrencesFor, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import {
+  getHeldRecurringSlots,
+  occurrencesFor,
+  slotFitsWorkingHours,
+  weeklySlotsOverlap,
+} from "@/lib/scheduling/recurring";
 import { getHolidayDateKeys } from "@/lib/scheduling/holidays";
 import { windowEndMinutes, type WorkingHours } from "@/lib/scheduling/working-hours";
 import { zonedYearMonthDay } from "@/lib/timezone";
@@ -166,15 +171,12 @@ function evaluate(ctx: SetupContext, dayOfWeek: number, startTime: string): Week
     return null;
   }
 
-  const [hh, mm] = startTime.split(":").map(Number);
-  const startMin = hh * 60 + mm;
-  const endMin = startMin + durationMinutes;
-  const clashesRecurring = ctx.coachSchedules.some((s) => {
-    if (s.day_of_week !== dayOfWeek) return false;
-    const [oh, om] = s.start_time.split(":").map(Number);
-    const otherStart = oh * 60 + om;
-    return startMin < otherStart + s.duration_minutes && endMin > otherStart;
-  });
+  // Every other active weekly slot this coach has, any student, any
+  // cadence (a biweekly slot still holds the time) — including a paused
+  // student's, whose schedule stays active while their slot is held.
+  const clashesRecurring = ctx.coachSchedules.some((s) =>
+    weeklySlotsOverlap({ day_of_week: dayOfWeek, start_time: startTime, duration_minutes: durationMinutes }, s),
+  );
   if (clashesRecurring) return null;
 
   const occurrences = occurrencesFor(

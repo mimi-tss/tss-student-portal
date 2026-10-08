@@ -1,4 +1,10 @@
-import { materializeRecurringSessions, nextWeeklySlotInstant, slotFitsWorkingHours } from "@/lib/scheduling/recurring";
+import {
+  materializeRecurringSessions,
+  neighbourWeekdays,
+  nextWeeklySlotInstant,
+  slotFitsWorkingHours,
+  weeklySlotsOverlap,
+} from "@/lib/scheduling/recurring";
 import { ensureStudentDriveFolder } from "@/lib/google/drive";
 import { notifyCoachRecurringScheduleEvent } from "@/lib/notifications/session-events";
 
@@ -24,15 +30,15 @@ export type CreateRecurringScheduleResult =
   | { success: true; scheduleId: string; created: number; skipped: number; warning: string | null }
   | { success: false; status: number; error: string };
 
-function minutesOf(time: string): number {
-  const [hh, mm] = time.split(":").map(Number);
-  return hh * 60 + mm;
-}
-
-function overlapsMinutes(startTime: string, durationMinutes: number, other: { start_time: string; duration_minutes: number }) {
-  const start = minutesOf(startTime);
-  const otherStart = minutesOf(other.start_time);
-  return start < otherStart + other.duration_minutes && start + durationMinutes > otherStart;
+// Same coach-zone weekly clock as weeklySlotsOverlap, for "this new slot
+// vs. an existing schedule row".
+function overlapsMinutes(
+  dayOfWeek: number,
+  startTime: string,
+  durationMinutes: number,
+  other: { day_of_week: number; start_time: string; duration_minutes: number },
+) {
+  return weeklySlotsOverlap({ day_of_week: dayOfWeek, start_time: startTime, duration_minutes: durationMinutes }, other);
 }
 
 // The ONE implementation of "save a student's recurring weekly slot",
@@ -151,14 +157,14 @@ export async function createRecurringSchedule(
   // the student can't actually be in both at once.
   const { data: otherSchedules } = await supabase
     .from("recurring_schedules")
-    .select("id, start_time, duration_minutes")
+    .select("id, day_of_week, start_time, duration_minutes")
     .eq("student_id", studentId)
-    .eq("day_of_week", dayOfWeek)
+    .in("day_of_week", neighbourWeekdays(dayOfWeek))
     .eq("active", true);
 
   const overlapsExisting = (otherSchedules ?? []).some(
-    (other: { id: string; start_time: string; duration_minutes: number }) =>
-      !(scheduleId && other.id === scheduleId) && overlapsMinutes(startTime, durationMinutes, other),
+    (other: { id: string; day_of_week: number; start_time: string; duration_minutes: number }) =>
+      !(scheduleId && other.id === scheduleId) && overlapsMinutes(dayOfWeek, startTime, durationMinutes, other),
   );
 
   if (overlapsExisting) {
@@ -173,14 +179,14 @@ export async function createRecurringSchedule(
   // the time.
   const { data: coachSchedules } = await supabase
     .from("recurring_schedules")
-    .select("id, start_time, duration_minutes, students(name)")
+    .select("id, day_of_week, start_time, duration_minutes, students(name)")
     .eq("coach_id", effectiveCoachId)
-    .eq("day_of_week", dayOfWeek)
+    .in("day_of_week", neighbourWeekdays(dayOfWeek))
     .eq("active", true);
 
   const coachConflict = (coachSchedules ?? []).find(
-    (other: { id: string; start_time: string; duration_minutes: number }) =>
-      !(scheduleId && other.id === scheduleId) && overlapsMinutes(startTime, durationMinutes, other),
+    (other: { id: string; day_of_week: number; start_time: string; duration_minutes: number }) =>
+      !(scheduleId && other.id === scheduleId) && overlapsMinutes(dayOfWeek, startTime, durationMinutes, other),
   );
 
   if (coachConflict) {
@@ -315,16 +321,16 @@ export async function createRecurringSchedule(
   if (!existingSchedule || reactivatedDeadRow) {
     const { data: rivals } = await supabase
       .from("recurring_schedules")
-      .select("id, start_time, duration_minutes, updated_at")
+      .select("id, day_of_week, start_time, duration_minutes, updated_at")
       .eq("coach_id", effectiveCoachId)
-      .eq("day_of_week", dayOfWeek)
+      .in("day_of_week", neighbourWeekdays(dayOfWeek))
       .eq("active", true)
       .neq("id", schedule.id);
 
     const ours = { id: schedule.id as string, at: new Date(schedule.updated_at ?? writtenAt).getTime() };
     const lost = (rivals ?? []).some(
-      (r: { id: string; start_time: string; duration_minutes: number; updated_at: string | null }) => {
-        if (!overlapsMinutes(startTime, durationMinutes, r)) return false;
+      (r: { id: string; day_of_week: number; start_time: string; duration_minutes: number; updated_at: string | null }) => {
+        if (!overlapsMinutes(dayOfWeek, startTime, durationMinutes, r)) return false;
         const theirs = r.updated_at ? new Date(r.updated_at).getTime() : 0;
         return theirs < ours.at || (theirs === ours.at && r.id < ours.id);
       },
