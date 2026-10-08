@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripeClient, stripe, stripeOpus } from "@/lib/stripe/client";
 import { resolveTier, billingIntervalFromPrice, formatPrice } from "@/lib/stripe/tiers";
+import { resolveAddonFromPrice } from "@/lib/billing/addons";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAttentionItem, type AttentionKind } from "@/lib/admin/attention-items";
 import { syncKajabiForTierChange } from "@/lib/kajabi/sync";
@@ -371,9 +372,10 @@ async function handleCheckoutCompleted(admin: AdminClient, session: Stripe.Check
       tier,
       name: session.customer_details?.name ?? null,
       firstSession: tier === "suite" ? firstSession : undefined,
+      ownedAddonIds: await checkoutAddonIds(session.id),
     }).catch((err) => console.error("Failed to send welcome email", err));
   } else if (priorTier !== tier) {
-    await notifyPlanChanged(admin, studentId, priorTier!, tier, session.id);
+    await notifyPlanChanged(admin, studentId, priorTier!, tier, session.id, await checkoutAddonIds(session.id));
   }
 }
 
@@ -459,8 +461,37 @@ async function handleSubscriptionUpdated(admin: AdminClient, subscription: Strip
     });
   }
 
+  // Moved down from Pro/Elite to Suite: their weekly lessons should be
+  // removed (bi-weekly is a separate Suite add-on they can buy after) —
+  // a Needs Review item so it isn't forgotten and doesn't clash with the
+  // coach's calendar (studio call 2026-10-08). Never removed automatically:
+  // a Stripe change made by mistake shouldn't cancel real lessons.
+  if (tier === "suite" && (priorTier === "pro" || priorTier === "elite")) {
+    const { data: weekly } = await admin
+      .from("recurring_schedules")
+      .select("day_of_week, start_time, cadence, coaches(name)")
+      .eq("student_id", student.id)
+      .eq("active", true);
+    if (weekly && weekly.length > 0) {
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const desc = weekly
+        .map((w) => {
+          const c = w.coaches as unknown as { name: string } | { name: string }[] | null;
+          const coach = Array.isArray(c) ? c[0] : c;
+          return `${days[w.day_of_week]} ${String(w.start_time).slice(0, 5)} ${w.cadence}${coach ? ` with ${coach.name}` : ""}`;
+        })
+        .join("; ");
+      await createAttentionItem(admin, {
+        kind: "downgraded_has_schedule",
+        studentId: student.id,
+        summary: `Moved from ${priorTier === "elite" ? "Elite" : "Pro"} to Suite but still has a lesson schedule (${desc}). Remove it, unless they bought the bi-weekly add-on.`,
+      });
+    }
+  }
+
   if (tier && priorTier && tier !== priorTier && priorTier !== "lite" && tier !== "lite") {
-    await notifyPlanChanged(admin, student.id, priorTier, tier, `${subscription.id}:${priceId ?? ""}`);
+    const owned = subscription.items.data.map((it) => resolveAddonFromPrice(it.price)?.id).filter((x): x is string => !!x);
+    await notifyPlanChanged(admin, student.id, priorTier, tier, `${subscription.id}:${priceId ?? ""}`, owned);
   }
 
   if (tier && tier !== priorTier) {
@@ -581,7 +612,27 @@ async function handleSubscriptionDeleted(admin: AdminClient, subscription: Strip
 // (no text, no bell), but still held by the notification pause so billing
 // cleanup in Stripe doesn't email students. Dedup on the change itself, so
 // Stripe re-delivering the same event can't send it twice.
-async function notifyPlanChanged(admin: AdminClient, studentId: string, from: Tier, to: Tier, ref: string) {
+// Add-ons bought in a Checkout Session (the Suite signup bundles them in
+// one session — /billing/addons-select), for the welcome email's
+// "Your add-ons" list. Best-effort: [] on any error.
+async function checkoutAddonIds(sessionId: string): Promise<string[]> {
+  try {
+    const items = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 20, expand: ["data.price"] });
+    return items.data.map((li) => resolveAddonFromPrice(li.price)?.id).filter((x): x is string => !!x);
+  } catch (err) {
+    console.error("couldn't read checkout add-ons", err);
+    return [];
+  }
+}
+
+async function notifyPlanChanged(
+  admin: AdminClient,
+  studentId: string,
+  from: Tier,
+  to: Tier,
+  ref: string,
+  ownedAddonIds: string[] = [],
+) {
   try {
     const { data: s } = await admin.from("students").select("name, email, phone").eq("id", studentId).maybeSingle();
     if (!s) return;
@@ -601,7 +652,7 @@ async function notifyPlanChanged(admin: AdminClient, studentId: string, from: Ti
       const coach = Array.isArray(c) ? c[0] : c;
       if (coach?.name) biweeklyCoachFirstName = firstNameOf(coach.name);
     }
-    const r = planChangedEmail({ firstName: firstNameOf(s.name), from, to, biweeklyCoachFirstName });
+    const r = planChangedEmail({ firstName: firstNameOf(s.name), from, to, biweeklyCoachFirstName, ownedAddonIds });
     await notifyStudent(admin, {
       studentId,
       email: s.email,

@@ -24,7 +24,8 @@ export interface GhlEvent {
     | "plan_changed"
     | "session_missed"
     | "payment_failed"
-    | "trial_upgrade_offer";
+    | "trial_upgrade_offer"
+    | "addon_added";
   studentId: string;
   email: string;
   phone: string | null;

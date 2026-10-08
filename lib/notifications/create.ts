@@ -20,7 +20,8 @@ type NotificationKind =
   | "plan_changed"
   | "session_missed"
   | "payment_failed"
-  | "trial_upgrade_offer";
+  | "trial_upgrade_offer"
+  | "addon_added";
 
 // The only notifications that may go out by text (studio call
 // 2026-09-26). Coach messages, recordings and the digest are never
@@ -37,6 +38,7 @@ const SMS_KINDS: ReadonlySet<NotificationKind> = new Set([
   "fifth_week_offer",
   "session_missed",
   "payment_failed",
+  "addon_added",
 ]);
 
 // Claims a dedup_key in notification_log — returns false (already sent)
@@ -75,6 +77,7 @@ const TOPIC: Partial<Record<NotificationKind, Topic>> = {
   group_lesson_cancelled: "bookings",
   fifth_week_offer: "bookings",
   session_missed: "bookings",
+  addon_added: "bookings",
   makeup_credit_needs_scheduling: "credits",
   chat_message: "messages",
   recording_ready: "recordings",

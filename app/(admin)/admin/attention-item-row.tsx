@@ -34,6 +34,7 @@ export const KIND_LABEL: Record<AttentionKind, string> = {
   recording_pipeline_stale: "Recordings Not Arriving",
   schedule_overlap: "Schedule Overlap",
   tara_trial_done: "Tara Trial",
+  downgraded_has_schedule: "Moved to Suite",
 };
 
 export const KIND_CLASS: Record<AttentionKind, string> = {
@@ -61,6 +62,7 @@ export const KIND_CLASS: Record<AttentionKind, string> = {
   recording_pipeline_stale: styles.naKindDnc,
   schedule_overlap: styles.naKindDnc,
   tara_trial_done: styles.naKindTrial,
+  downgraded_has_schedule: styles.naKindDnc,
 };
 
 export const STATUS_TABS: { status: AttentionStatus; label: string }[] = [

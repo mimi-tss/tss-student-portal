@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveBillingStudent } from "@/lib/billing/student-stripe-link";
-import { notifyStaff } from "@/lib/notifications/create";
+import { notifyStaff, notifyStudent } from "@/lib/notifications/create";
+import { addonAdded } from "@/lib/email/templates/addon-added";
+import { firstNameOf } from "@/lib/ghl/fields";
 import { findAddon, resolveAddonPriceId, resolveAddonFromPrice } from "@/lib/billing/addons";
 import { resolvePromotionCode } from "@/lib/stripe/coupons";
 import { getStripeClient } from "@/lib/stripe/client";
@@ -112,6 +114,39 @@ export async function POST(req: NextRequest) {
     dedupKey: inserted?.id ?? `${billingStudent.studentId}-${Date.now()}`,
     text: `${billingStudent.name} ${addonAction === "add" ? "added" : "removed"} ${addon.label}.`,
   });
+
+  // Confirmation to the student (studio call 2026-10-08). Best-effort —
+  // the add-on is already on their subscription either way.
+  if (addonAction === "add") {
+    try {
+      const { data: st } = await admin
+        .from("students")
+        .select("email, phone, coaches:assigned_coach_id(name)")
+        .eq("id", billingStudent.studentId)
+        .maybeSingle();
+      if (st) {
+        const c = st.coaches as unknown as { name: string } | { name: string }[] | null;
+        const coach = Array.isArray(c) ? c[0] : c;
+        const r = addonAdded({ firstName: firstNameOf(billingStudent.name), addonId: addon.id, coachFirstName: coach ? firstNameOf(coach.name) : null });
+        await notifyStudent(admin, {
+          studentId: billingStudent.studentId,
+          email: st.email,
+          phone: st.phone,
+          group: "alerts",
+          kind: "addon_added",
+          dedupKey: `student:${billingStudent.studentId}:addon_added:${addon.id}:${inserted?.id ?? Date.now()}`,
+          title: r.bellTitle,
+          body: r.bellBody,
+          linkUrl: "/student/dashboard",
+          ghlData: { addonId: addon.id, ...r },
+          channels: { email: true, sms: false, inApp: true },
+          emailAlways: true, // purchase confirmation
+        });
+      }
+    } catch (err) {
+      console.error("add-on confirmation failed", err);
+    }
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -55,9 +55,44 @@ const GET_STARTED: Record<Tier, string> = {
   elite: "Open **Student Access** in the app to see your lessons, chat with your coach, and catch your recordings.",
 };
 
+// "Want more coaching?" — Suite add-ons, no prices (studio call
+// 2026-10-08), in the Suite welcome and the move-to-Suite email. Anything
+// they already bought shows under "Your add-ons" instead; owning either
+// bi-weekly option hides both. The button goes to the website add-ons
+// page (purchases stay web-only, never the Kajabi app).
+const SUITE_ADDON_OFFERS: { id: string; line: string }[] = [
+  { id: "biweekly_30min_suite", line: "**30-min Bi-weekly Lessons**: 2 private lessons a month" },
+  { id: "biweekly_60min_suite", line: "**60-min Bi-weekly Lessons**: 2 private lessons a month" },
+  { id: "four_pack_30min", line: "**4-Pack 30-min Lessons**: book anytime within a year" },
+  { id: "four_pack_group_class", line: "**4-Pack Group Classes**: 4 group classes within a year" },
+];
+const ADDON_NAMES: Record<string, string> = {
+  biweekly_30min_suite: "30-min Bi-weekly Lessons",
+  biweekly_60min_suite: "60-min Bi-weekly Lessons",
+  four_pack_30min: "4-Pack 30-min Lessons",
+  four_pack_group_class: "4-Pack Group Classes",
+};
+export function suiteAddonBlocks(ownedAddonIds: string[] = []): EmailBlock[] {
+  const owned = new Set(ownedAddonIds);
+  const hasBiweekly = owned.has("biweekly_30min_suite") || owned.has("biweekly_60min_suite");
+  const offers = SUITE_ADDON_OFFERS.filter((o) => !owned.has(o.id) && !(hasBiweekly && o.id.startsWith("biweekly_")));
+  const mine = [...owned].map((id) => ADDON_NAMES[id]).filter(Boolean);
+  const blocks: EmailBlock[] = [];
+  if (mine.length) blocks.push({ type: "h2", text: "Your add-ons" }, { type: "list", items: mine.map((m) => `✓ ${m}`) });
+  if (offers.length) {
+    blocks.push(
+      { type: "h2", text: "Want more coaching?" },
+      { type: "p", text: "Add any of these to your Suite membership:" },
+      { type: "list", items: offers.map((o) => `✓ ${o.line}`) },
+      { type: "link", label: "See add-ons →", url: `${process.env.NEXT_PUBLIC_APP_URL}/billing/addons` },
+    );
+  }
+  return blocks;
+}
+
 // firstSession: false for a Suite member who isn't getting the free first
 // session (they've had sessions with us before).
-export function welcomeEmail(i: { firstName: string; tier: Tier; accountUrl: string; firstSession?: boolean }) {
+export function welcomeEmail(i: { firstName: string; tier: Tier; accountUrl: string; firstSession?: boolean; ownedAddonIds?: string[] }) {
   const name = planName(i.tier);
   const returningSuite = i.tier === "suite" && i.firstSession === false;
   const intro = returningSuite ? SUITE_WELCOME_RETURNING : WELCOME_LINE[i.tier];
@@ -70,6 +105,7 @@ export function welcomeEmail(i: { firstName: string; tier: Tier; accountUrl: str
     { type: "h2", text: "Get started" },
     { type: "p", text: returningSuite ? SUITE_GET_STARTED_RETURNING : GET_STARTED[i.tier] },
     { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
+    ...(i.tier === "suite" ? suiteAddonBlocks(i.ownedAddonIds) : []),
     { type: "link", label: "Manage your membership →", url: i.accountUrl },
     { type: "note", text: "That link logs you straight into your billing account, no password needed. Keep this email handy." },
   ];
@@ -99,7 +135,13 @@ export function accountLinkEmail(i: { accountUrl: string }) {
 // biweeklyCoachFirstName: moving to Suite while keeping the bi-weekly
 // 30-min lesson add-on (studio call 2026-10-08) — say the lessons
 // continue, so it doesn't read like they lost them.
-export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier; biweeklyCoachFirstName?: string | null }) {
+export function planChangedEmail(i: {
+  firstName: string;
+  from: Tier;
+  to: Tier;
+  biweeklyCoachFirstName?: string | null;
+  ownedAddonIds?: string[];
+}) {
   const up = TIER_RANK[i.to] > TIER_RANK[i.from];
   const keepsLessons = !up && i.to === "suite" && !!i.biweeklyCoachFirstName;
   const name = planName(i.to);
@@ -135,6 +177,7 @@ export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier; b
             : "Want to move back up any time? You can change your plan from your account.",
         },
         { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
+        ...(i.to === "suite" ? suiteAddonBlocks(i.ownedAddonIds) : []),
       ];
   const r = renderEmail({
     preheader,

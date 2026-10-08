@@ -33,7 +33,8 @@ export type AttentionKind =
   | "change_plan_request"
   | "recording_pipeline_stale"
   | "schedule_overlap"
-  | "tara_trial_done";
+  | "tara_trial_done"
+  | "downgraded_has_schedule";
 
 export type AttentionStatus = "needs_action" | "in_progress" | "resolved";
 
