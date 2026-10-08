@@ -311,7 +311,14 @@ export async function loadWeeklySetupState(
 
   let coaches: SetupCoach[];
   if (student.assigned_coach_id) {
-    const { data } = await admin.from("coaches").select("id, name").eq("id", student.assigned_coach_id).maybeSingle();
+    // An assigned coach who has since left (active=false) isn't offered —
+    // the page then asks the student to message the studio.
+    const { data } = await admin
+      .from("coaches")
+      .select("id, name")
+      .eq("id", student.assigned_coach_id)
+      .eq("active", true)
+      .maybeSingle();
     coaches = data ? [data] : [];
   } else {
     const { data, error } = await admin

@@ -99,7 +99,12 @@ export async function createRecurringSchedule(
   // a conflict on the next occurrence means every future one conflicts
   // too. One-time blocks later on are skipped per-week by
   // materializeRecurringSessions instead.
-  const nextInstant = nextWeeklySlotInstant(dayOfWeek, startTime, coach?.timezone ?? "America/New_York");
+  // "Next" counts from the start date when that's in the future (a slot
+  // starting Oct 14 shouldn't be refused over a one-time block on Oct 7).
+  // Midday UTC on that date is the same calendar date in every US zone.
+  const checkFrom =
+    effectiveStartDate > new Date().toISOString().slice(0, 10) ? new Date(`${effectiveStartDate}T12:00:00Z`) : new Date();
+  const nextInstant = nextWeeklySlotInstant(dayOfWeek, startTime, coach?.timezone ?? "America/New_York", checkFrom);
   const nextInstantEnd = new Date(nextInstant.getTime() + durationMinutes * 60000);
   const { data: conflictingBlock } = await supabase
     .from("coach_blocks")
