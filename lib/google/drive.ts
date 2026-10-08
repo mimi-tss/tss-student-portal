@@ -148,6 +148,11 @@ export interface StudentFolderFile {
   name: string;
   webViewLink: string | null;
   isShortcut: boolean;
+  // The real file behind a shortcut (or the file itself) and its type —
+  // the portal plays videos from this id in Drive's own embedded player
+  // (components/shared-folder-panel.tsx), not via the shortcut's link.
+  playId: string;
+  mimeType: string | null;
 }
 
 export async function listStudentRecordings(folderId: string): Promise<StudentFolderFile[]> {
@@ -171,7 +176,35 @@ export async function listStudentRecordings(folderId: string): Promise<StudentFo
       name: f.name ?? "Untitled",
       webViewLink: f.webViewLink ?? null,
       isShortcut: !!f.shortcutDetails,
+      playId: (f.shortcutDetails?.targetId as string | undefined) ?? (f.id as string),
+      mimeType: (f.shortcutDetails?.targetMimeType as string | undefined) ?? f.mimeType ?? null,
     }));
+}
+
+// Makes a recording viewable by anyone holding its link (not
+// discoverable, no download/copy for viewers) so the portal's embedded
+// player can show it to the student. Opening the shortcut in a student's
+// folder sent students to Drive's "Request access" page; the video
+// itself is what has to be link-viewable. Best-effort: callers carry on
+// if this fails.
+export async function ensureFileLinkViewable(fileId: string): Promise<void> {
+  const drive = getDriveClient();
+  const { data } = await drive.permissions.list({
+    fileId,
+    supportsAllDrives: true,
+    fields: "permissions(type, role)",
+  });
+  if ((data.permissions ?? []).some((p) => p.type === "anyone")) return;
+  await drive.permissions.create({
+    fileId,
+    supportsAllDrives: true,
+    requestBody: { type: "anyone", role: "reader", allowFileDiscovery: false },
+  });
+  await drive.files.update({
+    fileId,
+    supportsAllDrives: true,
+    requestBody: { copyRequiresWriterPermission: true },
+  });
 }
 
 // Mints a one-time Google Drive "resumable upload session" URL and hands
@@ -265,7 +298,7 @@ export async function createDriveShortcut(
 
   const target = await drive.files.get({
     fileId: targetFileId,
-    fields: "name",
+    fields: "name, mimeType",
     supportsAllDrives: true,
   });
 
@@ -286,6 +319,8 @@ export async function createDriveShortcut(
     name: res.data.name ?? "Shared file",
     webViewLink: res.data.webViewLink ?? null,
     isShortcut: true,
+    playId: targetFileId,
+    mimeType: target.data.mimeType ?? null,
   };
 }
 

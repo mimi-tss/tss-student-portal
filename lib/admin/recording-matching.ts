@@ -7,6 +7,7 @@ import {
   findShortcutTargeting,
   removeStudentFolderItem,
   ensureStudentDriveFolder,
+  ensureFileLinkViewable,
   recordingsScanIdentities,
 } from "@/lib/google/drive";
 import { getMeetRecordingTimes } from "@/lib/google/meet";
@@ -201,6 +202,13 @@ export async function attachRecordingToStudent(
   // already uses. Wrapped in try/catch — was unguarded before,
   // producing an opaque uncaught-exception 500 with no error text
   // anywhere on any failure.
+  // So the portal's embedded player can show it (see ensureFileLinkViewable).
+  try {
+    await ensureFileLinkViewable(recording.drive_file_id);
+  } catch (err) {
+    console.error(`attachRecordingToStudent: couldn't make recording ${recordingId} link-viewable`, err);
+  }
+
   if (!alreadyLinked) {
     try {
       await createDriveShortcut(student.drive_folder_id, recording.drive_file_id);
@@ -333,6 +341,12 @@ export async function attachRecordingToGroupLesson(
   let notified = 0;
   const skipped: string[] = [];
   const groupCtx = await groupLessonContext(admin, groupLessonId);
+
+  try {
+    await ensureFileLinkViewable(recording.drive_file_id);
+  } catch (err) {
+    console.error(`attachRecordingToGroupLesson: couldn't make recording ${recordingId} link-viewable`, err);
+  }
 
   for (const row of rows) {
     const student = row.students;

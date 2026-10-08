@@ -8,6 +8,17 @@ interface DriveFile {
   name: string;
   webViewLink?: string | null;
   isShortcut?: boolean;
+  playId?: string;
+  mimeType?: string | null;
+}
+
+// Lesson recordings (and any uploaded video/audio) play right here in
+// Drive's own embedded player, from the real file id — the shortcut's
+// own Drive link sent students to a "Request access" page. Google does
+// the streaming; the file just has to be link-viewable, which matching
+// ensures (lib/google/drive.ts ensureFileLinkViewable).
+function isPlayable(f: DriveFile) {
+  return !!f.playId && /^(video|audio)\//.test(f.mimeType ?? "");
 }
 
 type PendingAction = null | "link";
@@ -42,6 +53,7 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
   const [pending, setPending] = useState<PendingAction>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<DriveFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -262,14 +274,23 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--surface-2)] text-sm">
                 {f.isShortcut ? "🔗" : "🎵"}
               </div>
-              <a
-                href={f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]"
-              >
-                {f.name}
-              </a>
+              {isPlayable(f) ? (
+                <button
+                  onClick={() => setPlaying(f)}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--text)]"
+                >
+                  ▶ {f.name}
+                </button>
+              ) : (
+                <a
+                  href={f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]"
+                >
+                  {f.name}
+                </a>
+              )}
               <button
                 onClick={() => handleRemove(f.id)}
                 disabled={busy}
@@ -280,6 +301,30 @@ export default function SharedFolderPanel({ studentId }: { studentId: string }) 
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {playing && (
+        <div className="border-t border-[var(--border)] p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-sm font-semibold text-[var(--text)]">{playing.name}</p>
+            <button
+              onClick={() => setPlaying(null)}
+              className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+            >
+              Close
+            </button>
+          </div>
+          <div className="relative w-full overflow-hidden rounded-lg bg-black" style={{ paddingTop: "56.25%" }}>
+            <iframe
+              key={playing.playId}
+              src={`https://drive.google.com/file/d/${playing.playId}/preview`}
+              title={playing.name}
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              className="absolute inset-0 h-full w-full border-0"
+            />
+          </div>
         </div>
       )}
 
