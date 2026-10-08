@@ -14,18 +14,21 @@ interface ConferenceRecord {
 }
 interface MeetRecording {
   state?: string;
+  startTime?: string;
+  endTime?: string;
   driveDestination?: { file?: string };
 }
 
-// Drive file ids of every Meet recording that has finished generating
-// for a meeting that started on/after `cutoffIso`, as seen by `subject`.
-// Meet itself reports each recording the moment its file exists, with
-// the Drive file id attached — so this finds a recording without
-// crawling Drive folders (which Google has restructured three times
-// since 2026-09-10, silently breaking the folder scan each time).
-// Needs the meetings.space.readonly scope on the service account's
-// domain-wide delegation (Workspace admin console).
-export async function listMeetApiRecordingFileIds(subject: string, cutoffIso: string): Promise<string[]> {
+export interface MeetRecordingTimes {
+  fileId: string;
+  start: string;
+  end: string;
+}
+
+// Every finished recording (with its real start/end) for meetings that
+// started on/after `cutoffIso`, as seen by `subject`. Shared by the id
+// listing below and the recording-time sync used for matching.
+async function listMeetApiRecordings(subject: string, cutoffIso: string): Promise<MeetRecordingTimes[]> {
   const auth = getGoogleAuth(MEET_SCOPES, subject);
   const token = (await auth.getAccessToken()).token;
   if (!token) throw new Error("Meet API: no access token");
@@ -47,12 +50,37 @@ export async function listMeetApiRecordingFileIds(subject: string, cutoffIso: st
     conferences.map((c) => meetGet<{ recordings?: MeetRecording[] }>(token, `${c.name}/recordings`)),
   );
 
-  const ids = new Set<string>();
+  const out: MeetRecordingTimes[] = [];
   for (const { recordings } of perConference) {
     for (const rec of recordings ?? []) {
       const file = rec.driveDestination?.file;
-      if (rec.state === "FILE_GENERATED" && file) ids.add(file.replace(/^files\//, ""));
+      if (rec.state === "FILE_GENERATED" && file && rec.startTime && rec.endTime) {
+        out.push({ fileId: file.replace(/^files\//, ""), start: rec.startTime, end: rec.endTime });
+      }
     }
   }
-  return [...ids];
+  return out;
+}
+
+// Real recording start/end by Drive file id, merged across identities.
+export async function getMeetRecordingTimes(subjects: string[], cutoffIso: string): Promise<Map<string, MeetRecordingTimes>> {
+  const byFile = new Map<string, MeetRecordingTimes>();
+  const results = await Promise.allSettled(subjects.map((s) => listMeetApiRecordings(s, cutoffIso)));
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    for (const t of r.value) byFile.set(t.fileId, t);
+  }
+  return byFile;
+}
+
+// Drive file ids of every Meet recording that has finished generating
+// for a meeting that started on/after `cutoffIso`, as seen by `subject`.
+// Meet itself reports each recording the moment its file exists, with
+// the Drive file id attached — so this finds a recording without
+// crawling Drive folders (which Google has restructured three times
+// since 2026-09-10, silently breaking the folder scan each time).
+// Needs the meetings.space.readonly scope on the service account's
+// domain-wide delegation (Workspace admin console).
+export async function listMeetApiRecordingFileIds(subject: string, cutoffIso: string): Promise<string[]> {
+  return [...new Set((await listMeetApiRecordings(subject, cutoffIso)).map((r) => r.fileId))];
 }

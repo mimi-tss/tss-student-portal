@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { scanForNewRecordings, runNameMatching, runDayMatching } from "@/lib/admin/recording-matching";
+import { scanForNewRecordings, runNameMatching, runDayMatching, runTimeMatching, syncRecordingTimes } from "@/lib/admin/recording-matching";
 import { syncComputedAttentionItems } from "@/lib/admin/attention-items";
 import { notifyStaff } from "@/lib/notifications/create";
 
@@ -117,13 +117,11 @@ export async function GET(req: NextRequest) {
   // fallback for whatever name-matching couldn't resolve.
   // Time-of-day first: the recording's own start time (filename) against
   // the coach's attended lessons — resolves most recordings outright.
-  // DISABLED 2026-10-08: Meet names every recording in a meeting after
-  // the MEETING's start time, not the recording's. Celine keeps one
-  // meeting open for a block of students, so 4 different students'
-  // recordings ("12:01 EDT - Recording", "- Recording 2", ...) were all
-  // sent to the 12:00 student (Dabeluchi Isiofia). Off until the time can
-  // be told apart reliably.
-  const timeMatched = 0;
+  // Real recording start/end from the Meet API (not the filename, which
+  // carries the meeting's start), then match each recording to the
+  // attended lesson it overlaps. See runTimeMatching.
+  await syncRecordingTimes(admin);
+  const { autoMatched: timeMatched } = await runTimeMatching(admin);
   const { matched: nameMatched } = await runNameMatching(admin);
   const { autoMatched: dayMatched } = await runDayMatching(admin);
 

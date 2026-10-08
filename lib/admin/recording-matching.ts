@@ -7,7 +7,9 @@ import {
   findShortcutTargeting,
   removeStudentFolderItem,
   ensureStudentDriveFolder,
+  recordingsScanIdentities,
 } from "@/lib/google/drive";
+import { getMeetRecordingTimes } from "@/lib/google/meet";
 import { zonedYearMonthDay } from "@/lib/timezone";
 import { resolveAttentionItemsForRecording } from "@/lib/admin/attention-items";
 import { notifyStudent } from "@/lib/notifications/create";
@@ -898,114 +900,156 @@ export async function listAllCandidateGroupLessons(
 // same day) is deliberately left for a human to pick in the queue —
 // see the conversation this was scoped from: an internal meeting
 // recording must never get force-paired with an unrelated student.
-// Meet's own UTC offsets for the processed-name form's zone abbreviation
-// ("... - 2026/09/28 14:30 EDT - Recording"). Unknown abbreviation →
-// no start time, and the recording falls through to the other passes.
-const ZONE_OFFSET_HOURS: Record<string, number> = {
-  EDT: -4, EST: -5, CDT: -5, CST: -6, MDT: -6, MST: -7, PDT: -7, PST: -8,
-  AKDT: -8, AKST: -9, HST: -10, GMT: 0, UTC: 0, BST: 1, CET: 1, CEST: 2,
-};
+// ── Matching by the recording's real time ─────────────────────────────
+// A recording's Drive filename carries the MEETING's start time, not the
+// recording's (Meet names every recording in a meeting "<meeting start>
+// - Recording", "- Recording 2", ...). Coaches keep one meeting open for
+// a block of students and record each lesson separately, so a first,
+// filename-based version of this pass (2026-10-02 → 10-08) sent four
+// students' recordings to the first student of the block. The real
+// start/end come from the Google Meet API (conference record →
+// recordings) and are stored on the row (migration 0126) by
+// syncRecordingTimes below; matching uses only those.
 
-// The recording's own start instant, from either filename scheme
-// (see recordedDateFromFileName): "(2026-09-29 22:05 GMT-4)" or
-// "2026/09/28 14:30 EDT".
-export function recordingStartFromFileName(fileName: string): Date | null {
-  const raw = fileName.match(/\((\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})\s+GMT([+-]\d{1,2})(?::?(\d{2}))?\)/);
-  if (raw) {
-    const sign = raw[6].startsWith("-") ? -1 : 1;
-    const offsetMin = Number(raw[6]) * 60 + sign * Number(raw[7] ?? 0);
-    return new Date(Date.UTC(+raw[1], +raw[2] - 1, +raw[3], +raw[4], +raw[5]) - offsetMin * 60_000);
-  }
-  const processed = fileName.match(/(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})\s+([A-Z]{2,4})/);
-  if (processed && ZONE_OFFSET_HOURS[processed[6]] !== undefined) {
-    const offsetMin = ZONE_OFFSET_HOURS[processed[6]] * 60;
-    return new Date(Date.UTC(+processed[1], +processed[2] - 1, +processed[3], +processed[4], +processed[5]) - offsetMin * 60_000);
-  }
-  return null;
+interface TimedLesson {
+  id: string;
+  studentId: string;
+  start: number;
+  end: number;
 }
 
-// A recording usually starts within a few minutes of its lesson (coach
-// hits record a little early or late). Lessons starting from 15 min
-// after the recording began back to 20 min before it are candidates.
-const TIME_MATCH_EARLY_MS = 15 * 60_000;
-const TIME_MATCH_LATE_MS = 20 * 60_000;
-// The nearest lesson has to beat any other student's by this much.
-const TIME_MATCH_MARGIN_MS = 10 * 60_000;
+function overlapMs(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
+}
 
-// Matches a recording to the coach's attended 1:1 lesson whose start
-// time is nearest the recording's own start (from the filename). The
-// day-only pass below can only act when a coach has exactly one lesson
-// that day — almost never — so nearly every recording used to land in
-// the manual queue. Skips (leaves for the other passes / a human) when:
-// no attended lesson is in the window, two students' lessons are about
-// equally close, or one of the coach's group classes overlaps the
-// recording. Several files for one lesson (Meet splits long recordings)
-// all attach to it; only the first notifies the student. Recorded as
-// match_method 'day_session' (same family: an auto day+time pairing).
+// The lesson a recording belongs to, or null when it isn't clear enough
+// to send without a human: the recording must overlap one student's
+// attended lesson(s) for at least 5 min and 40% of its length, beat any
+// other student's overlap by 2x, and not mostly overlap a group class.
+export function pickLessonForRecording(
+  recording: { start: number; end: number },
+  lessons: TimedLesson[],
+  groupClasses: { start: number; end: number }[],
+): TimedLesson | null {
+  const length = recording.end - recording.start;
+  if (length <= 0) return null;
+  const inGroup = Math.max(0, ...groupClasses.map((g) => overlapMs(recording.start, recording.end, g.start, g.end)));
+  if (inGroup >= length * 0.5) return null;
+
+  const byStudent = new Map<string, { total: number; best: TimedLesson; bestOverlap: number }>();
+  for (const l of lessons) {
+    const o = overlapMs(recording.start, recording.end, l.start, l.end);
+    if (o <= 0) continue;
+    const cur = byStudent.get(l.studentId) ?? { total: 0, best: l, bestOverlap: 0 };
+    cur.total += o;
+    if (o > cur.bestOverlap) {
+      cur.best = l;
+      cur.bestOverlap = o;
+    }
+    byStudent.set(l.studentId, cur);
+  }
+  const ranked = [...byStudent.values()].sort((a, b) => b.total - a.total);
+  const top = ranked[0];
+  if (!top) return null;
+  if (top.total < Math.max(5 * 60_000, length * 0.4)) return null;
+  if (ranked[1] && ranked[1].total * 2 > top.total) return null;
+  return top.best;
+}
+
+// Fills recorded_start/recorded_end on unmatched recordings from the
+// Meet API. Rows Meet has no record of keep nulls and are left to the
+// other passes / the manual queue.
+export async function syncRecordingTimes(admin: SupabaseClient): Promise<{ updated: number }> {
+  const { data: rows } = await admin
+    .from("meet_recordings")
+    .select("id, drive_file_id, drive_created_at")
+    .eq("status", "unmatched")
+    .is("recorded_start", null)
+    .gte("drive_created_at", new Date(Date.now() - 30 * 86_400_000).toISOString());
+  if (!rows?.length) return { updated: 0 };
+
+  const earliest = Math.min(...rows.map((r) => new Date(r.drive_created_at as string).getTime()));
+  const times = await getMeetRecordingTimes(recordingsScanIdentities(), new Date(earliest - 3 * 86_400_000).toISOString());
+
+  let updated = 0;
+  for (const r of rows) {
+    const t = times.get(r.drive_file_id as string);
+    if (!t) continue;
+    const { error } = await admin
+      .from("meet_recordings")
+      .update({ recorded_start: t.start, recorded_end: t.end })
+      .eq("id", r.id);
+    if (!error) updated++;
+  }
+  return { updated };
+}
+
+// Attaches each unmatched recording (with real times) to the attended
+// 1:1 lesson it overlaps — see pickLessonForRecording for when it holds
+// back. A lesson recorded in several files gets them all; the student
+// is notified once. Recorded as match_method 'day_session'.
 export async function runTimeMatching(
   admin: SupabaseClient,
   // dryRun: decide but don't attach — returns the planned pairs.
   opts: { dryRun?: boolean } = {},
 ): Promise<{ autoMatched: number; planned: { recordingId: string; sessionId: string; studentId: string }[] }> {
   const planned: { recordingId: string; sessionId: string; studentId: string }[] = [];
-  const manualOnly = await manualMatchOnlyCoachFilter(admin);
   const { data: unmatched } = await admin
     .from("meet_recordings")
-    .select("id, coach_id, file_name")
+    .select("id, coach_id, recorded_start, recorded_end")
     .eq("status", "unmatched")
     .not("coach_id", "is", null)
-    .not("coach_id", "in", manualOnly)
-    .order("drive_created_at", { ascending: true });
+    .not("recorded_start", "is", null)
+    .order("recorded_start", { ascending: true });
   if (!unmatched?.length) return { autoMatched: 0, planned };
 
   let autoMatched = 0;
   for (const rec of unmatched) {
-    const start = recordingStartFromFileName(rec.file_name as string);
-    if (!start) continue;
-    const from = new Date(start.getTime() - TIME_MATCH_LATE_MS).toISOString();
-    const to = new Date(start.getTime() + TIME_MATCH_EARLY_MS).toISOString();
+    const recStart = new Date(rec.recorded_start as string).getTime();
+    const recEnd = new Date(rec.recorded_end as string).getTime();
+    const from = new Date(recStart - 3 * 3_600_000).toISOString();
+    const to = new Date(recEnd).toISOString();
 
     const [{ data: sessions }, { data: groups }] = await Promise.all([
       admin
         .from("sessions")
-        .select("id, student_id, scheduled_at")
+        .select("id, student_id, scheduled_at, duration_minutes")
         .eq("actual_coach_id", rec.coach_id)
         .eq("status", "attended")
         .gte("scheduled_at", from)
-        .lte("scheduled_at", to),
+        .lt("scheduled_at", to),
       admin
         .from("group_lessons")
-        .select("id, scheduled_at, duration_minutes")
+        .select("scheduled_at, duration_minutes")
         .eq("coach_id", rec.coach_id)
         .is("cancelled_at", null)
-        .gte("scheduled_at", new Date(start.getTime() - 3 * 3_600_000).toISOString())
-        .lte("scheduled_at", to),
+        .gte("scheduled_at", from)
+        .lt("scheduled_at", to),
     ]);
 
-    const groupOverlaps = (groups ?? []).some((g) => {
-      const gs = new Date(g.scheduled_at as string).getTime();
-      return start.getTime() >= gs - TIME_MATCH_EARLY_MS && start.getTime() < gs + (g.duration_minutes as number) * 60_000;
+    const lessons: TimedLesson[] = (sessions ?? []).map((x) => {
+      const st = new Date(x.scheduled_at as string).getTime();
+      return { id: x.id as string, studentId: x.student_id as string, start: st, end: st + (x.duration_minutes as number) * 60_000 };
     });
-    if (groupOverlaps || !sessions?.length) continue;
+    const groupClasses = (groups ?? []).map((g) => {
+      const st = new Date(g.scheduled_at as string).getTime();
+      return { start: st, end: st + (g.duration_minutes as number) * 60_000 };
+    });
 
-    const ranked = sessions
-      .map((s) => ({ ...s, gap: Math.abs(new Date(s.scheduled_at as string).getTime() - start.getTime()) }))
-      .sort((a, b) => a.gap - b.gap);
-    const best = ranked[0];
-    const rival = ranked.find((s) => s.student_id !== best.student_id);
-    if (rival && rival.gap - best.gap < TIME_MATCH_MARGIN_MS) continue;
+    const pick = pickLessonForRecording({ start: recStart, end: recEnd }, lessons, groupClasses);
+    if (!pick) continue;
 
-    planned.push({ recordingId: rec.id as string, sessionId: best.id as string, studentId: best.student_id as string });
+    planned.push({ recordingId: rec.id as string, sessionId: pick.id, studentId: pick.studentId });
     if (opts.dryRun) continue;
 
     const { count: earlierParts } = await admin
       .from("meet_recordings")
       .select("id", { count: "exact", head: true })
       .eq("status", "matched")
-      .eq("matched_session_id", best.id);
+      .eq("matched_session_id", pick.id);
 
-    const result = await attachRecordingToStudent(admin, rec.id as string, best.student_id as string, {
-      sessionId: best.id as string,
+    const result = await attachRecordingToStudent(admin, rec.id as string, pick.studentId, {
+      sessionId: pick.id,
       method: "day_session",
       notify: (earlierParts ?? 0) === 0,
     });

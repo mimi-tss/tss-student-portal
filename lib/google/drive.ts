@@ -477,7 +477,7 @@ async function listQualifyingMeetingSubfolders(
 // comma-separated, for the mimi@-doesn't-see-info@'s-folders gap (see
 // findMeetRecordingsRootFolders's own comment). Deduped so a misconfigured
 // duplicate doesn't double every API call this function makes.
-function recordingsScanIdentities(): string[] {
+export function recordingsScanIdentities(): string[] {
   const extra = (process.env.GOOGLE_RECORDINGS_SCAN_EXTRA_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim())
