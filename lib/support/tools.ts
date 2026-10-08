@@ -264,7 +264,7 @@ export async function runTool(name: string, input: Record<string, unknown>, ctx:
       can_use_portal: canUse,
       for_your_reasoning_only: { plan: student.tier, subscription_status: student.subscription_status, archived: student.archived },
       note: canUse
-        ? `${note} This email can use the portal — help them with the code steps (spam folder, newest code, typo, private browsing; open app.tarasimonstudios.com in their browser, e.g. Safari).`
+        ? `${note} This email can use the portal — first check they are in a web browser (Safari/Chrome at app.tarasimonstudios.com), NOT an app downloaded from the App Store/Google Play, which can't open Coaching Studio. Then the code steps (spam folder, newest code, typo, private browsing).`
         : `${note} This email can't use Coaching Studio (Lite plans don't include it; My Library and Backstage are still in the Sing Smarter App at app.tarasimonstudios.com). Explain gently without naming their plan, and point them to My Library and Backstage in the Sing Smarter App. If they believe they should have portal access, offer a person.`,
     });
   }

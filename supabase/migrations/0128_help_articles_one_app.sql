@@ -65,3 +65,40 @@ update support_kb_articles set
 The Coaching Studio notification settings only cover lessons, the weekly digest and alerts — see [Notification settings](/help/a/notification-settings).$md$,
   updated_at = now()
 where slug = 'community-course-notifications' and body like '%Kajabi%';
+
+-- The #1 access problem: students using an app downloaded from the App
+-- Store / Google Play, which can't open Coaching Studio. Pinned first in
+-- "Getting in" and published.
+insert into support_kb_articles (slug, category, title, summary, body, sort_order, is_public, audience)
+values (
+  'use-your-web-browser',
+  'login',
+  'Use your web browser to open Coaching Studio',
+  'Coaching Studio only works in Safari, Chrome or another web browser — not in a downloaded app.',
+  $md$**Coaching Studio only works in your web browser** — Safari, Chrome, Edge or Firefox.
+
+If you downloaded an app from the **App Store** or **Google Play** to get here, that app **can't open Coaching Studio** — you'll see a blank screen or keep landing back on the login page.
+
+## How to get in
+1. Open **Safari** (iPhone/iPad) or **Chrome** (Android or computer).
+2. Go to **app.tarasimonstudios.com**.
+3. Log in with your email and the 6-digit code we send you.
+
+## Tip: one-tap access
+- **iPhone/iPad (Safari):** tap the **Share** button, then **Add to Home Screen**.
+- **Android (Chrome):** tap the **⋮** menu, then **Add to Home screen**.
+
+You'll get an icon on your phone that opens the Sing Smarter App straight in your browser — everything in one place: **My Library**, **Backstage** and **Coaching Studio**.$md$,
+  1,
+  true,
+  'students'
+)
+on conflict (slug) do nothing;
+
+-- "Sent back to the login page": make the browser check step 1.
+update support_kb_articles set body = replace(body,
+  '1. **Close the tab** completely.',
+  '1. **Make sure you''re in your web browser** (Safari or Chrome) at **app.tarasimonstudios.com** — not an app downloaded from the App Store or Google Play. See [Use your web browser](/help/a/use-your-web-browser).
+2. **Close the tab** completely.'),
+  updated_at = now()
+where slug = 'logged-in-but-sent-back-to-the-login-page' and body not like '%use-your-web-browser%';
