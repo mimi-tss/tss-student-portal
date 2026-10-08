@@ -585,7 +585,23 @@ async function notifyPlanChanged(admin: AdminClient, studentId: string, from: Ti
   try {
     const { data: s } = await admin.from("students").select("name, email, phone").eq("id", studentId).maybeSingle();
     if (!s) return;
-    const r = planChangedEmail({ firstName: firstNameOf(s.name), from, to });
+    // Suite + the bi-weekly 30-min lesson add-on: the email says the
+    // lessons carry on (studio call 2026-10-08).
+    let biweeklyCoachFirstName: string | null = null;
+    if (to === "suite") {
+      const { data: rs } = await admin
+        .from("recurring_schedules")
+        .select("coaches(name)")
+        .eq("student_id", studentId)
+        .eq("active", true)
+        .eq("cadence", "biweekly")
+        .eq("duration_minutes", 30)
+        .limit(1);
+      const c = rs?.[0]?.coaches as unknown as { name: string } | { name: string }[] | null | undefined;
+      const coach = Array.isArray(c) ? c[0] : c;
+      if (coach?.name) biweeklyCoachFirstName = firstNameOf(coach.name);
+    }
+    const r = planChangedEmail({ firstName: firstNameOf(s.name), from, to, biweeklyCoachFirstName });
     await notifyStudent(admin, {
       studentId,
       email: s.email,

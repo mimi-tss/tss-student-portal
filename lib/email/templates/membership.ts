@@ -96,8 +96,12 @@ export function accountLinkEmail(i: { accountUrl: string }) {
   };
 }
 
-export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier }) {
+// biweeklyCoachFirstName: moving to Suite while keeping the bi-weekly
+// 30-min lesson add-on (studio call 2026-10-08) — say the lessons
+// continue, so it doesn't read like they lost them.
+export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier; biweeklyCoachFirstName?: string | null }) {
   const up = TIER_RANK[i.to] > TIER_RANK[i.from];
+  const keepsLessons = !up && i.to === "suite" && !!i.biweeklyCoachFirstName;
   const name = planName(i.to);
   const subject = up ? `You're now on ${name}!` : `Your plan is now ${name}`;
   const preheader = up ? "Here's everything you've just unlocked." : `Your membership has changed to ${name}.`;
@@ -109,11 +113,27 @@ export function planChangedEmail(i: { firstName: string; from: Tier; to: Tier })
         { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       ]
     : [
-        { type: "p", text: `Your membership has changed from ${planName(i.from)} to **${name}**.` },
+        {
+          type: "p",
+          text: keepsLessons
+            ? `Your membership is now **${name}**, and your 30-min lessons with **Coach ${i.biweeklyCoachFirstName}** continue every other week.`
+            : `Your membership has changed from ${planName(i.from)} to **${name}**.`,
+        },
         { type: "h2", text: "Your plan includes" },
         // A downgrade never includes the first-session bonus.
-        { type: "list", items: allFeatures(i.to, false).map((f) => `✓ ${f}`) },
-        { type: "p", text: "Want to move back up any time? You can change your plan from your account." },
+        {
+          type: "list",
+          items: [
+            ...(keepsLessons ? [`Bi-weekly 30-min Private Coaching Session with Coach ${i.biweeklyCoachFirstName}`] : []),
+            ...allFeatures(i.to, false),
+          ].map((f) => `✓ ${f}`),
+        },
+        {
+          type: "p",
+          text: keepsLessons
+            ? "Want weekly lessons again? You can change your plan from your account any time."
+            : "Want to move back up any time? You can change your plan from your account.",
+        },
         { type: "button", label: "LOG IN TO THE SING SMARTER APP", url: STUDENT_APP_URL },
       ];
   const r = renderEmail({
