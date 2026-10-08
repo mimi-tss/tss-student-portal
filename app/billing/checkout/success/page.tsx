@@ -37,6 +37,11 @@ export default async function CheckoutSuccessPage({
             ? `Check ${email} for a link to access your account — no password needed.`
             : "Check your email for a link to access your account — no password needed."}
         </p>
+        {(tier === "pro" || tier === "elite") && (
+          <p className={styles.helpText}>
+            Once you&apos;re in, you&apos;ll pick your coach and your regular weekly lesson time.
+          </p>
+        )}
       </div>
     </div>
   );

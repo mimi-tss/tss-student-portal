@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import WeeklySetupBanner from "../weekly-lesson/setup-banner";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paidThroughEnd } from "@/lib/scheduling/recurring";
@@ -144,7 +145,13 @@ export default async function BookPage() {
     const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString();
     const cycleEnd = paidThroughEnd(student.billing_anniversary_date, student.billing_interval);
 
-    const [{ data: credits }, { data: upcomingSessions }, { count: monthlyCreditsUsed }, { count: yearlyCreditsUsed }] =
+    const [
+      { data: credits },
+      { data: upcomingSessions },
+      { count: monthlyCreditsUsed },
+      { count: yearlyCreditsUsed },
+      { count: activeScheduleCount },
+    ] =
       await Promise.all([
         supabase
           .from("makeup_credits")
@@ -173,10 +180,16 @@ export default async function BookPage() {
           .eq("student_id", student.id)
           .eq("type", "student-fault")
           .gte("created_at", yearStart),
+        supabase
+          .from("recurring_schedules")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", student.id)
+          .eq("active", true),
       ]);
 
     return (
       <div className={styles.wrap}>
+        {(activeScheduleCount ?? 0) === 0 && <WeeklySetupBanner />}
         {upcomingSessions && upcomingSessions.length > 0 && (
           <div className={styles.panel} style={{ marginTop: 32, marginBottom: 24 }}>
             <h2>Upcoming sessions this cycle</h2>
