@@ -161,3 +161,59 @@ export async function notifyStudentGroupBooked(studentId: string, groupLessonIds
     console.error(`notifyStudentGroupBooked failed for ${studentId}`, err);
   }
 }
+
+// A student set up their own weekly lesson (app/api/student/weekly-lesson).
+// Same booked-lessons confirmation as a series sign-up, listing the first
+// few weeks so they can see the pattern and the first date.
+export async function notifyStudentWeeklyLessonSet(scheduleId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data: schedule } = await admin
+      .from("recurring_schedules")
+      .select(`id, duration_minutes, students(${STUDENT_COLS}), coaches(name, timezone)`)
+      .eq("id", scheduleId)
+      .maybeSingle();
+    if (!schedule) return false;
+    const student = one(schedule.students as unknown as One<StudentRow>);
+    const coach = one(schedule.coaches as unknown as One<{ name: string; timezone: string }>);
+    if (!student) return false;
+
+    const { data: sessions } = await admin
+      .from("sessions")
+      .select("scheduled_at")
+      .eq("recurring_schedule_id", scheduleId)
+      .eq("status", "scheduled")
+      .order("scheduled_at", { ascending: true })
+      .limit(4);
+    if (!sessions || sessions.length === 0) return false;
+
+    const r = bookingConfirmed({
+      firstName: firstNameOf(student.name),
+      coachFirstName: firstNameOf(coach?.name),
+      label: "Weekly Lesson",
+      isGroup: false,
+      durationMinutes: schedule.duration_minutes,
+      lessons: sessions.map((s) => lessonOf(s.scheduled_at, coach?.timezone)),
+    });
+    await notifyStudent(admin, {
+      studentId: student.id,
+      email: student.email,
+      phone: student.phone,
+      group: "alerts",
+      kind: "session_booked",
+      dedupKey: `student:${student.id}:weekly_lesson_set:${scheduleId}`,
+      title: r.bellTitle,
+      body: r.bellBody,
+      linkUrl: "/student/dashboard",
+      ghlData: { scheduleId, ...r },
+      channels: channelsOf(student),
+      // Setting up their lessons is part of joining — always confirm by
+      // email, whatever their alert settings.
+      emailAlways: true,
+    });
+    return true;
+  } catch (err) {
+    console.error(`notifyStudentWeeklyLessonSet failed for schedule ${scheduleId}`, err);
+    return false;
+  }
+}
